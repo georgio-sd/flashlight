@@ -1,0 +1,10 @@
+[Unit]
+Description=Double instance protection
+After=mnt-mailserver.mount
+
+[Service]
+ExecStart=/usr/bin/services-shutdown
+KillMode=process
+
+[Install]
+WantedBy=multi-user.target

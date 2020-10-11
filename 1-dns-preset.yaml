@@ -1,0 +1,278 @@
+# Request to remove email sending limitations and add PTR record
+# https://console.aws.amazon.com/support/contacts?#/rdns-limits
+#
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+    - Label:
+        default: "Domain Names"
+      Parameters:
+      - MainZoneID
+      - ZoneIDs
+    - Label:
+        default: "Admin and mail subdomains"
+      Parameters:
+      - AdminSubDomain
+      - MailSubDomain
+    - Label:
+        default: "Options"
+      Parameters:
+      - Updater
+Parameters:
+  MainZoneID:
+    Type: 'AWS::Route53::HostedZone::Id'
+    Description: Select main mail domain
+  ZoneIDs:
+    Type: 'List<AWS::Route53::HostedZone::Id>'
+    Description: Select all mail domains
+  AdminSubDomain:
+    Type: String
+    Default: admin
+    AllowedPattern: "[a-z0-9]*"
+    Description: Admin SubDomain (?????.maindomain.tld) Allowed pattern [a-z0-9]
+  MailSubDomain:
+    Type: String
+    Default: mail
+    AllowedPattern: "[a-z0-9]*"
+    Description: Mail SubDomain (?????.maindomain.tld) Allowed pattern [a-z0-9]
+  Updater:
+    Type: String
+    Description: Switch it to initiate full update without changing other parameters
+    Default: Even
+    AllowedValues: [ Even, Odd ]
+Resources:
+  MSBucket:
+    Type: "AWS::S3::Bucket"
+    Properties:
+      Tags:
+      - Key: Name
+        Value: !Sub "${AWS::StackName}-Flashlight"
+      BucketName: !Join
+      - "-"
+      - - "flashlight-config"
+        - !Select
+          - 0
+          - !Split
+            - "-"
+            - !Select
+              - 2
+              - !Split
+                - "/"
+                - !Ref "AWS::StackId"
+  IPAddressMS:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+      Tags:
+      - Key: Name
+        Value: !Sub "${AWS::StackName}-Flashlight"
+  LambdaExecutionRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      Tags:
+      - Key: Name
+        Value: !Sub "${AWS::StackName}-Flashlight"
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service:
+              - lambda.amazonaws.com
+          Action:
+            - 'sts:AssumeRole'
+      Path: /
+      Policies:
+      - PolicyName: LambdaExecutionRolePolicy
+        PolicyDocument:
+          Version: 2012-10-17
+          Statement:
+          - Effect: Allow
+            Action:
+            - 'logs:CreateLogGroup'
+            - 'logs:CreateLogStream'
+            - 'logs:PutLogEvents'
+            - 'route53:*'
+            - 'route53domains:*'
+            - 's3:*'
+            - 'ec2:DescribeImages'
+            - 'ec2:CopyImage'
+            Resource: '*'
+  DownloadBundles:
+    Type: 'Custom::DownloadBundles'
+    Properties:
+      ServiceToken: !GetAtt [ DownloadBundlesLambdaFunction, Arn ]
+      S3BucketName: !Ref MSBucket
+      ZoneIDs: !Join [ ',', !Ref ZoneIDs ]
+      Updater: !Ref Updater
+      Urls:
+      - 'https://mail-server-bundles.s3.eu-central-1.amazonaws.com/v0.5/lambda-dns.zip'
+      - 'https://mail-server-bundles.s3.eu-central-1.amazonaws.com/v0.5/system/iptables'
+      - 'https://mail-server-bundles.s3.eu-central-1.amazonaws.com/v0.5/system/autoshutdown.service'
+      - 'https://mail-server-bundles.s3.eu-central-1.amazonaws.com/v0.5/system/scale-in.service'
+      - 'https://mail-server-bundles.s3.eu-central-1.amazonaws.com/v0.5/system/spot-instance-shutdown'
+      - 'https://mail-server-bundles.s3.eu-central-1.amazonaws.com/v0.5/system/spotprices.py'
+      - 'https://mail-server-bundles.s3.eu-central-1.amazonaws.com/v0.5/system/base.sh'
+      - 'https://mail-server-bundles.s3.eu-central-1.amazonaws.com/v0.5/system/fail2ban.sh'
+      - 'https://mail-server-bundles.s3.eu-central-1.amazonaws.com/v0.5/system/double-inst-prot.service'
+      - 'https://mail-server-bundles.s3.eu-central-1.amazonaws.com/v0.5/system/services-shutdown'
+      - 'https://mail-server-bundles.s3.eu-central-1.amazonaws.com/v0.5/mariadb/mysql_secure_installation_auto'
+      - 'https://mail-server-bundles.s3.eu-central-1.amazonaws.com/v0.5/mariadb/db-backup'
+      - 'https://mail-server-bundles.s3.eu-central-1.amazonaws.com/v0.5/phpmyadmin/config.inc.php'
+      - 'https://mail-server-bundles.s3.eu-central-1.amazonaws.com/v0.5/postfixadmin/config.local.php'
+      - 'https://mail-server-bundles.s3.eu-central-1.amazonaws.com/v0.5/apache/httpd.conf'
+      - 'https://mail-server-bundles.s3.eu-central-1.amazonaws.com/v0.5/apache/sites.conf'
+      - 'https://mail-server-bundles.s3.eu-central-1.amazonaws.com/v0.5/apache/ssl.conf'
+      - 'https://mail-server-bundles.s3.eu-central-1.amazonaws.com/v0.5/postfix/main.cf'
+      - 'https://mail-server-bundles.s3.eu-central-1.amazonaws.com/v0.5/postfix/master.cf'
+      - 'https://mail-server-bundles.s3.eu-central-1.amazonaws.com/v0.5/postfix/postfix-mysql.tar.gz'
+      - 'https://mail-server-bundles.s3.eu-central-1.amazonaws.com/v0.5/dovecot/dovecot.conf'
+      - 'https://mail-server-bundles.s3.eu-central-1.amazonaws.com/v0.5/dovecot/dovecot-mysql.conf'
+      - 'https://mail-server-bundles.s3.eu-central-1.amazonaws.com/v0.5/roundcube/config.inc.php.rc'
+      - 'https://mail-server-bundles.s3.eu-central-1.amazonaws.com/v0.5/roundcube/roundcubemail.sql'
+      - 'https://mail-server-bundles.s3.eu-central-1.amazonaws.com/v0.5/opendkim/opendkim.conf'
+      - 'https://mail-server-bundles.s3.eu-central-1.amazonaws.com/v0.5/opendkim/dnsupd.py'
+      - 'https://mail-server-bundles.s3.eu-central-1.amazonaws.com/v0.5/fail2ban/jail.local'
+      - 'https://mail-server-bundles.s3.eu-central-1.amazonaws.com/v0.5/fail2ban/postfix-sasl.conf'
+  DownloadBundlesLambdaFunction:
+    Type: 'AWS::Lambda::Function'
+    DependsOn: MSBucket
+    Properties:
+      Code:
+        ZipFile: |
+          var AWS = require('aws-sdk')
+          var response = require('cfn-response')
+          var fs = require('fs')
+          var path = require('path')
+          var https = require('https')
+          var urlmod = require('url')
+          var {promisify} = require('util')
+          var stream = require('stream')
+          var finished = promisify(stream.finished)
+          var s3 = new AWS.S3()
+
+          function getFilesizeInBytes(filename) {
+            var stats = fs.statSync(filename)
+            var fileSizeInBytes = stats["size"]
+            return fileSizeInBytes
+          }
+
+          download = async function(url) {
+            filename = path.basename(urlmod.parse(url, true).pathname)
+            console.log('/tmp/' + filename)
+            file = fs.createWriteStream('/tmp/' + filename)
+            request = https.get(url, function(resp) {
+              resp.pipe(file)
+            })
+            await finished(file)
+          }
+
+          upload = async function(url, s3buketname) {
+            filename = path.basename(urlmod.parse(url, true).pathname)
+            if (filename == 'lambda-dns.zip') {
+              filename_new = 'lambda-dns-' + dt_frmt + '.zip'
+            } else {
+              filename_new = filename
+            }
+            console.log(filename + ': ' + getFilesizeInBytes('/tmp/' + filename))
+            var res = await new Promise((resolve, reject) => {
+              s3.upload({
+                Bucket: s3buketname,
+                Body: fs.createReadStream('/tmp/' + filename),
+                Key: filename_new,
+                ContentType: 'binary'
+              }, (err, data) => err == null ? resolve(data) : reject(err))
+            })
+            console.log('Uploaded: ' + filename)
+          }
+
+          exports.lambda_handler = async (event, context, callback) => {
+            dt_frmt = new Date().toISOString().replace(/-|:|\..+/gi, '').replace(/T/, '-')
+            console.log('Datetime ' + dt_frmt)
+            if ((event['RequestType'] == 'Create') || (event['RequestType'] == 'Update')) {
+              var s3buketname = event.ResourceProperties.S3BucketName
+              var urls = event.ResourceProperties.Urls
+              for(let url of urls) {
+                await download(url)
+                await upload(url, s3buketname)
+              }
+              responseData = {Result: "Create/Update", Datetime: dt_frmt}
+              return response.send(event, context, response.SUCCESS, responseData)
+            } else {
+              responseData = {Result: "Other"}
+              return response.send(event, context, response.SUCCESS, responseData)
+            }
+          }
+      Handler: index.lambda_handler
+      Role: !GetAtt [ LambdaExecutionRole, Arn ]
+      Runtime: nodejs12.x
+      Timeout: '30'
+      Tags:
+      - Key: Name
+        Value: !Sub "${AWS::StackName}-Flashlight"
+  DnsPreset:
+    Type: 'Custom::DnsPreset'
+    Properties:
+      ServiceToken: !GetAtt [ DnsPresetLambdaFunction, Arn ]
+      MainZoneID: !Ref MainZoneID
+      ZoneIDs: !Join [ ',', !Ref ZoneIDs ]
+      ElasticIP: !Ref IPAddressMS
+      Updater: !Ref Updater
+  DnsPresetLambdaFunction:
+    Type: 'AWS::Lambda::Function'
+    DependsOn: IPAddressMS
+    DependsOn: DownloadBundles
+    Properties:
+      Code:
+        S3Bucket: !Ref MSBucket
+        S3Key: !Sub "lambda-dns-${DownloadBundles.Datetime}.zip"
+      Handler: index.lambda_handler
+      Role: !GetAtt [ LambdaExecutionRole, Arn ]
+      Runtime: python3.7
+      Timeout: '30'
+      Tags:
+      - Key: Name
+        Value: !Sub "${AWS::StackName}-Flashlight"
+Outputs:
+  DomainNames:
+    Value: !GetAtt [ DnsPreset, DomainNames ]
+    Export:
+      Name: !Sub "${AWS::StackName}-DomainNames"
+  DomainZoneIDs:
+    Value: !GetAtt [ DnsPreset, DomainZoneIDs ]
+    Export:
+      Name: !Sub "${AWS::StackName}-DomainZoneIDs"
+  NumberOfDomains:
+    Value: !GetAtt [ DnsPreset, NumberOfDomains ]
+    Export:
+      Name: !Sub "${AWS::StackName}-NumberOfDomains"
+  S3Bucket:
+    Value: !Ref MSBucket
+    Export:
+      Name: !Sub "${AWS::StackName}-S3Bucket"
+  EipID:
+    Value: !GetAtt IPAddressMS.AllocationId
+    Export:
+      Name: !Sub "${AWS::StackName}-EipID"
+  Eip:
+    Value: !Ref IPAddressMS
+    Export:
+      Name: !Sub "${AWS::StackName}-Eip"
+  ImageId:
+    Value: !GetAtt [ DnsPreset, ImageId ]
+    Export:
+      Name: !Sub "${AWS::StackName}-ImageId"
+  DNSRecAdmin:
+    Value: !GetAtt [ DnsPreset, DNSRecAdmin ]
+    Export:
+      Name: !Sub "${AWS::StackName}-DNSRecAdmin"
+  DNSRecMail:
+    Value: !GetAtt [ DnsPreset, DNSRecMail ]
+    Export:
+      Name: !Sub "${AWS::StackName}-DNSRecMail"
+  LogDnsPreset:
+    Description: Logs for the DnsPreset lambda function are located in Cloudwatch logs.
+    Value: !Sub "/aws/lambda/${DnsPresetLambdaFunction}"
+  LogDownloadBundles:
+    Description: Logs for the DownloadBundles lambda function are located in Cloudwatch logs.
+    Value: !Sub "/aws/lambda/${DownloadBundlesLambdaFunction}"

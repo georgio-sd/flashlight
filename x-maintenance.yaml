@@ -1,0 +1,316 @@
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+    - Label:
+        default: "Network Configuration"
+      Parameters:
+      - DnsPreset
+      - VpcCidr
+      - SubnetMask
+      - AZoneNames
+      - TwoAZoneConf
+    - Label:
+        default: "Mail Server Configuration"
+      Parameters:
+      - AdminEmail
+      - TimeZone
+      - Fail2ban
+      - InstanceType
+      - InstanceType2
+      - InstanceLifecycle
+      - DiskVolumeSize
+      - KeyName
+    - Label:
+        default: "Storage Configuration"
+      Parameters:
+      - MailStorageLifecyclePolicy
+      - MailStorageBackupPolicy
+Parameters:
+  DnsPreset:
+    Type: String
+    Default: MailServerDnsPreset
+    Description: MailServer DNS-Preset Stack name
+  AdminEmail:
+    Type: String
+    Description: Email of MailServer Admin
+  TimeZone:
+    Type: String
+    Default: America/Chicago
+    Description: Look up https://www.php.net/manual/en/timezones.php
+  Fail2ban:
+    Type: String
+    Description: Fail2ban package
+    Default: ENABLED
+    AllowedValues: [ ENABLED, DISABLED ]
+  VpcCidr:
+    Type: String
+    Default: 10.0.0.0/16
+    AllowedValues: [ 10.0.0.0/16, 172.16.0.0/16, 192.168.0.0/16 ]
+    Description: VPC CIDR
+  SubnetMask:
+    Type: String
+    Default: 8
+    AllowedValues: [ 8, 10, 12, 14 ]
+    Description: Subnets mask size 8=/24, 10=/22, 12=/20, 14=/18
+  AZoneNames:
+    Type: 'List<AWS::EC2::AvailabilityZone::Name>'
+    Description: Availability Zones (choose 3 availability zones, or 2 with TwoAZoneConf enabled)
+  TwoAZoneConf:
+    Type: String
+    Description: Two-availability-zone configuration (not recommended), enable only in two-AZ regions
+    Default: DISABLED
+    AllowedValues: [ ENABLED, DISABLED ]
+  InstanceType:
+    Type: String
+    Description: EC2 instance type
+    Default: t2.micro
+    AllowedValues: [ t2.micro, t3a.micro, t3a.small, t3a.medium, t3a.large, t3a.xlarge ]
+  InstanceType2:
+    Type: String
+    Description: EC2 additional instance type
+    Default: None
+    AllowedValues: [ None, t3.micro, t3.small, t3.medium, t3.large, t3.xlarge ]
+  InstanceLifecycle:
+    Type: String
+    Description: EC2 instance payment model
+    Default: Spot
+    AllowedValues: [ On-Demand, Spot ]
+  DiskVolumeSize:
+    Type: String
+    Description: Disk volume size (GiB)
+    Default: 6
+    AllowedValues: [ 4, 6, 8, 16, 32 ]
+  MailStorageLifecyclePolicy:
+    Type: String
+    Description: Mail Server Storage lifecycle policy of transition files to the Infrequent Access (IA) storage class
+    Default: AFTER_30_DAYS
+    AllowedValues: [ None, AFTER_7_DAYS, AFTER_14_DAYS, AFTER_30_DAYS, AFTER_60_DAYS, AFTER_90_DAYS ]
+  MailStorageBackupPolicy:
+    Type: String
+    Description: Mail Server Storage backup policy
+    Default: DISABLED
+    AllowedValues: [ ENABLED, DISABLED ]
+  KeyName:
+    Type: AWS::EC2::KeyPair::KeyName
+    Description: Key Name
+    ConstraintDescription: must be the name of an existing EC2 KeyPair.
+Conditions:
+  ThreeAZoneConf: !Equals [ !Ref TwoAZoneConf, 'DISABLED' ]
+  SpotInstance: !Equals [ !Ref InstanceLifecycle, 'Spot' ]
+  SecondInstanceType: !Not [ !Equals [ !Ref InstanceType2, 'None' ] ]
+  MailStorageIA: !Not [ !Equals [ !Ref MailStorageLifecyclePolicy, 'None' ] ]
+Resources:
+  MailServerVPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Ref VpcCidr
+      EnableDnsSupport: 'true'
+      EnableDnsHostnames: 'true'
+      InstanceTenancy: 'default'
+      Tags:
+      - Key: Name
+        Value: !Sub "${AWS::StackName}-Flashlight"
+  MailServerInternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+      - Key: Name
+        Value: !Sub "${AWS::StackName}-Flashlight"
+  AttachGateway:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref MailServerVPC
+      InternetGatewayId: !Ref MailServerInternetGateway
+  PubSubnetA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref MailServerVPC
+      CidrBlock: !Select [ 0, !Cidr [ !GetAtt MailServerVPC.CidrBlock, 4, !Ref SubnetMask ] ]
+      AvailabilityZone: !Select [ 0, !Ref AZoneNames ]
+      MapPublicIpOnLaunch: 'true'
+      Tags:
+      - Key: Name
+        Value: !Sub "${AWS::StackName}-Flashlight"
+  PubSubnetB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref MailServerVPC
+      CidrBlock: !Select [ 1, !Cidr [ !GetAtt MailServerVPC.CidrBlock, 4, !Ref SubnetMask ] ]
+      AvailabilityZone: !Select [ 1, !Ref AZoneNames ]
+      MapPublicIpOnLaunch: 'true'
+      Tags:
+      - Key: Name
+        Value: !Sub "${AWS::StackName}-Flashlight"
+  PubSubnetC:
+    Type: AWS::EC2::Subnet
+    Condition: ThreeAZoneConf
+    Properties:
+      VpcId: !Ref MailServerVPC
+      CidrBlock: !Select [ 2, !Cidr [ !GetAtt MailServerVPC.CidrBlock, 4, !Ref SubnetMask ] ]
+      AvailabilityZone: !Select [ 2, !Ref AZoneNames ]
+      MapPublicIpOnLaunch: 'true'
+      Tags:
+      - Key: Name
+        Value: !Sub "${AWS::StackName}-Flashlight"
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref MailServerVPC
+      Tags:
+      - Key: Name
+        Value: !Sub "${AWS::StackName}-Flashlight"
+  PublicRoute:
+    Type: AWS::EC2::Route
+    DependsOn: AttachGateway
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      GatewayId: !Ref MailServerInternetGateway
+      DestinationCidrBlock: 0.0.0.0/0
+  PubSubnetARouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      SubnetId: !Ref PubSubnetA
+  PubSubnetBRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      SubnetId: !Ref PubSubnetB
+  PubSubnetCRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Condition: ThreeAZoneConf
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      SubnetId: !Ref PubSubnetC
+  InstanceSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Mail-Server
+      VpcId: !Ref MailServerVPC
+      Tags:
+      - Key: Name
+        Value: !Sub "${AWS::StackName}-Flashlight"
+      SecurityGroupIngress:
+      - IpProtocol: tcp
+        FromPort: 22
+        ToPort: 22
+        CidrIp: 0.0.0.0/0
+        Description: SSH
+      - IpProtocol: tcp
+        FromPort: 80
+        ToPort: 80
+        CidrIp: 0.0.0.0/0
+        Description: HTTP
+      - IpProtocol: tcp
+        FromPort: 443
+        ToPort: 443
+        CidrIp: 0.0.0.0/0
+        Description: HTTPS
+      - IpProtocol: tcp
+        FromPort: 25
+        ToPort: 25
+        CidrIp: 0.0.0.0/0
+        Description: SMTP
+      - IpProtocol: tcp
+        FromPort: 465
+        ToPort: 465
+        CidrIp: 0.0.0.0/0
+        Description: SMTPS (SSL) legacy
+      - IpProtocol: tcp
+        FromPort: 587
+        ToPort: 587
+        CidrIp: 0.0.0.0/0
+        Description: SMTPS (TLS)
+      - IpProtocol: tcp
+        FromPort: 143
+        ToPort: 143
+        CidrIp: 0.0.0.0/0
+        Description: IMAP (TLS)
+      - IpProtocol: tcp
+        FromPort: 993
+        ToPort: 993
+        CidrIp: 0.0.0.0/0
+        Description: IMAPS (SSL)
+  InstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service:
+            - ec2.amazonaws.com
+          Action: sts:AssumeRole
+      Path: "/"
+      Tags:
+      - Key: Name
+        Value: !Sub "${AWS::StackName}-Flashlight"
+      Policies:
+      - PolicyName: MailServerInstance
+        PolicyDocument:
+          Version: 2012-10-17
+          Statement:
+          - Effect: Allow
+            Action:
+            - 'ec2:AssociateAddress'
+            - 'ec2:DescribeSpotPriceHistory'
+            - 'route53:*'
+            - 'route53domains:*'
+            - 'autoscaling:*'
+            Resource: '*'
+          - Effect: Allow
+            Action:
+            - 's3:*'
+            Resource:
+              Fn::Join:
+              - ''
+              - - 'arn:aws:s3:::'
+                - Fn::ImportValue: !Sub "${DnsPreset}-S3Bucket"
+                - '/*'
+  InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Path: "/"
+      Roles: [ !Ref InstanceRole ]
+  MailStorageSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Mail-Storage
+      VpcId: !Ref MailServerVPC
+      Tags:
+      - Key: Name
+        Value: !Sub "${AWS::StackName}-Flashlight"
+      SecurityGroupIngress:
+      - IpProtocol: tcp
+        FromPort: 2049
+        ToPort: 2049
+        SourceSecurityGroupId: !GetAtt InstanceSecurityGroup.GroupId
+  MailStorageMountTargetA:
+    Type: AWS::EFS::MountTarget
+    Properties:
+      FileSystemId: !Ref MailStorage
+      SecurityGroups: [ !Ref MailStorageSecurityGroup ]
+      SubnetId: !Ref PubSubnetA
+  MailStorageMountTargetB:
+    Type: AWS::EFS::MountTarget
+    Properties:
+      FileSystemId: !Ref MailStorage
+      SecurityGroups: [ !Ref MailStorageSecurityGroup ]
+      SubnetId: !Ref PubSubnetB
+  MailStorageMountTargetC:
+    Type: AWS::EFS::MountTarget
+    Condition: ThreeAZoneConf
+    Properties:
+      FileSystemId: !Ref MailStorage
+      SecurityGroups: [ !Ref MailStorageSecurityGroup ]
+      SubnetId: !Ref PubSubnetC
+  MailStorage:
+    Type: AWS::EFS::FileSystem
+    Properties:
+      Encrypted: True
+      PerformanceMode: generalPurpose
+      ThroughputMode: bursting
+      LifecyclePolicies: !If [ MailStorageIA, [ TransitionToIA: !Ref MailStorageLifecyclePolicy ], !Ref 'AWS::NoValue' ]
+      BackupPolicy:
+        Status: !Ref MailStorageBackupPolicy

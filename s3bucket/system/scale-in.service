@@ -1,0 +1,11 @@
+[Unit]
+Description=Scale-in during shutdown
+After=iptables.service network.service mnt-mailserver.mount
+
+[Service]
+ExecStop=/mnt/mailserver/automation/scale-in
+Type=oneshot
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

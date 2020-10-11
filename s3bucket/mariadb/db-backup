@@ -1,0 +1,21 @@
+#!/usr/bin/bash
+#
+# Make database backups
+#
+DATE=$(date +%Y-%m-%d)
+mysqldump --opt -u root -p{mysqlpasswd} --events mysql | gzip -c > /mnt/mailserver/backup/mysql.${DATE}.sql.gz
+mysqldump --opt -u root -p{mysqlpasswd} --default-character-set=utf8 postfix | gzip -c > /mnt/mailserver/backup/postfix.${DATE}.sql.gz
+mysqldump --opt -u root -p{mysqlpasswd} --default-character-set=utf8 phpmyadmin | gzip -c > /mnt/mailserver/backup/phpmyadmin.${DATE}.sql.gz
+mysqldump --opt -u root -p{mysqlpasswd} --default-character-set=utf8 roundcube | gzip -c > /mnt/mailserver/backup/roundcube.${DATE}.sql.gz
+#
+# Delete old backups
+#
+f28days=$(date +%s --date="-28 days")
+cd /mnt/mailserver/backup
+for file in *.gz; do
+    fdate=$(echo $file | sed 's/[^0-9/]//g')
+    fsec=$(date +%s --date=${fdate})
+    if [[ $fsec -lt $f28days ]]; then
+        rm $file
+    fi
+done

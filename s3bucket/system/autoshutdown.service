@@ -1,0 +1,11 @@
+[Unit]
+Description=Autoshutdown before spot instance termination
+After=mnt-mailserver.mount
+
+[Service]
+ExecStart=/mnt/mailserver/automation/spot-instance-shutdown
+KillMode=process
+
+[Install]
+WantedBy=multi-user.target
+

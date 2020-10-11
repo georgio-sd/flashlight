@@ -1,0 +1,30 @@
+[DEFAULT]
+# Ban IP/hosts for 3 hours (3h*60m*60s = 10800s):
+bantime = 10800
+
+# An ip address/host is banned if it has generated "maxretry" during the last "findtime" seconds. (60m*60s = 3600s)
+findtime = 3600
+maxretry = 3
+
+# "ignoreip" can be a list of IP addresses, CIDR masks or DNS hosts. Fail2ban
+# will not ban a host which matches an address in this list. Several addresses
+# can be defined using space (and/or comma) separator. For example, add your 
+# static IP address that you always use for login such as 103.1.2.3
+#ignoreip = 127.0.0.1/8 ::1 103.1.2.3
+
+# Call iptables to ban IP address
+banaction = iptables-multiport
+
+# Do not resolve domain names
+usedns = no
+
+# Enable sshd protection
+[sshd]
+enabled = true
+mode = aggressive
+
+[postfix-sasl]
+enabled = true
+
+[dovecot]
+enabled = true
