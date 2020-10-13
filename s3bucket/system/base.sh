@@ -9,6 +9,7 @@ timedatectl set-timezone $TIMEZONE
 hostnamectl set-hostname $MAIL_DOMAIN
 flag=/mnt/mailserver/flag
 systemctl stop crond
+systemctl disable tuned
 #
 # Installing amazon-efs-utils and mounting EFS
 cd ~
