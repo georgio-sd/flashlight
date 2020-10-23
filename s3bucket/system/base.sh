@@ -168,7 +168,7 @@ if [ ! -f $flag ]; then
   chmod 744 /etc/letsencrypt/renewal-hooks/post/srv-start /etc/letsencrypt/renewal-hooks/pre/srv-stop
   mv /etc/letsencrypt /mnt/mailserver/etc
   printf '@reboot         root /usr/bin/cron-boot-runner\n' >> /etc/crontab
-  printf '#15   1  *  *  6 root /mnt/mailserver/automation/spotprices.py\n' >> /etc/crontab
+  printf '#15   1  *  *  * root /mnt/mailserver/automation/spotprices.py\n' >> /etc/crontab
   printf '15   3  *  *  6 root certbot renew -q\n' >> /etc/crontab
   mv /etc/crontab /mnt/mailserver/etc
 fi
