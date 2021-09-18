@@ -39,7 +39,7 @@ fi
 #
 # Installing Remi and the base set of packages
 yum install -y dnf-utils http://rpms.remirepo.net/enterprise/remi-release-8.rpm
-yum makecache
+yum makecache -y
 yum module enable -y php:remi-7.2
 yum install -y httpd mod_ssl mariadb mariadb-server pwgen php php-imap php-mysqlnd php-mbstring bind-utils certbot \
   postfix postfix-mysql dovecot dovecot-mysql dovecot-pigeonhole php-pear php-mcrypt php-intl php-ldap \
