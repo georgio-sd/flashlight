@@ -40,7 +40,7 @@ Parameters:
   Fail2ban:
     Type: String
     Description: Fail2ban package
-    Default: ENABLED
+    Default: DISABLED
     AllowedValues: [ ENABLED, DISABLED ]
   VpcCidr:
     Type: String
