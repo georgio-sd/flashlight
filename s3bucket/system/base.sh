@@ -10,7 +10,7 @@ hostnamectl set-hostname $MAIL_DOMAIN
 flag=/mnt/mailserver/flag
 systemctl stop crond
 #
-# CenntOS repofix
+# CentOS repofix
 cd /etc/yum.repos.d/
 sed -i 's/mirrorlist/#mirrorlist/g' /etc/yum.repos.d/CentOS-*
 sed -i 's|#baseurl=http://mirror.centos.org|baseurl=http://vault.centos.org|g' /etc/yum.repos.d/CentOS-*
@@ -44,6 +44,10 @@ fi
 #
 # Installing Remi and the base set of packages
 yum install -y dnf-utils http://rpms.remirepo.net/enterprise/remi-release-8.rpm
+# fix later
+cd /etc/yum.repos.d/
+sed -i 's/mirrorlist/#mirrorlist/g' /etc/yum.repos.d/CentOS-*
+sed -i 's|#baseurl=http://mirror.centos.org|baseurl=http://vault.centos.org|g' /etc/yum.repos.d/CentOS-*
 yum makecache -y
 yum module enable -y php:remi-7.2
 yum install -y httpd mod_ssl mariadb mariadb-server pwgen php php-imap php-mysqlnd php-mbstring bind-utils certbot \
