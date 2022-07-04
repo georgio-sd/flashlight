@@ -43,7 +43,7 @@ else
 fi
 #
 # Installing Remi and the base set of packages
-yum install -y dnf-utils http://rpms.remirepo.net/enterprise/remi-release-8.rpm
+yum install -y dnf-utils http://rpms.remirepo.net/enterprise/remi-release-8.5.rpm
 # fix later
 cd /etc/yum.repos.d/
 sed -i 's/mirrorlist/#mirrorlist/g' /etc/yum.repos.d/CentOS-*
