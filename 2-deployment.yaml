@@ -289,7 +289,7 @@ Resources:
         - DeviceName: /dev/xvda
           Ebs:
             VolumeSize: !Ref DiskVolumeSize
-            VolumeType: gp2
+            VolumeType: gp3
         UserData:
           Fn::Base64: !Sub
           - |

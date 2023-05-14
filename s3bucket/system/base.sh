@@ -11,9 +11,9 @@ flag=/mnt/mailserver/flag
 systemctl stop crond
 #
 # CentOS repofix
-cd /etc/yum.repos.d/
-sed -i 's/mirrorlist/#mirrorlist/g' /etc/yum.repos.d/CentOS-*
-sed -i 's|#baseurl=http://mirror.centos.org|baseurl=http://vault.centos.org|g' /etc/yum.repos.d/CentOS-*
+#cd /etc/yum.repos.d/
+#sed -i 's/mirrorlist/#mirrorlist/g' /etc/yum.repos.d/CentOS-*
+#sed -i 's|#baseurl=http://mirror.centos.org|baseurl=http://vault.centos.org|g' /etc/yum.repos.d/CentOS-*
 #
 # Installing amazon-efs-utils and mounting EFS
 cd ~
@@ -43,23 +43,23 @@ else
 fi
 #
 # Installing Remi and the base set of packages
-yum install -y dnf-utils http://rpms.remirepo.net/enterprise/remi-release-8.5.rpm
+yum install -y dnf-utils http://rpms.remirepo.net/enterprise/remi-release-8.7.rpm
 # fix later
-cd /etc/yum.repos.d/
-sed -i 's/mirrorlist/#mirrorlist/g' /etc/yum.repos.d/CentOS-*
-sed -i 's|#baseurl=http://mirror.centos.org|baseurl=http://vault.centos.org|g' /etc/yum.repos.d/CentOS-*
+#cd /etc/yum.repos.d/
+#sed -i 's/mirrorlist/#mirrorlist/g' /etc/yum.repos.d/CentOS-*
+#sed -i 's|#baseurl=http://mirror.centos.org|baseurl=http://vault.centos.org|g' /etc/yum.repos.d/CentOS-*
 yum makecache -y
-yum module enable -y php:remi-7.2
+yum module enable -y php:remi-7.4
 yum install -y httpd mod_ssl mariadb mariadb-server pwgen php php-imap php-mysqlnd php-mbstring bind-utils certbot \
   postfix postfix-mysql dovecot dovecot-mysql dovecot-pigeonhole php-pear php-mcrypt php-intl php-ldap \
-  php-pear-Net-SMTP php-gd php-zip php-imagick opendkim jq
+  php-pear-Net-SMTP php-gd php-zip php-imagick opendkim jq python39
 yum install -y --enablerepo=remi php-pear-Net-Sieve php-pear-Mail-Mime php-pear-Net-IDNA2
-pip3 install boto3 requests --upgrade
+pip3.9 install boto3 requests --upgrade
 #
 # installing cfn-tools
 cd ~
 wget https://s3.amazonaws.com/cloudformation-examples/aws-cfn-bootstrap-py3-latest.tar.gz
-pip3 install aws-cfn-bootstrap-py3-latest.tar.gz
+pip3.9 install aws-cfn-bootstrap-py3-latest.tar.gz
 rm aws-cfn-bootstrap-py3-latest.tar.gz
 mkdir /etc/cron.once
 printf '#!/bin/bash'"\n#\n/usr/local/bin/cfn-signal -s true --stack $STACK --resource AutoScalingGroup --region $AWS_REGION\n" \
