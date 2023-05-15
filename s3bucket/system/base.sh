@@ -54,7 +54,7 @@ yum install -y httpd mod_ssl mariadb mariadb-server pwgen php php-imap php-mysql
   postfix postfix-mysql dovecot dovecot-mysql dovecot-pigeonhole php-pear php-mcrypt php-intl php-ldap \
   php-pear-Net-SMTP php-gd php-zip php-imagick opendkim jq python39
 yum install -y --enablerepo=remi php-pear-Net-Sieve php-pear-Mail-Mime php-pear-Net-IDNA2
-pip3.9 install boto3 requests --upgrade
+pip3.9 install boto3 requests urllib3==1.26.15 --upgrade
 #
 # installing cfn-tools
 cd ~
