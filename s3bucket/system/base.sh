@@ -10,11 +10,6 @@ hostnamectl set-hostname $MAIL_DOMAIN
 flag=/mnt/mailserver/flag
 systemctl stop crond
 #
-# CentOS repofix
-#cd /etc/yum.repos.d/
-#sed -i 's/mirrorlist/#mirrorlist/g' /etc/yum.repos.d/CentOS-*
-#sed -i 's|#baseurl=http://mirror.centos.org|baseurl=http://vault.centos.org|g' /etc/yum.repos.d/CentOS-*
-#
 # Installing amazon-efs-utils and mounting EFS
 cd ~
 yum install -y make rpm-build
@@ -44,10 +39,6 @@ fi
 #
 # Installing Remi and the base set of packages
 yum install -y dnf-utils http://rpms.remirepo.net/enterprise/remi-release-8.7.rpm
-# fix later
-#cd /etc/yum.repos.d/
-#sed -i 's/mirrorlist/#mirrorlist/g' /etc/yum.repos.d/CentOS-*
-#sed -i 's|#baseurl=http://mirror.centos.org|baseurl=http://vault.centos.org|g' /etc/yum.repos.d/CentOS-*
 yum makecache -y
 yum module enable -y php:remi-7.4
 yum install -y httpd mod_ssl mariadb mariadb-server pwgen php php-imap php-mysqlnd php-mbstring bind-utils certbot \
@@ -268,10 +259,10 @@ systemctl enable dovecot
 # Installing roundcube
 if [ ! -f $flag ]; then
   cd ~
-  wget https://github.com/roundcube/roundcubemail/releases/download/1.4.7/roundcubemail-1.4.7-complete.tar.gz
-  tar xzvf roundcubemail-1.4.7-complete.tar.gz > /dev/null
+  wget https://github.com/roundcube/roundcubemail/releases/download/1.4.13/roundcubemail-1.4.13-complete.tar.gz
+  tar xzvf roundcubemail-1.4.13-complete.tar.gz > /dev/null
   mkdir /var/www/webmail
-  cp -R /root/roundcubemail-1.4.7/* /var/www/webmail
+  cp -R /root/roundcubemail-1.4.13/* /var/www/webmail
   chown -R apache. /var/www/webmail/temp /var/www/webmail/logs
   aws s3 cp s3://$BUCKET_CONFIG/config.inc.php.rc /var/www/webmail/config/config.inc.php
   sed -i "s/{des_key}/$(pwgen 24 1)/" /var/www/webmail/config/config.inc.php
@@ -384,8 +375,8 @@ else
 fi
 rm -f /etc/sysconfig/opendkim
 ln -s /mnt/mailserver/etc/sysconfig/opendkim /etc/sysconfig/opendkim
-sed -i "s#/var##" /etc/tmpfiles.d/opendkim.conf
+#sed -i "s#/var##" /etc/tmpfiles.d/opendkim.conf
 cp /usr/lib/systemd/system/opendkim.service /etc/systemd/system
 sed -i "s/After=\(.*\)/After=\1 mnt-mailserver.mount/" /etc/systemd/system/opendkim.service
-sed -i "s/PIDFile/#PIDFile/" /etc/systemd/system/opendkim.service
+#sed -i "s/PIDFile/#PIDFile/" /etc/systemd/system/opendkim.service
 systemctl enable opendkim
