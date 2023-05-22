@@ -10,9 +10,18 @@ hostnamectl set-hostname $MAIL_DOMAIN
 flag=/mnt/mailserver/flag
 systemctl stop crond
 #
+# Disabling yes requests from rm/mv/cp commands
+sed -i 's/alias/#alias/' /root/.*hrc
+source ~/.*hrc
+#
+# Disabling IPv6
+sed -i "s/GRUB_CMDLINE_LINUX=\"\(.*\)\"/GRUB_CMDLINE_LINUX=\"\1 ipv6.disable=1\"/" /etc/default/grub
+grub2-mkconfig -o /boot/grub2/grub.cfg
+#
 # Installing amazon-efs-utils and mounting EFS
+# source ~/.bashrc
 cd ~
-yum install -y make rpm-build
+yum install -y make rpm-build git
 git clone https://github.com/aws/efs-utils
 cd efs-utils
 make rpm
@@ -43,7 +52,7 @@ yum makecache -y
 yum module enable -y php:remi-7.4
 yum install -y httpd mod_ssl mariadb mariadb-server pwgen php php-imap php-mysqlnd php-mbstring bind-utils certbot \
   postfix postfix-mysql dovecot dovecot-mysql dovecot-pigeonhole php-pear php-mcrypt php-intl php-ldap \
-  php-pear-Net-SMTP php-gd php-zip php-imagick opendkim jq python39
+  php-pear-Net-SMTP php-gd php-zip php-imagick opendkim jq python39 wget net-tools mc iptables iptables-services epel-release
 yum install -y --enablerepo=remi php-pear-Net-Sieve php-pear-Mail-Mime php-pear-Net-IDNA2
 pip3.9 install boto3 requests urllib3==1.26.15 --upgrade
 #

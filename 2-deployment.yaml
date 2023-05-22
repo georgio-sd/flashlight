@@ -317,8 +317,13 @@ Resources:
             export ADMIN_DOMAIN=${admindomain}
             export MAIL_DOMAIN=${maildomain}
             #
+            # Disabling SELinux
+            setenforce 0
+            sed -i 's/=enforcing/=disabled/' /etc/selinux/config
+            #
             # Installing awscli
             cd ~
+            yum install -y unzip zip
             curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
             unzip awscliv2.zip > /dev/null
             /root/aws/install
