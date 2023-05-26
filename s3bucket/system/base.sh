@@ -10,10 +10,6 @@ hostnamectl set-hostname $MAIL_DOMAIN
 flag=/mnt/mailserver/flag
 systemctl stop crond
 #
-# Disabling yes requests from rm/mv/cp commands
-sed -i 's/alias/#alias/' /root/.*hrc
-source ~/.*hrc
-#
 # Disabling IPv6
 sed -i "s/GRUB_CMDLINE_LINUX=\"\(.*\)\"/GRUB_CMDLINE_LINUX=\"\1 ipv6.disable=1\"/" /etc/default/grub
 grub2-mkconfig -o /boot/grub2/grub.cfg

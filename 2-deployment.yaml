@@ -321,6 +321,10 @@ Resources:
             setenforce 0
             sed -i 's/=enforcing/=disabled/' /etc/selinux/config
             #
+            # Disabling yes requests for rm/mv/cp commands
+            sed -i 's/alias/#alias/' /root/.*hrc
+            source ~/.*hrc
+            #
             # Installing awscli
             cd ~
             yum install -y unzip zip
