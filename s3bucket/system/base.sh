@@ -13,6 +13,10 @@ systemctl stop crond
 # Disabling IPv6
 sed -i "s/GRUB_CMDLINE_LINUX=\"\(.*\)\"/GRUB_CMDLINE_LINUX=\"\1 ipv6.disable=1\"/" /etc/default/grub
 grub2-mkconfig -o /boot/grub2/grub.cfg
+nmcli connection modify eth0 ipv6.method "disabled"
+#
+# Disabling amazon-ssm-agent
+systemctl disable amazon-ssm-agent
 #
 # Installing amazon-efs-utils and mounting EFS
 # source ~/.bashrc
@@ -338,7 +342,7 @@ if [ ! -f $flag ]; then
     echo "*@$domain mail._domainkey.$domain" >> signingtable
   done
   aws s3 cp s3://$BUCKET_CONFIG/opendkim.conf /etc/postfix/dkim
-  chown -R root:opendkim * && find . -type d -exec chmod 750 {} \; && find . -type f -exec chmod 640 {} \;
+  chown -R root:opendkim /etc/postfix/dkim && find . -type d -exec chmod 750 {} \; && find . -type f -exec chmod 640 {} \;
   aws s3 cp s3://$BUCKET_CONFIG/dnsupd.py /root
   chmod 700 /root/dnsupd.py
   /root/dnsupd.py $DOMAIN_NAMES $DOMAIN_ZONE_IDS $EIP
@@ -372,7 +376,7 @@ else
     echo "mail._domainkey.$domain $domain:mail:/etc/postfix/dkim/$domain/mail.private" >> keytable
     echo "*@$domain mail._domainkey.$domain" >> signingtable
   done
-  chown -R root:opendkim * && find . -type d -exec chmod 750 {} \; && find . -type f -exec chmod 640 {} \;
+  chown -R root:opendkim /etc/postfix/dkim && find . -type d -exec chmod 750 {} \; && find . -type f -exec chmod 640 {} \;
   aws s3 cp s3://$BUCKET_CONFIG/dnsupd.py /root
   chmod 700 /root/dnsupd.py
   /root/dnsupd.py $DOMAIN_NAMES $DOMAIN_ZONE_IDS $EIP
