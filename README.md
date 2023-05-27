@@ -1,2 +1,2 @@
 # flashlight
-Flashlight Mail Server
+Flashlight Mail Server (powered by AWS)

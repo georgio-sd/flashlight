@@ -38,18 +38,19 @@ else
 fi
 #
 # Installing Remi and the base set of packages
-yum install -y dnf-utils http://rpms.remirepo.net/enterprise/remi-release-8.rpm
-yum makecache
-yum module enable -y php:remi-7.2
+yum install -y dnf-utils http://rpms.remirepo.net/enterprise/remi-release-8.7.rpm
+yum makecache -y
+yum module enable -y php:remi-7.4
 yum install -y httpd mod_ssl mariadb mariadb-server pwgen php php-imap php-mysqlnd php-mbstring bind-utils certbot \
   postfix postfix-mysql dovecot dovecot-mysql dovecot-pigeonhole php-pear php-mcrypt php-intl php-ldap \
-  php-pear-Net-SMTP php-gd php-zip php-imagick opendkim jq
+  php-pear-Net-SMTP php-gd php-zip php-imagick opendkim jq python39
 yum install -y --enablerepo=remi php-pear-Net-Sieve php-pear-Mail-Mime php-pear-Net-IDNA2
+pip3.9 install boto3 requests urllib3==1.26.15 --upgrade
 #
 # installing cfn-tools
 cd ~
 wget https://s3.amazonaws.com/cloudformation-examples/aws-cfn-bootstrap-py3-latest.tar.gz
-pip3 install aws-cfn-bootstrap-py3-latest.tar.gz
+pip3.9 install aws-cfn-bootstrap-py3-latest.tar.gz
 rm aws-cfn-bootstrap-py3-latest.tar.gz
 mkdir /etc/cron.once
 printf '#!/bin/bash'"\n#\n/usr/local/bin/cfn-signal -s true --stack $STACK --resource AutoScalingGroup --region $AWS_REGION\n" \
@@ -168,7 +169,7 @@ if [ ! -f $flag ]; then
   chmod 744 /etc/letsencrypt/renewal-hooks/post/srv-start /etc/letsencrypt/renewal-hooks/pre/srv-stop
   mv /etc/letsencrypt /mnt/mailserver/etc
   printf '@reboot         root /usr/bin/cron-boot-runner\n' >> /etc/crontab
-  printf '#15   1  *  *  6 root /mnt/mailserver/automation/spotprices.py\n' >> /etc/crontab
+  printf '#15   1  *  *  * root /mnt/mailserver/automation/spotprices.py\n' >> /etc/crontab
   printf '15   3  *  *  6 root certbot renew -q\n' >> /etc/crontab
   mv /etc/crontab /mnt/mailserver/etc
 fi
@@ -258,10 +259,10 @@ systemctl enable dovecot
 # Installing roundcube
 if [ ! -f $flag ]; then
   cd ~
-  wget https://github.com/roundcube/roundcubemail/releases/download/1.4.7/roundcubemail-1.4.7-complete.tar.gz
-  tar xzvf roundcubemail-1.4.7-complete.tar.gz > /dev/null
+  wget https://github.com/roundcube/roundcubemail/releases/download/1.4.13/roundcubemail-1.4.13-complete.tar.gz
+  tar xzvf roundcubemail-1.4.13-complete.tar.gz > /dev/null
   mkdir /var/www/webmail
-  cp -R /root/roundcubemail-1.4.7/* /var/www/webmail
+  cp -R /root/roundcubemail-1.4.13/* /var/www/webmail
   chown -R apache. /var/www/webmail/temp /var/www/webmail/logs
   aws s3 cp s3://$BUCKET_CONFIG/config.inc.php.rc /var/www/webmail/config/config.inc.php
   sed -i "s/{des_key}/$(pwgen 24 1)/" /var/www/webmail/config/config.inc.php
@@ -374,8 +375,8 @@ else
 fi
 rm -f /etc/sysconfig/opendkim
 ln -s /mnt/mailserver/etc/sysconfig/opendkim /etc/sysconfig/opendkim
-sed -i "s#/var##" /etc/tmpfiles.d/opendkim.conf
+#sed -i "s#/var##" /etc/tmpfiles.d/opendkim.conf
 cp /usr/lib/systemd/system/opendkim.service /etc/systemd/system
 sed -i "s/After=\(.*\)/After=\1 mnt-mailserver.mount/" /etc/systemd/system/opendkim.service
-sed -i "s/PIDFile/#PIDFile/" /etc/systemd/system/opendkim.service
+#sed -i "s/PIDFile/#PIDFile/" /etc/systemd/system/opendkim.service
 systemctl enable opendkim

@@ -35,6 +35,9 @@ $config['db_dsnw'] = 'mysql://roundcube:{RoundcubePassword}@localhost/roundcube'
 //          required to match old user data records with the new host.
 $config['default_host'] = 'localhost';
 
+// Default mail domain
+$config['username_domain'] = '%t';
+
 // SMTP port. Use 25 for cleartext, 465 for Implicit TLS, or 587 for STARTTLS (default)
 $config['smtp_port'] = 25;
 
