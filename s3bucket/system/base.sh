@@ -10,9 +10,20 @@ hostnamectl set-hostname $MAIL_DOMAIN
 flag=/mnt/mailserver/flag
 systemctl stop crond
 #
+# Disabling IPv6
+sed -i "s/GRUB_CMDLINE_LINUX=\"\(.*\)\"/GRUB_CMDLINE_LINUX=\"\1 ipv6.disable=1\"/" /etc/default/grub
+grub2-mkconfig -o /boot/grub2/grub.cfg
+sed -i "s/udp6\(.*\)/#udp6\1/" /etc/netconfig
+sed -i "s/tcp6\(.*\)/#tcp6\1/" /etc/netconfig
+nmcli connection modify eth0 ipv6.method "disabled"
+#
+# Disabling amazon-ssm-agent
+systemctl disable amazon-ssm-agent
+#
 # Installing amazon-efs-utils and mounting EFS
+# source ~/.bashrc
 cd ~
-yum install -y make rpm-build
+yum install -y make rpm-build git
 git clone https://github.com/aws/efs-utils
 cd efs-utils
 make rpm
@@ -43,7 +54,7 @@ yum makecache -y
 yum module enable -y php:remi-7.4
 yum install -y httpd mod_ssl mariadb mariadb-server pwgen php php-imap php-mysqlnd php-mbstring bind-utils certbot \
   postfix postfix-mysql dovecot dovecot-mysql dovecot-pigeonhole php-pear php-mcrypt php-intl php-ldap \
-  php-pear-Net-SMTP php-gd php-zip php-imagick opendkim jq python39
+  php-pear-Net-SMTP php-gd php-zip php-imagick opendkim jq python39 wget net-tools mc iptables iptables-services epel-release
 yum install -y --enablerepo=remi php-pear-Net-Sieve php-pear-Mail-Mime php-pear-Net-IDNA2
 pip3.9 install boto3 requests urllib3==1.26.15 --upgrade
 #
@@ -333,7 +344,7 @@ if [ ! -f $flag ]; then
     echo "*@$domain mail._domainkey.$domain" >> signingtable
   done
   aws s3 cp s3://$BUCKET_CONFIG/opendkim.conf /etc/postfix/dkim
-  chown -R root:opendkim * && find . -type d -exec chmod 750 {} \; && find . -type f -exec chmod 640 {} \;
+  chown -R root:opendkim /etc/postfix/dkim && find . -type d -exec chmod 750 {} \; && find . -type f -exec chmod 640 {} \;
   aws s3 cp s3://$BUCKET_CONFIG/dnsupd.py /root
   chmod 700 /root/dnsupd.py
   /root/dnsupd.py $DOMAIN_NAMES $DOMAIN_ZONE_IDS $EIP
@@ -367,7 +378,7 @@ else
     echo "mail._domainkey.$domain $domain:mail:/etc/postfix/dkim/$domain/mail.private" >> keytable
     echo "*@$domain mail._domainkey.$domain" >> signingtable
   done
-  chown -R root:opendkim * && find . -type d -exec chmod 750 {} \; && find . -type f -exec chmod 640 {} \;
+  chown -R root:opendkim /etc/postfix/dkim && find . -type d -exec chmod 750 {} \; && find . -type f -exec chmod 640 {} \;
   aws s3 cp s3://$BUCKET_CONFIG/dnsupd.py /root
   chmod 700 /root/dnsupd.py
   /root/dnsupd.py $DOMAIN_NAMES $DOMAIN_ZONE_IDS $EIP
