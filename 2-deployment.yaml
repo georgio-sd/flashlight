@@ -286,7 +286,7 @@ Resources:
         IamInstanceProfile:
           Arn: !GetAtt InstanceProfile.Arn
         BlockDeviceMappings:
-        - DeviceName: /dev/xvda
+        - DeviceName: /dev/sda1
           Ebs:
             VolumeSize: !Ref DiskVolumeSize
             VolumeType: gp3
