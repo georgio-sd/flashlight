@@ -6,11 +6,11 @@ while true; do
     CODE=$(curl -LI -o /dev/null -w '%{http_code}\n' -s http://169.254.169.254/latest/meta-data/spot/instance-action)
     if [ "$CODE" = "200" ];  then
         if [ -f /tmp/shutdown-in-progress ]; then
-          echo "Mail server is about to shutdown, no action taken..."
+          echo "Mail server is about to shutdown, no action taken..." >> /mnt/mailserver/log/spotprices.log
           exit 0
         fi
         touch /tmp/shutdown-in-progress
-        echo "AWS is going to terminate me :(, shutting down gracefully..."
+        echo "AWS is going to terminate me :(, shutting down gracefully..." >> /mnt/mailserver/log/spotprices.log
         aws autoscaling set-desired-capacity --auto-scaling-group-name {AutoScalingGroup} --desired-capacity 2 --region {region}
         sleep 100
         systemctl stop mysql postfix dovecot
