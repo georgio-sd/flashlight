@@ -263,11 +263,15 @@ Resources:
             Action:
             - 's3:*'
             Resource:
-              Fn::Join:
-              - ''
-              - - 'arn:aws:s3:::'
-                - Fn::ImportValue: !Sub "${DnsPreset}-S3Bucket"
-                - '/*'
+              - Fn::Join:
+                - ''
+                - - 'arn:aws:s3:::'
+                  - Fn::ImportValue: !Sub "${DnsPreset}-S3Bucket"
+              - Fn::Join:
+                - ''
+                - - 'arn:aws:s3:::'
+                  - Fn::ImportValue: !Sub "${DnsPreset}-S3Bucket"
+                  - '/*'
   InstanceProfile:
     Type: AWS::IAM::InstanceProfile
     Properties:
