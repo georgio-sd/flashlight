@@ -391,3 +391,5 @@ cp /usr/lib/systemd/system/opendkim.service /etc/systemd/system
 sed -i "s/After=\(.*\)/After=\1 mnt-mailserver.mount/" /etc/systemd/system/opendkim.service
 #sed -i "s/PIDFile/#PIDFile/" /etc/systemd/system/opendkim.service
 systemctl enable opendkim
+#Almalinux fix
+rpm --import https://repo.almalinux.org/almalinux/RPM-GPG-KEY-AlmaLinux
