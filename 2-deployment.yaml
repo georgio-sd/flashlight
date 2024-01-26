@@ -79,7 +79,7 @@ Parameters:
     Type: String
     Description: Disk volume size (GiB)
     Default: 6
-    AllowedValues: [ 4, 6, 8, 16, 32 ]
+    AllowedValues: [ 5, 6, 8, 16, 32 ]
   MailStorageLifecyclePolicy:
     Type: String
     Description: Mail Server Storage lifecycle policy of transition files to the Infrequent Access (IA) storage class

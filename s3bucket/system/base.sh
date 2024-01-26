@@ -15,7 +15,7 @@ sed -i "s/GRUB_CMDLINE_LINUX=\"\(.*\)\"/GRUB_CMDLINE_LINUX=\"\1 ipv6.disable=1\"
 grub2-mkconfig -o /boot/grub2/grub.cfg
 sed -i "s/udp6\(.*\)/#udp6\1/" /etc/netconfig
 sed -i "s/tcp6\(.*\)/#tcp6\1/" /etc/netconfig
-nmcli connection modify eth0 ipv6.method "disabled"
+nmcli connection modify "System eth0" ipv6.method "disabled"
 #
 # Disabling amazon-ssm-agent
 systemctl disable amazon-ssm-agent
