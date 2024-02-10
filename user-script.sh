@@ -1,5 +1,5 @@
 #!/bin/bash -xe
-#
+##
 # Squid install
 yum install -y squid
 sed -i "s/# should be allowed/# should be allowed\nacl sam_spectrum src 66\.25\.51\.4\/32/" /etc/squid/squid.conf
