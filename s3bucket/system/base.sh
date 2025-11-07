@@ -23,12 +23,10 @@ systemctl disable amazon-ssm-agent
 # Installing amazon-efs-utils and mounting EFS
 # source ~/.bashrc
 cd ~
-yum install -y make rpm-build git cargo openssl-devel rust
-git clone https://github.com/aws/efs-utils
-cd efs-utils
-make rpm
-yum install -y ./build/amazon-efs-utils*rpm
-cd ~ && rm -r /root/efs-utils
+yum install -y make rpm-build git cargo openssl-devel
+aws s3 cp s3://$BUCKET_CONFIG/amazon-efs-utils-2.4.0-1.el8.x86_64.rpm .
+yum install -y amazon-efs-utils-2.4.0-1.el8.x86_64.rpm
+rm amazon-efs-utils-2.4.0-1.el8.x86_64.rpm
 mkdir /mnt/mailserver
 echo -e "$MAIL_STORAGE:/ /mnt/mailserver efs defaults,_netdev 0 0" >> /etc/fstab
 mount -a
