@@ -137,8 +137,10 @@ Resources:
       BaseUrl: 'https://mail-server-bundles.s3.eu-central-1.amazonaws.com/v1.0'
       Files:
       - 'system/autoshutdown.service'
-      - 'system/scale-in.service'
       - 'system/spot-instance-shutdown'
+      - 'system/replace-instance'
+      - 'system/imds'
+      - 'system/instance-log'
       - 'system/spotprices.py'
       - 'system/base.sh'
       - 'system/fail2ban.sh'

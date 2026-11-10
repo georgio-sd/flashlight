@@ -73,13 +73,13 @@ Parameters:
   InstanceType:
     Type: String
     Description: EC2 instance type
-    Default: t2.micro
-    AllowedValues: [ t2.micro, t3a.micro, t3a.small, t3a.medium, t3a.large, t3a.xlarge ]
+    Default: t3a.small
+    AllowedValues: [ t3a.small, t3a.medium, t3a.large, t3a.xlarge ]
   InstanceType2:
     Type: String
     Description: EC2 additional instance type
-    Default: None
-    AllowedValues: [ None, t3.micro, t3.small, t3.medium, t3.large, t3.xlarge ]
+    Default: t3.small
+    AllowedValues: [ None, t3.small, t3.medium, t3.large, t3.xlarge ]
   InstanceLifecycle:
     Type: String
     Description: EC2 instance payment model
@@ -276,8 +276,17 @@ Resources:
             - 'ec2:DescribeSpotPriceHistory'
             - 'route53:*'
             - 'route53domains:*'
-            - 'autoscaling:*'
             Resource: '*'
+          - Effect: Allow
+            Action: [ 'autoscaling:DescribeAutoScalingInstances', 'autoscaling:DescribeAutoScalingGroups' ]
+            Resource: '*'
+          # replace-instance: the instance may only ask its own stack's ASG (old or new one during an update) to replace it
+          - Effect: Allow
+            Action: 'autoscaling:TerminateInstanceInAutoScalingGroup'
+            Resource: '*'
+            Condition:
+              StringEquals:
+                'autoscaling:ResourceTag/Name': !Sub "${AWS::StackName}-Flashlight"
           - Effect: Allow
             Action: 'cloudformation:SignalResource'
             Resource: !Ref 'AWS::StackId'

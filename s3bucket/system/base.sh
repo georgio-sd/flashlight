@@ -48,6 +48,13 @@ if [ ! -f $flag ]; then
   chown -R vmail: /mnt/mailserver/mail
 fi
 #
+# Instance helpers (imds: IMDSv2 metadata; instance-log: event log on EFS) and the BOOT record
+for tool in imds instance-log; do
+  aws s3 cp s3://$BUCKET_CONFIG/$tool /usr/local/sbin/
+  chmod 755 /usr/local/sbin/$tool
+done
+/usr/local/sbin/instance-log BOOT "new $INSTANCE_LIFECYCLE instance, installing"
+#
 # Installing the base set of packages (AlmaLinux AppStream/BaseOS + EPEL)
 dnf install -y epel-release
 dnf install -y php php-cli php-fpm php-mysqlnd php-mbstring php-intl php-xml php-gd php-pecl-zip php-opcache \
@@ -58,7 +65,9 @@ dnf install -y php php-cli php-fpm php-mysqlnd php-mbstring php-intl php-xml php
 # Signaling CloudFormation after the final reboot (the same API call cfn-signal makes, through the AWS CLI)
 cd ~
 mkdir /etc/cron.once
-printf '#!/bin/bash'"\n#\n/usr/bin/aws cloudformation signal-resource --stack-name $STACK --logical-resource-id AutoScalingGroup \
+# (outside stack create/update, e.g. after an ASG replacement, CloudFormation just rejects the signal)
+printf '#!/bin/bash'"\n#\n/usr/local/sbin/instance-log READY 'installed and rebooted, services up'\n\
+/usr/bin/aws cloudformation signal-resource --stack-name $STACK --logical-resource-id AutoScalingGroup \
   --unique-id $instid --status SUCCESS --region $AWS_REGION\n" > /etc/cron.once/cfn_signal.sh
 printf '#!/bin/bash\n#\nfor script in `find /etc/cron.once -type f`; do $script; rm $script; done\n' \
   > /usr/bin/cron-boot-runner
@@ -165,7 +174,8 @@ if [ ! -f $flag ]; then
   chmod 744 /etc/letsencrypt/renewal-hooks/*/srv-*
   mv /etc/letsencrypt /mnt/mailserver/etc
   printf '@reboot         root /usr/bin/cron-boot-runner\n' >> /etc/crontab
-  printf '#15   1  *  *  * root /mnt/mailserver/automation/spotprices.py\n' >> /etc/crontab
+  # weekly spot price check, Saturday -> Sunday night (enabled below for spot instances only)
+  printf '#15   1  *  *  0 root /mnt/mailserver/automation/spotprices.py\n' >> /etc/crontab
   mv /etc/crontab /mnt/mailserver/etc
 fi
 rm -f /etc/crontab
@@ -175,27 +185,16 @@ ln -s /mnt/mailserver/etc/crontab /etc/crontab
 rm -rf /etc/letsencrypt
 ln -s /mnt/mailserver/etc/letsencrypt /etc/letsencrypt
 #
-# Spot instances instructions
+# Spot instances: on the interruption notice and on the weekly price check the instance stops its
+# services and asks the ASG to replace it (replace-instance); events go to /mnt/mailserver/log/instance.log
 if [ "$INSTANCE_LIFECYCLE" = 'Spot' ]; then
-  AutoScalingGroup=$(aws autoscaling describe-auto-scaling-instances --instance-ids $instid \
-    --region $AWS_REGION --query 'AutoScalingInstances[0].AutoScalingGroupName' --output text)
-  printf "#%c/bin/bash\naws autoscaling set-desired-capacity --auto-scaling-group-name $AutoScalingGroup \
-    --desired-capacity 1 --region $AWS_REGION\n" ! > /mnt/mailserver/automation/scale-in
-  chmod 700 /mnt/mailserver/automation/scale-in
-  aws s3 cp s3://$BUCKET_CONFIG/spot-instance-shutdown /mnt/mailserver/automation
-  chmod 700 /mnt/mailserver/automation/spot-instance-shutdown
-  sed -i "s/{AutoScalingGroup}/$AutoScalingGroup/" /mnt/mailserver/automation/spot-instance-shutdown
-  sed -i "s/{region}/$AWS_REGION/" /mnt/mailserver/automation/spot-instance-shutdown
-  aws s3 cp s3://$BUCKET_CONFIG/spotprices.py /mnt/mailserver/automation
-  chmod 700 /mnt/mailserver/automation/spotprices.py
-  sed -i "s/{region}/'$AWS_REGION'/" /mnt/mailserver/automation/spotprices.py
-  sed -i "s/{chosenazs}/'$JOINED_AZS'/" /mnt/mailserver/automation/spotprices.py
-  sed -i "s/{chosenec2types}/'$INSTANCE_TYPE1,$INSTANCE_TYPE2'/" /mnt/mailserver/automation/spotprices.py
-  sed -i "s/{asg}/'$AutoScalingGroup'/" /mnt/mailserver/automation/spotprices.py
+  for tool in replace-instance spot-instance-shutdown spotprices.py; do
+    aws s3 cp s3://$BUCKET_CONFIG/$tool /mnt/mailserver/automation/
+    chmod 700 /mnt/mailserver/automation/$tool
+  done
   sed -i "s/\([^0-9]*\)\(.*\)spotprices\(.*\)/\2spotprices\3/" /mnt/mailserver/etc/crontab
   aws s3 cp s3://$BUCKET_CONFIG/autoshutdown.service /etc/systemd/system
-  aws s3 cp s3://$BUCKET_CONFIG/scale-in.service /etc/systemd/system
-  systemctl enable autoshutdown scale-in
+  systemctl enable autoshutdown
 else
   sed -i "s/\(^[0-9].*\)spotprices\(.*\)/\#\1spotprices\2/" /mnt/mailserver/etc/crontab
 fi

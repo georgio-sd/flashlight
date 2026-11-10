@@ -1,0 +1,23 @@
+#!/bin/bash
+#
+# Stops the mail services cleanly and asks the Auto Scaling group to replace this instance.
+# The ASG keeps its desired capacity (1) and launches the new instance by its own allocation strategy.
+# usage: replace-instance "<reason>"        DRY_RUN=1 replace-instance "..." only logs what it would do
+#
+# imds and instance-log live in /usr/local/sbin, which is not in cron's PATH
+export PATH=/usr/local/sbin:$PATH
+reason=$1
+instance-log REPLACE "reason=$reason"
+if [ "$DRY_RUN" = 1 ]; then
+  instance-log REPLACE "dry run: services would be stopped and the ASG asked to replace this instance"
+  exit 0
+fi
+systemctl stop postfix dovecot httpd php-fpm opendkim
+systemctl stop mariadb
+instance-log STOP "services stopped, asking the ASG to replace this instance"
+if ! aws autoscaling terminate-instance-in-auto-scaling-group --instance-id "$(imds instance-id)" \
+     --no-should-decrement-desired-capacity --region "$(imds placement/region)"; then
+  # the instance terminates on shutdown (InstanceInitiatedShutdownBehavior) and the ASG replaces it
+  instance-log STOP "ASG call failed, shutting down instead"
+  shutdown -h now
+fi

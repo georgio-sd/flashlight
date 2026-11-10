@@ -1,0 +1,10 @@
+#!/bin/bash
+#
+# Appends one event line to /mnt/mailserver/log/instance.log (shared by all instances on EFS):
+#   date time, instance ID, pool (type/zone), event, message
+# usage: instance-log EVENT "message"
+#
+# imds and instance-log live in /usr/local/sbin, which is not in cron's PATH
+export PATH=/usr/local/sbin:$PATH
+printf '%s %s %-22s %-7s %s\n' "$(date '+%F %T')" "$(imds instance-id)" \
+  "$(imds instance-type)/$(imds placement/availability-zone)" "$1" "$2" | tee -a /mnt/mailserver/log/instance.log

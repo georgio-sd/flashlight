@@ -1,0 +1,8 @@
+#!/bin/bash
+#
+# Prints EC2 instance metadata through IMDSv2 (get a token, then ask with it).
+# usage: imds <path>        e.g. imds instance-id, imds spot/instance-action
+# Exits non-zero if the path doesn't exist (HTTP 404), so it can be used in tests.
+#
+token=$(curl -s -X PUT http://169.254.169.254/latest/api/token -H "X-aws-ec2-metadata-token-ttl-seconds: 60")
+curl -s -f -H "X-aws-ec2-metadata-token: $token" http://169.254.169.254/latest/meta-data/$1
