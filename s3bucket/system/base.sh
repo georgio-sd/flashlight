@@ -173,6 +173,8 @@ if [ ! -f $flag ]; then
   printf '#!/bin/bash\nsystemctl try-reload-or-restart postfix dovecot\n' > /etc/letsencrypt/renewal-hooks/deploy/srv-reload
   chmod 744 /etc/letsencrypt/renewal-hooks/*/srv-*
   mv /etc/letsencrypt /mnt/mailserver/etc
+  # no cron mail: jobs write their own logs to /mnt/mailserver/log
+  sed -i 's/^MAILTO=.*/MAILTO=""/' /etc/crontab
   printf '@reboot         root /usr/bin/cron-boot-runner\n' >> /etc/crontab
   # weekly spot price check, Saturday -> Sunday night (enabled below for spot instances only)
   printf '#15   1  *  *  0 root /mnt/mailserver/automation/spotprices.py\n' >> /etc/crontab
@@ -182,6 +184,8 @@ rm -f /etc/crontab
 cp /usr/lib/systemd/system/crond.service /etc/systemd/system
 sed -i "s/After=\(.*\)/After=\1 mnt-mailserver.mount/" /etc/systemd/system/crond.service
 ln -s /mnt/mailserver/etc/crontab /etc/crontab
+# the local cron files (hourly runner, anacron daily/weekly jobs) don't send mail either
+sed -i 's/^MAILTO=.*/MAILTO=""/' /etc/cron.d/0hourly /etc/anacrontab
 rm -rf /etc/letsencrypt
 ln -s /mnt/mailserver/etc/letsencrypt /etc/letsencrypt
 #

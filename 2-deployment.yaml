@@ -400,6 +400,16 @@ Resources:
             # Updating OS and rebooting
             yum update -y
             printf "Flashlight Mail Server v0.5 (re)deployed at $(date)\nDo not delete this file" > /mnt/mailserver/flag
+            #
+            # Keeping this instance's install log on EFS (root only: the first install's trace contains passwords)
+            # and removing install logs older than 90 days
+            if mountpoint -q /mnt/mailserver; then
+              TOKEN=$(curl -s -X PUT http://169.254.169.254/latest/api/token -H "X-aws-ec2-metadata-token-ttl-seconds: 60")
+              INSTANCE_ID=$(curl -s -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/instance-id)
+              install -d -m 700 /mnt/mailserver/log/install
+              install -m 600 /var/log/flashlight-install.log /mnt/mailserver/log/install/$(date +%Y-%m-%d-%H-%M-%S)-$INSTANCE_ID.log
+              find /mnt/mailserver/log/install -name '*.log' -mtime +90 -delete
+            fi
             reboot
           - eipid:
               Fn::ImportValue: !Sub "${DnsPreset}-EipID"
