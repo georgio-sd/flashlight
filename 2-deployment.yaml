@@ -461,7 +461,9 @@ Resources:
     Properties:
       DesiredCapacity: 1
       MinSize: 1
-      MaxSize: 2
+      # one mail server per storage: replacements (spot, price check, scheduled rebuild) terminate first,
+      # then the ASG launches the new instance; a stack update creates a separate ASG
+      MaxSize: 1
       VPCZoneIdentifier: [ !Ref PubSubnetA, !Ref PubSubnetB, !If [ ThreeAZoneConf, !Ref PubSubnetC, !Ref 'AWS::NoValue' ] ]
       TerminationPolicies: [ OldestInstance ]
       MixedInstancesPolicy:
