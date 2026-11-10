@@ -274,9 +274,27 @@ Resources:
             Action:
             - 'ec2:AssociateAddress'
             - 'ec2:DescribeSpotPriceHistory'
-            - 'route53:*'
-            - 'route53domains:*'
             Resource: '*'
+          # DNS: TXT records only, in this stack's zones only. dnsupd.py writes DKIM, SPF and DMARC;
+          # certbot's Route 53 plugin adds and removes the Let's Encrypt _acme-challenge records
+          # (it also looks up the zone and waits until the change is on all Route 53 servers)
+          - Effect: Allow
+            Action: [ 'route53:ListHostedZones', 'route53:GetChange' ]
+            Resource: '*'
+          - Effect: Allow
+            Action: 'route53:ChangeResourceRecordSets'
+            Resource: !Split
+            - ','
+            - !Sub
+              - 'arn:aws:route53:::hostedzone/${ZoneIds}'
+              - ZoneIds: !Join
+                - ',arn:aws:route53:::hostedzone/'
+                - !Split
+                  - ','
+                  - Fn::ImportValue: !Sub "${DnsPreset}-DomainZoneIDs"
+            Condition:
+              'ForAllValues:StringEquals':
+                'route53:ChangeResourceRecordSetsRecordTypes': 'TXT'
           - Effect: Allow
             Action: [ 'autoscaling:DescribeAutoScalingInstances', 'autoscaling:DescribeAutoScalingGroups' ]
             Resource: '*'

@@ -60,7 +60,7 @@ dnf install -y epel-release
 dnf install -y php php-cli php-fpm php-mysqlnd php-mbstring php-intl php-xml php-gd php-pecl-zip php-opcache \
   httpd httpd-tools mod_ssl mariadb mariadb-server \
   postfix postfix-mysql dovecot dovecot-mysql dovecot-pigeonhole \
-  opendkim opendkim-tools certbot pwgen python3-boto3 bind-utils mc
+  opendkim opendkim-tools certbot python3-certbot-dns-route53 pwgen python3-boto3 bind-utils mc
 #
 # Signaling CloudFormation after the final reboot (the same API call cfn-signal makes, through the AWS CLI)
 cd ~
@@ -159,18 +159,18 @@ ln -s /mnt/mailserver/www /var/www
 #
 # Getting SSL certificates (certbot) and preparing crontab
 # Renewal runs from certbot-renew.timer (EPEL package, twice a day); the hooks below apply to it.
+# Domain validation is DNS-01 through Route 53: certbot adds a temporary _acme-challenge TXT record to the
+# domain's zone, waits until Route 53 has it on all its servers, and removes it after the check. No web server
+# or open port is involved, so Apache keeps running during renewals.
 if [ ! -f $flag ]; then
   # CERT_MODE=staging (stack parameter) uses the Let's Encrypt test CA: untrusted certs, no production rate limits
   certbot_test=""
   [ "$CERT_MODE" = 'staging' ] && certbot_test="--test-cert"
   # RSA: understood by every mail server and client, including old ones
-  certbot certonly --standalone $certbot_test --key-type rsa -d $MAIL_DOMAIN,$ADMIN_DOMAIN -m $ADMIN_EMAIL \
+  certbot certonly --dns-route53 $certbot_test --key-type rsa -d $MAIL_DOMAIN,$ADMIN_DOMAIN -m $ADMIN_EMAIL \
     --agree-tos --non-interactive
-  # standalone renewal needs port 80, so Apache stops for the few seconds of a renewal
-  printf '#!/bin/bash\nsystemctl stop httpd\n' > /etc/letsencrypt/renewal-hooks/pre/srv-stop
-  printf '#!/bin/bash\nsystemctl start httpd\n' > /etc/letsencrypt/renewal-hooks/post/srv-start
-  # only when a new certificate was actually issued: reload mail services, connections stay up
-  printf '#!/bin/bash\nsystemctl try-reload-or-restart postfix dovecot\n' > /etc/letsencrypt/renewal-hooks/deploy/srv-reload
+  # only when a new certificate was actually issued: services reload it, connections stay up
+  printf '#!/bin/bash\nsystemctl try-reload-or-restart postfix dovecot httpd\n' > /etc/letsencrypt/renewal-hooks/deploy/srv-reload
   chmod 744 /etc/letsencrypt/renewal-hooks/*/srv-*
   mv /etc/letsencrypt /mnt/mailserver/etc
   # no cron mail: jobs write their own logs to /mnt/mailserver/log
