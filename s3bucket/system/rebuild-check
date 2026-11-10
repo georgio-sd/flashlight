@@ -1,0 +1,17 @@
+#!/bin/bash
+#
+# Scheduled rebuild: once this instance is older than DAYS, it asks the ASG to replace it, and the new
+# instance is installed from scratch on current packages. Runs from cron weekly, Sunday 03:15 (two hours after
+# the spot price check, so an instance that check has just replaced is young and stays).
+# The age counts from the install (time of /mnt/mailserver/flag-ec2id-<id>), so reboots don't reset it.
+# usage: rebuild-check DAYS        DRY_RUN=1 rebuild-check DAYS only logs what it would do
+#
+# imds and instance-log live in /usr/local/sbin, which is not in cron's PATH
+export PATH=/usr/local/sbin:$PATH
+days=$1
+flag=/mnt/mailserver/flag-ec2id-$(imds instance-id)
+[ -f "$flag" ] || exit 0
+age=$(( ($(date +%s) - $(stat -c %Y "$flag")) / 86400 ))
+if [ "$age" -ge "$days" ]; then
+  exec /mnt/mailserver/automation/replace-instance "scheduled rebuild: instance age $age days"
+fi

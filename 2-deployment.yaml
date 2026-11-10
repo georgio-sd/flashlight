@@ -19,6 +19,7 @@ Metadata:
       - InstanceType
       - InstanceType2
       - InstanceLifecycle
+      - RebuildAfterDays
       - DiskVolumeSize
       - KeyName
     - Label:
@@ -85,6 +86,13 @@ Parameters:
     Description: EC2 instance payment model
     Default: Spot
     AllowedValues: [ On-Demand, Spot ]
+  RebuildAfterDays:
+    Type: Number
+    Description: >-
+      Rebuild the server from scratch on current packages once it is this many days old: it is replaced on
+      the first Saturday-to-Sunday night (03:15) after that age, which takes 10-15 minutes. 0 turns it off
+    Default: 30
+    MinValue: 0
   DiskVolumeSize:
     Type: String
     Description: Disk volume size (GiB)
@@ -357,6 +365,7 @@ Resources:
             export MAIL_STORAGE=${MailStorage}
             export BUCKET_CONFIG=${bucketconfig}
             export INSTANCE_LIFECYCLE=${InstanceLifecycle}
+            export REBUILD_AFTER_DAYS=${RebuildAfterDays}
             #
             export TIMEZONE=${TimeZone}
             export ADMIN_EMAIL=${AdminEmail}

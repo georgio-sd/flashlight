@@ -191,8 +191,12 @@ ln -s /mnt/mailserver/etc/letsencrypt /etc/letsencrypt
 #
 # Spot instances: on the interruption notice and on the weekly price check the instance stops its
 # services and asks the ASG to replace it (replace-instance); events go to /mnt/mailserver/log/instance.log
+for tool in replace-instance rebuild-check; do
+  aws s3 cp s3://$BUCKET_CONFIG/$tool /mnt/mailserver/automation/
+  chmod 700 /mnt/mailserver/automation/$tool
+done
 if [ "$INSTANCE_LIFECYCLE" = 'Spot' ]; then
-  for tool in replace-instance spot-instance-shutdown spotprices.py; do
+  for tool in spot-instance-shutdown spotprices.py; do
     aws s3 cp s3://$BUCKET_CONFIG/$tool /mnt/mailserver/automation/
     chmod 700 /mnt/mailserver/automation/$tool
   done
@@ -201,6 +205,12 @@ if [ "$INSTANCE_LIFECYCLE" = 'Spot' ]; then
   systemctl enable autoshutdown
 else
   sed -i "s/\(^[0-9].*\)spotprices\(.*\)/\#\1spotprices\2/" /mnt/mailserver/etc/crontab
+fi
+# Scheduled rebuild (stack parameter RebuildAfterDays, 0 = off): Sunday 03:15, two hours after the price check.
+# The line is rewritten at every boot, so a stack update changes or removes it.
+sed -i '/rebuild-check/d' /mnt/mailserver/etc/crontab
+if [ "$REBUILD_AFTER_DAYS" -gt 0 ]; then
+  printf '15   3  *  *  0 root /mnt/mailserver/automation/rebuild-check %s\n' "$REBUILD_AFTER_DAYS" >> /mnt/mailserver/etc/crontab
 fi
 #
 # Double instance service protection

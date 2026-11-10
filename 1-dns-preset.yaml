@@ -147,6 +147,7 @@ Resources:
       - 'system/autoshutdown.service'
       - 'system/spot-instance-shutdown'
       - 'system/replace-instance'
+      - 'system/rebuild-check'
       - 'system/imds'
       - 'system/instance-log'
       - 'system/spotprices.py'
