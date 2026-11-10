@@ -42,7 +42,7 @@ groupadd -g 5000 vmail
 useradd -M -d /mnt/mailserver/mail -g 5000 -u 5000 -s /sbin/nologin vmail
 if [ ! -f $flag ]; then
   mkdir /mnt/mailserver/root /mnt/mailserver/automation /mnt/mailserver/log /mnt/mailserver/backup
-  mkdir /mnt/mailserver/www /mnt/mailserver/etc /mnt/mailserver/etc/sysconfig /mnt/mailserver/mail
+  mkdir /mnt/mailserver/www /mnt/mailserver/etc /mnt/mailserver/mail
   mkdir /mnt/mailserver/mail/shared-folders /mnt/mailserver/mail/sieve /mnt/mailserver/spool
   chmod 700 /mnt/mailserver/backup
   chown -R vmail: /mnt/mailserver/mail
@@ -321,65 +321,36 @@ sed -i "s/After=\(.*\)/After=\1 mnt-mailserver.mount/" /etc/systemd/system/httpd
 sed -i "s/After=\(.*\)/After=\1 mnt-mailserver.mount/" /etc/systemd/system/php-fpm.service
 systemctl enable httpd
 #
-# Setting up DKIM, SPF and DMARK
+# DKIM, SPF and DMARC. Run at every boot, so the server follows the stack's domain list:
+# keys of removed domains are deleted, new domains get a key, and the DNS records are brought up to date.
+dkim=/etc/postfix/dkim
 if [ ! -f $flag ]; then
-  cd ~
-  mkdir /etc/postfix/dkim
-  chown root:opendkim /etc/postfix/dkim && chmod 750 /etc/postfix/dkim
-  cd /etc/postfix/dkim
-  for (( i=1; i<=$NUMBER_OF_DOMAINS; i++ ))
-  do
-    domain=$(echo "$DOMAIN_NAMES" | cut -d',' -f $i)
-    mkdir $domain
-    opendkim-genkey -D /etc/postfix/dkim/$domain/ -d $domain -s mail
-    echo "mail._domainkey.$domain $domain:mail:/etc/postfix/dkim/$domain/mail.private" >> keytable
-    echo "*@$domain mail._domainkey.$domain" >> signingtable
-  done
-  aws s3 cp s3://$BUCKET_CONFIG/opendkim.conf /etc/postfix/dkim
-  chown -R root:opendkim /etc/postfix/dkim && find . -type d -exec chmod 750 {} \; && find . -type f -exec chmod 640 {} \;
-  aws s3 cp s3://$BUCKET_CONFIG/dnsupd.py /root
-  chmod 700 /root/dnsupd.py
-  /root/dnsupd.py $DOMAIN_NAMES $DOMAIN_ZONE_IDS $EIP
-  rm /root/dnsupd.py
-  sed -i "s#opendkim.conf -P /var#postfix/dkim/opendkim.conf -P #" /etc/sysconfig/opendkim
-  mv /etc/sysconfig/opendkim /mnt/mailserver/etc/sysconfig
-else
-  cd /etc/postfix/dkim
-  rm keytable signingtable
-  for directory in `find . -maxdepth 1 -mindepth 1 -type d -printf '%f\n'`
-  do
-    directory_in_use=false
-    for (( i=1; i<=$NUMBER_OF_DOMAINS; i++ ))
-    do
-      domain=$(echo "$DOMAIN_NAMES" | cut -d',' -f $i)
-      if [ "$directory" = "$domain" ]; then
-        directory_in_use=true
-      fi
-    done
-    if [ "$directory_in_use" = "false" ]; then
-      rm -r $directory
-    fi
-  done
-  for (( i=1; i<=$NUMBER_OF_DOMAINS; i++ ))
-  do
-    domain=$(echo "$DOMAIN_NAMES" | cut -d',' -f $i)
-    if [ ! -d $domain ]; then
-      mkdir $domain
-      opendkim-genkey -D /etc/postfix/dkim/$domain/ -d $domain -s mail
-    fi
-    echo "mail._domainkey.$domain $domain:mail:/etc/postfix/dkim/$domain/mail.private" >> keytable
-    echo "*@$domain mail._domainkey.$domain" >> signingtable
-  done
-  chown -R root:opendkim /etc/postfix/dkim && find . -type d -exec chmod 750 {} \; && find . -type f -exec chmod 640 {} \;
-  aws s3 cp s3://$BUCKET_CONFIG/dnsupd.py /root
-  chmod 700 /root/dnsupd.py
-  /root/dnsupd.py $DOMAIN_NAMES $DOMAIN_ZONE_IDS $EIP
-  rm /root/dnsupd.py
+  mkdir $dkim
+  aws s3 cp s3://$BUCKET_CONFIG/opendkim.conf $dkim
 fi
-rm -f /etc/sysconfig/opendkim
-ln -s /mnt/mailserver/etc/sysconfig/opendkim /etc/sysconfig/opendkim
-#sed -i "s#/var##" /etc/tmpfiles.d/opendkim.conf
+IFS=',' read -ra domains <<< "$DOMAIN_NAMES"
+for dir in $(find $dkim -mindepth 1 -maxdepth 1 -type d -printf '%f\n'); do
+  [[ " ${domains[*]} " == *" $dir "* ]] || rm -r "$dkim/$dir"
+done
+: > $dkim/keytable
+: > $dkim/signingtable
+for domain in "${domains[@]}"; do
+  if [ ! -d $dkim/$domain ]; then
+    mkdir $dkim/$domain
+    opendkim-genkey -b 2048 -D $dkim/$domain -d $domain -s mail
+  fi
+  echo "mail._domainkey.$domain $domain:mail:$dkim/$domain/mail.private" >> $dkim/keytable
+  echo "*@$domain mail._domainkey.$domain" >> $dkim/signingtable
+done
+# the private keys are readable by OpenDKIM only
+chown -R root:opendkim $dkim
+find $dkim -type d -exec chmod 750 {} +
+find $dkim -type f -exec chmod 640 {} +
+aws s3 cp s3://$BUCKET_CONFIG/dnsupd.py /usr/local/sbin/dnsupd.py --quiet
+chmod 700 /usr/local/sbin/dnsupd.py
+/usr/local/sbin/dnsupd.py "$DOMAIN_NAMES" "$DOMAIN_ZONE_IDS" "$EIP" "$MAIL_DOMAIN"
+# OpenDKIM reads our config on EFS (local file, rewritten at every boot)
+echo "OPTIONS=\"-x $dkim/opendkim.conf\"" > /etc/sysconfig/opendkim
 cp /usr/lib/systemd/system/opendkim.service /etc/systemd/system
 sed -i "s/After=\(.*\)/After=\1 mnt-mailserver.mount/" /etc/systemd/system/opendkim.service
-#sed -i "s/PIDFile/#PIDFile/" /etc/systemd/system/opendkim.service
 systemctl enable opendkim

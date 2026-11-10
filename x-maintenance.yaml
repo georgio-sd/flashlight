@@ -277,9 +277,10 @@ Resources:
             Resource: '*'
           # DNS: TXT records only, in this stack's zones only. dnsupd.py writes DKIM, SPF and DMARC;
           # certbot's Route 53 plugin adds and removes the Let's Encrypt _acme-challenge records
-          # (it also looks up the zone and waits until the change is on all Route 53 servers)
+          # (it also looks up the zone and waits until the change is on all Route 53 servers);
+          # dnsupd.py reads a domain's TXT records to keep the strings that aren't ours (read-only, DNS is public anyway)
           - Effect: Allow
-            Action: [ 'route53:ListHostedZones', 'route53:GetChange' ]
+            Action: [ 'route53:ListHostedZones', 'route53:GetChange', 'route53:ListResourceRecordSets' ]
             Resource: '*'
           - Effect: Allow
             Action: 'route53:ChangeResourceRecordSets'
