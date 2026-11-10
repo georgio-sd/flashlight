@@ -63,22 +63,11 @@ printf '#!/bin/bash\n#\nfor script in `find /etc/cron.once -type f`; do $script;
   > /usr/bin/cron-boot-runner
 chmod 744 /etc/cron.once/cfn_signal.sh /usr/bin/cron-boot-runner
 #
-# Setting up iptables
+# Credentials file creating (the install trace with passwords goes to the root-only flashlight-install.log)
 if [ ! -f $flag ]; then
-  aws s3 cp s3://$BUCKET_CONFIG/iptables /mnt/mailserver/etc/sysconfig
-fi
-rm /etc/sysconfig/iptables
-ln -s /mnt/mailserver/etc/sysconfig/iptables /etc/sysconfig/iptables
-cp /usr/lib/systemd/system/iptables.service /etc/systemd/system
-sed -i "s/After=\(.*\)/After=\1 mnt-mailserver.mount/" /etc/systemd/system/iptables.service
-systemctl daemon-reload
-systemctl restart iptables
-#
-# Credentials file creating and init log protecting
-if [ ! -f $flag ]; then
+  chmod 700 /mnt/mailserver/root
   touch /mnt/mailserver/root/credentials
   chmod 600 /mnt/mailserver/root/credentials
-  chmod 600 /var/log/cloud-init-output.log
 fi
 ln -s /mnt/mailserver/root/credentials /root/credentials
 #

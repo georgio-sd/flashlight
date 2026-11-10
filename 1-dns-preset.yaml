@@ -136,7 +136,6 @@ Resources:
       Updater: !Ref Updater
       BaseUrl: 'https://mail-server-bundles.s3.eu-central-1.amazonaws.com/v1.0'
       Files:
-      - 'system/iptables'
       - 'system/autoshutdown.service'
       - 'system/scale-in.service'
       - 'system/spot-instance-shutdown'

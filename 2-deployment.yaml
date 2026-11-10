@@ -347,16 +347,22 @@ Resources:
             cd ~
             dnf install -y awscli2
             #
+            # Install scripts log to a root-only file: their -x trace contains generated passwords,
+            # and anything printed here also goes to the systemd journal and the EC2 console log
+            install -m 600 /dev/null /var/log/flashlight-install.log
+            #
             # Deploying base software
             aws s3 cp s3://${bucketconfig}/base.sh /root
             chmod 744 /root/base.sh
-            /root/base.sh
+            /root/base.sh >> /var/log/flashlight-install.log 2>&1
+            echo "base.sh finished with code $? (details: /var/log/flashlight-install.log)"
             rm /root/base.sh
             #
             # Deploying fail2ban
             aws s3 cp s3://${bucketconfig}/fail2ban.sh /root
             chmod 744 /root/fail2ban.sh
-            /root/fail2ban.sh
+            /root/fail2ban.sh >> /var/log/flashlight-install.log 2>&1
+            echo "fail2ban.sh finished with code $? (details: /var/log/flashlight-install.log)"
             rm /root/fail2ban.sh
             #
             # Deploying user script if presented
@@ -365,7 +371,8 @@ Resources:
               echo "user-script.sh is presented (applying user configuration)..."
               aws s3 cp s3://${bucketconfig}/user-script.sh /root
               chmod 744 /root/user-script.sh
-              /root/user-script.sh
+              /root/user-script.sh >> /var/log/flashlight-install.log 2>&1
+              echo "user-script.sh finished with code $? (details: /var/log/flashlight-install.log)"
               rm /root/user-script.sh
             else
               echo "user-script.sh is not presented (no additional user configuration)"
