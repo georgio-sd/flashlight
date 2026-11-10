@@ -354,11 +354,8 @@ Resources:
             export EIP=${eip}
             export AWS_REGION=${AWS::Region}
             export STACK=${AWS::StackName}
-            export JOINED_AZS=${joinedazs}
             export MAIL_STORAGE=${MailStorage}
             export BUCKET_CONFIG=${bucketconfig}
-            export INSTANCE_TYPE1=${InstanceType}
-            export INSTANCE_TYPE2=${InstanceType2}
             export INSTANCE_LIFECYCLE=${InstanceLifecycle}
             #
             export TIMEZONE=${TimeZone}
@@ -368,7 +365,6 @@ Resources:
             #
             export DOMAIN_ZONE_IDS=${domainzoneids}
             export DOMAIN_NAMES=${domainnames}
-            export NUMBER_OF_DOMAINS=${numberofdomains}
             export ADMIN_DOMAIN=${admindomain}
             export MAIL_DOMAIN=${maildomain}
             #
@@ -381,19 +377,25 @@ Resources:
             # Disabling yes requests for rm/mv/cp commands
             sed -i 's/alias/#alias/' /root/.*hrc
             #
-            # Installing awscli (AlmaLinux AppStream package)
-            cd ~
-            dnf install -y awscli2
-            #
             # Install scripts log to a root-only file: their -x trace contains generated passwords,
             # and anything printed here also goes to the systemd journal and the EC2 console log
             install -m 600 /dev/null /var/log/flashlight-install.log
+            #
+            # Updating the OS first, so everything below is installed and configured on the current
+            # package versions (a new kernel starts with the reboot at the end)
+            dnf upgrade -y >> /var/log/flashlight-install.log 2>&1
+            echo "dnf upgrade finished with code $? (details: /var/log/flashlight-install.log)"
+            #
+            # Installing awscli (AlmaLinux AppStream package)
+            cd ~
+            dnf install -y awscli2
             #
             # Deploying base software
             aws s3 cp s3://${bucketconfig}/base.sh /root
             chmod 744 /root/base.sh
             /root/base.sh >> /var/log/flashlight-install.log 2>&1
-            echo "base.sh finished with code $? (details: /var/log/flashlight-install.log)"
+            base_rc=$?
+            echo "base.sh finished with code $base_rc (details: /var/log/flashlight-install.log)"
             rm /root/base.sh
             #
             # Deploying user script if presented
@@ -409,9 +411,11 @@ Resources:
               echo "user-script.sh is not presented (no additional user configuration)"
             fi
             #
-            # Updating OS and rebooting
-            yum update -y
-            printf "Flashlight Mail Server v0.5 (re)deployed at $(date)\nDo not delete this file" > /mnt/mailserver/flag
+            # The flag on EFS tells the next instances that the first install is done. It is written only
+            # after a successful base.sh: a failed first install must not mark the storage as installed
+            if [ $base_rc -eq 0 ]; then
+              printf "Flashlight Mail Server v1.0 (re)deployed at $(date)\nDo not delete this file" > /mnt/mailserver/flag
+            fi
             #
             # Keeping this instance's install log on EFS (root only: the first install's trace contains passwords)
             # and removing install logs older than 90 days
@@ -437,12 +441,6 @@ Resources:
               Fn::ImportValue: !Sub "${DnsPreset}-DomainNames"
             domainzoneids:
               Fn::ImportValue: !Sub "${DnsPreset}-DomainZoneIDs"
-            numberofdomains:
-              Fn::ImportValue: !Sub "${DnsPreset}-NumberOfDomains"
-            joinedazs:
-              Fn::Join:
-              - ','
-              - !Ref AZoneNames
   AutoScalingGroup:
     Type: AWS::AutoScaling::AutoScalingGroup
     UpdatePolicy:

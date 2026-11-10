@@ -398,7 +398,7 @@ Resources:
                               main_change_id = change_id
                       reverse_dns = set_reverse_dns(props['EipAllocationId'], mail, main_change_id)
                       data = {'DomainNames': ','.join(domains), 'DomainZoneIDs': ','.join(zone_ids),
-                              'NumberOfDomains': len(domains), 'DNSRecAdmin': admin, 'DNSRecMail': mail,
+                              'DNSRecAdmin': admin, 'DNSRecMail': mail,
                               'ImageId': image_id, 'ReverseDNS': reverse_dns}
                   elif event['RequestType'] == 'Delete':
                       remove_reverse_dns(event['ResourceProperties']['EipAllocationId'])
@@ -425,10 +425,6 @@ Outputs:
     Value: !GetAtt [ DnsPreset, DomainZoneIDs ]
     Export:
       Name: !Sub "${AWS::StackName}-DomainZoneIDs"
-  NumberOfDomains:
-    Value: !GetAtt [ DnsPreset, NumberOfDomains ]
-    Export:
-      Name: !Sub "${AWS::StackName}-NumberOfDomains"
   S3Bucket:
     Value: !Ref MSBucket
     Export:
