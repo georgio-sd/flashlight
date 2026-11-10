@@ -31,22 +31,20 @@ aws s3 cp s3://$BUCKET_CONFIG/$efs_rpm .
 dnf install -y ./$efs_rpm
 rm $efs_rpm
 mkdir /mnt/mailserver
-echo -e "$MAIL_STORAGE:/ /mnt/mailserver efs defaults,_netdev 0 0" >> /etc/fstab
+# tls: encrypt traffic to EFS (costs about 1 s of CPU per GB transferred, no visible speed loss)
+echo -e "$MAIL_STORAGE:/ /mnt/mailserver efs _netdev,tls 0 0" >> /etc/fstab
 mount -a
 #
-# Creating directories
+# Creating directories and the vmail user (owner of all mailboxes)
 rm -f /mnt/mailserver/flag-ec2id-*
 printf "Do not delete this file" > /mnt/mailserver/flag-ec2id-$instid
+groupadd -g 5000 vmail
+useradd -M -d /mnt/mailserver/mail -g 5000 -u 5000 -s /sbin/nologin vmail
 if [ ! -f $flag ]; then
   mkdir /mnt/mailserver/root /mnt/mailserver/automation /mnt/mailserver/log /mnt/mailserver/backup
   mkdir /mnt/mailserver/www /mnt/mailserver/etc /mnt/mailserver/etc/sysconfig /mnt/mailserver/mail
   mkdir /mnt/mailserver/mail/shared-folders /mnt/mailserver/spool
-  groupadd -g 5000 vmail
-  useradd -d /mnt/mailserver/mail -g 5000 -u 5000 vmail -s /sbin/nologin
-  chown -R vmail. /mnt/mailserver/mail
-else
-  groupadd -g 5000 vmail
-  useradd -d /mnt/mailserver/mail -g 5000 -u 5000 vmail -s /sbin/nologin
+  chown -R vmail: /mnt/mailserver/mail
 fi
 #
 # Installing Remi and the base set of packages
