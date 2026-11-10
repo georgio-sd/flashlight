@@ -47,24 +47,18 @@ if [ ! -f $flag ]; then
   chown -R vmail: /mnt/mailserver/mail
 fi
 #
-# Installing Remi and the base set of packages
-yum install -y dnf-utils http://rpms.remirepo.net/enterprise/remi-release-8.7.rpm
-yum makecache -y
-yum module enable -y php:remi-7.4
-yum install -y httpd mod_ssl mariadb mariadb-server pwgen php php-imap php-mysqlnd php-mbstring bind-utils certbot \
-  postfix postfix-mysql dovecot dovecot-mysql dovecot-pigeonhole php-pear php-mcrypt php-intl php-ldap \
-  php-pear-Net-SMTP php-gd php-zip php-imagick opendkim jq python39 wget net-tools mc iptables iptables-services epel-release
-yum install -y --enablerepo=remi php-pear-Net-Sieve php-pear-Mail-Mime php-pear-Net-IDNA2
-pip3.9 install boto3 requests urllib3==1.26.15 --upgrade
+# Installing the base set of packages (AlmaLinux AppStream/BaseOS + EPEL)
+dnf install -y epel-release
+dnf install -y php php-cli php-fpm php-mysqlnd php-mbstring php-intl php-xml php-gd php-pecl-zip php-opcache \
+  httpd httpd-tools mod_ssl mariadb mariadb-server \
+  postfix postfix-mysql dovecot dovecot-mysql dovecot-pigeonhole \
+  opendkim opendkim-tools certbot pwgen python3-boto3 bind-utils mc
 #
-# installing cfn-tools
+# Signaling CloudFormation after the final reboot (the same API call cfn-signal makes, through the AWS CLI)
 cd ~
-wget https://s3.amazonaws.com/cloudformation-examples/aws-cfn-bootstrap-py3-latest.tar.gz
-pip3.9 install aws-cfn-bootstrap-py3-latest.tar.gz
-rm aws-cfn-bootstrap-py3-latest.tar.gz
 mkdir /etc/cron.once
-printf '#!/bin/bash'"\n#\n/usr/local/bin/cfn-signal -s true --stack $STACK --resource AutoScalingGroup --region $AWS_REGION\n" \
-  > /etc/cron.once/cfn_signal.sh
+printf '#!/bin/bash'"\n#\n/usr/bin/aws cloudformation signal-resource --stack-name $STACK --logical-resource-id AutoScalingGroup \
+  --unique-id $instid --status SUCCESS --region $AWS_REGION\n" > /etc/cron.once/cfn_signal.sh
 printf '#!/bin/bash\n#\nfor script in `find /etc/cron.once -type f`; do $script; rm $script; done\n' \
   > /usr/bin/cron-boot-runner
 chmod 744 /etc/cron.once/cfn_signal.sh /usr/bin/cron-boot-runner
@@ -193,7 +187,7 @@ ln -s /mnt/mailserver/etc/letsencrypt /etc/letsencrypt
 # Spot instances instructions
 if [ "$INSTANCE_LIFECYCLE" = 'Spot' ]; then
   AutoScalingGroup=$(aws autoscaling describe-auto-scaling-instances --instance-ids $instid \
-    --region $AWS_REGION | jq -r '.AutoScalingInstances[].AutoScalingGroupName')
+    --region $AWS_REGION --query 'AutoScalingInstances[0].AutoScalingGroupName' --output text)
   printf "#%c/bin/bash\naws autoscaling set-desired-capacity --auto-scaling-group-name $AutoScalingGroup \
     --desired-capacity 1 --region $AWS_REGION\n" ! > /mnt/mailserver/automation/scale-in
   chmod 700 /mnt/mailserver/automation/scale-in

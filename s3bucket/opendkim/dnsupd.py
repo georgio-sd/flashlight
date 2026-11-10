@@ -1,4 +1,4 @@
-#!/usr/bin/env python3.9
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 ################################################################################################
 # dkim dns records updater

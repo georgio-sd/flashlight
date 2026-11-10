@@ -270,6 +270,9 @@ Resources:
             - 'autoscaling:*'
             Resource: '*'
           - Effect: Allow
+            Action: 'cloudformation:SignalResource'
+            Resource: !Ref 'AWS::StackId'
+          - Effect: Allow
             Action:
             - 's3:*'
             Resource:
