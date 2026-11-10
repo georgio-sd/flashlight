@@ -17,23 +17,19 @@ hostnamectl set-hostname $MAIL_DOMAIN
 flag=/mnt/mailserver/flag
 systemctl stop crond
 #
-# Disabling IPv6
-sed -i "s/GRUB_CMDLINE_LINUX=\"\(.*\)\"/GRUB_CMDLINE_LINUX=\"\1 ipv6.disable=1\"/" /etc/default/grub
-grub2-mkconfig -o /boot/grub2/grub.cfg
-sed -i "s/udp6\(.*\)/#udp6\1/" /etc/netconfig
-sed -i "s/tcp6\(.*\)/#tcp6\1/" /etc/netconfig
-nmcli connection modify "System eth0" ipv6.method "disabled"
+# Disabling IPv6 (the VPC has no IPv6; the kernel parameter takes effect after the final reboot)
+grubby --update-kernel ALL --args ipv6.disable=1
+sed -i "s/^udp6\(.*\)/#udp6\1/; s/^tcp6\(.*\)/#tcp6\1/" /etc/netconfig
 #
 # Disabling amazon-ssm-agent
 systemctl disable amazon-ssm-agent
 #
-# Installing amazon-efs-utils and mounting EFS
-# source ~/.bashrc
+# Installing amazon-efs-utils (prebuilt RPM, see build/efs-utils.md) and mounting EFS
 cd ~
-yum install -y make rpm-build git cargo openssl-devel
-aws s3 cp s3://$BUCKET_CONFIG/amazon-efs-utils-2.4.0-1.el8.x86_64.rpm .
-yum install -y amazon-efs-utils-2.4.0-1.el8.x86_64.rpm
-rm amazon-efs-utils-2.4.0-1.el8.x86_64.rpm
+efs_rpm=amazon-efs-utils-3.3.5-1.el10.x86_64.rpm
+aws s3 cp s3://$BUCKET_CONFIG/$efs_rpm .
+dnf install -y ./$efs_rpm
+rm $efs_rpm
 mkdir /mnt/mailserver
 echo -e "$MAIL_STORAGE:/ /mnt/mailserver efs defaults,_netdev 0 0" >> /etc/fstab
 mount -a
