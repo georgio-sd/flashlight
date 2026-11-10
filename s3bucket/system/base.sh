@@ -285,14 +285,17 @@ upload_max_filesize = 15M
 post_max_size = 20M
 EOF
 #
-# Securing MariaDB
+# MariaDB root password and daily database backups.
+# A fresh MariaDB 10.11 has no anonymous users or test database, so only root needs a password (for phpMyAdmin);
+# root on the server itself (shell, db-backup) keeps logging in through the unix socket without one.
 if [ ! -f $flag ]; then
-  cd ~
+  db_root_password="$(pwgen 16 1)"
+  printf "MariaDB\n   Link: https://$ADMIN_DOMAIN/myadmin\n" >> /root/credentials
+  printf "   login: root\n   password: $db_root_password\n\n" >> /root/credentials
+  mysql -u root -e "ALTER USER root@localhost IDENTIFIED VIA unix_socket OR mysql_native_password USING PASSWORD('$db_root_password');"
   aws s3 cp s3://$BUCKET_CONFIG/db-backup /mnt/mailserver/automation
-  aws s3 cp s3://$BUCKET_CONFIG/mysql_secure_installation_auto ./
-  chmod 700 mysql_secure_installation_auto
-  ./mysql_secure_installation_auto
-  rm mysql_secure_installation_auto
+  chmod 700 /mnt/mailserver/automation/db-backup
+  printf '55  22  *  *  * root /mnt/mailserver/automation/db-backup\n' >> /mnt/mailserver/etc/crontab
 fi
 #
 # Configuring Apache

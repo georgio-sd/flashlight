@@ -1,23 +1,37 @@
 #!/usr/bin/bash
 #
-# Make database backups (runs as root, which logs in to MariaDB through the unix socket without a password)
+# Daily database backups to /mnt/mailserver/backup, kept for 28 days.
+# Runs as root, which logs in to MariaDB through the unix socket without a password.
+# Each run leaves one BACKUP line in /mnt/mailserver/log/instance.log: the size, or which dumps failed.
 #
+set -o pipefail
 # Dumps contain password hashes and mailbox data: readable by root only
 umask 077
+cd /mnt/mailserver/backup || exit 1
 DATE=$(date +%Y-%m-%d)
-mysqldump --opt -u root --events mysql | gzip -c > /mnt/mailserver/backup/mysql.${DATE}.sql.gz
-mysqldump --opt -u root --default-character-set=utf8mb4 postfix | gzip -c > /mnt/mailserver/backup/postfix.${DATE}.sql.gz
-mysqldump --opt -u root --default-character-set=utf8mb4 phpmyadmin | gzip -c > /mnt/mailserver/backup/phpmyadmin.${DATE}.sql.gz
-mysqldump --opt -u root --default-character-set=utf8mb4 roundcube | gzip -c > /mnt/mailserver/backup/roundcube.${DATE}.sql.gz
-#
-# Delete old backups
-#
-f28days=$(date +%s --date="-28 days")
-cd /mnt/mailserver/backup
-for file in *.gz; do
-    fdate=$(echo $file | sed 's/[^0-9/]//g')
-    fsec=$(date +%s --date=${fdate})
-    if [[ $fsec -lt $f28days ]]; then
-        rm $file
-    fi
+failed=""
+
+# dump NAME COMMAND...: writes NAME.DATE.sql.gz; a failed dump is removed and reported
+dump() {
+  local name=$1; shift
+  if ! "$@" | gzip -c > $name.$DATE.sql.gz; then
+    rm -f $name.$DATE.sql.gz
+    failed="$failed $name"
+  fi
+}
+
+# MariaDB users and privileges as portable CREATE USER / GRANT statements: they restore on any
+# MariaDB version (IF NOT EXISTS keeps the restored server's own root)
+dump users mariadb-dump -u root --system=users --insert-ignore
+# Application databases: a consistent snapshot without locking tables, so Postfix and Dovecot keep working
+for db in postfix roundcube phpmyadmin; do
+  dump $db mariadb-dump -u root --single-transaction --default-character-set=utf8mb4 $db
 done
+
+if [ -n "$failed" ]; then
+  /usr/local/sbin/instance-log BACKUP "FAILED:$failed"
+else
+  /usr/local/sbin/instance-log BACKUP "ok, 4 dumps, $(du -ch *.$DATE.sql.gz | tail -1 | cut -f1)"
+  # old backups are removed only after a good one, so failing runs never eat the last good copies
+  find /mnt/mailserver/backup -name '*.sql.gz' -mtime +28 -delete
+fi

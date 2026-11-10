@@ -154,7 +154,6 @@ Resources:
       - 'system/fail2ban.sh'
       - 'system/double-inst-prot.service'
       - 'system/services-shutdown'
-      - 'mariadb/mysql_secure_installation_auto'
       - 'mariadb/db-backup'
       - 'phpmyadmin/config.inc.php'
       - 'postfixadmin/config.local.php'
