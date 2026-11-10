@@ -43,7 +43,7 @@ useradd -M -d /mnt/mailserver/mail -g 5000 -u 5000 -s /sbin/nologin vmail
 if [ ! -f $flag ]; then
   mkdir /mnt/mailserver/root /mnt/mailserver/automation /mnt/mailserver/log /mnt/mailserver/backup
   mkdir /mnt/mailserver/www /mnt/mailserver/etc /mnt/mailserver/etc/sysconfig /mnt/mailserver/mail
-  mkdir /mnt/mailserver/mail/shared-folders /mnt/mailserver/spool
+  mkdir /mnt/mailserver/mail/shared-folders /mnt/mailserver/mail/sieve /mnt/mailserver/spool
   chmod 700 /mnt/mailserver/backup
   chown -R vmail: /mnt/mailserver/mail
 fi
@@ -249,11 +249,7 @@ if [ ! -f $flag ]; then
   mv /etc/dovecot /mnt/mailserver/etc
 fi
 rm -rf /etc/dovecot
-mkdir /var/log/dovecot
-cd /var/log/dovecot && touch lda-errors.log lda-deliver.log lmtp.log
-chown -R vmail:dovecot /var/log/dovecot
 ln -s /mnt/mailserver/etc/dovecot /etc/dovecot
-sed -i "s#/var##" /usr/lib/tmpfiles.d/dovecot.conf
 cp /usr/lib/systemd/system/dovecot.service /etc/systemd/system
 sed -i "s/After=\(.*\)/After=\1 mnt-mailserver.mount/" /etc/systemd/system/dovecot.service
 systemctl enable dovecot
