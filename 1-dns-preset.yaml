@@ -163,6 +163,7 @@ Resources:
       - 'opendkim/dnsupd.py'
       - 'fail2ban/jail.local'
       - 'fail2ban/postfix-sasl.conf'
+      - 'packages/amazon-efs-utils-3.3.5-1.el10.x86_64.rpm'
   DownloadBundlesLambdaFunction:
     Type: 'AWS::Lambda::Function'
     Properties:
