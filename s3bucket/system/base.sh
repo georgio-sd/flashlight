@@ -202,7 +202,6 @@ fi
 # Double instance service protection
 aws s3 cp s3://$BUCKET_CONFIG/double-inst-prot.service /etc/systemd/system
 aws s3 cp s3://$BUCKET_CONFIG/services-shutdown /usr/bin
-sed -i "s/{instanceid}/$instid/" /usr/bin/services-shutdown
 chmod 700 /usr/bin/services-shutdown
 systemctl enable double-inst-prot
 #

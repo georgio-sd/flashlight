@@ -1,10 +1,12 @@
 [Unit]
-Description=Double instance protection
-After=mnt-mailserver.mount
+Description=Double instance protection: go idle when another instance takes over the EFS
+Wants=network-online.target
+After=network-online.target mnt-mailserver.mount
 
 [Service]
 ExecStart=/usr/bin/services-shutdown
 KillMode=process
+Restart=on-failure
 
 [Install]
 WantedBy=multi-user.target
