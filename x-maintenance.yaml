@@ -23,6 +23,7 @@ Metadata:
     - Label:
         default: "Storage Configuration"
       Parameters:
+      - MailStorageThroughputMode
       - MailStorageLifecyclePolicy
       - MailStorageBackupPolicy
 Parameters:
@@ -80,6 +81,15 @@ Parameters:
     Description: Disk volume size (GiB)
     Default: 6
     AllowedValues: [ 4, 6, 8, 16, 32 ]
+  MailStorageThroughputMode:
+    Type: String
+    Description: >-
+      Mail Server Storage throughput mode. bursting (recommended): no extra cost and fine for a typical mail server,
+      since a small file system never runs out of burst credits. elastic: you pay per GB read/written; choose it only if
+      constant heavy traffic drains the burst credits (BurstCreditBalance metric in CloudWatch).
+      Can be changed later by a stack update (once a day)
+    Default: bursting
+    AllowedValues: [ bursting, elastic ]
   MailStorageLifecyclePolicy:
     Type: String
     Description: Mail Server Storage lifecycle policy of transition files to the Infrequent Access (IA) storage class
@@ -310,7 +320,11 @@ Resources:
     Properties:
       Encrypted: True
       PerformanceMode: generalPurpose
-      ThroughputMode: bursting
-      LifecyclePolicies: !If [ MailStorageIA, [ TransitionToIA: !Ref MailStorageLifecyclePolicy ], !Ref 'AWS::NoValue' ]
+      ThroughputMode: !Ref MailStorageThroughputMode
+      LifecyclePolicies: !If
+      - MailStorageIA
+      - - TransitionToIA: !Ref MailStorageLifecyclePolicy
+        - TransitionToPrimaryStorageClass: AFTER_1_ACCESS
+      - !Ref 'AWS::NoValue'
       BackupPolicy:
         Status: !Ref MailStorageBackupPolicy
