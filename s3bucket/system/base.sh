@@ -1,7 +1,14 @@
 #!/bin/bash -xe
 #
-# Installing awscli and setting up ElasticIP
-instid=$(curl -s http://169.254.169.254/latest/meta-data/instance-id)
+# EC2 instance metadata (IMDSv2: get a token, then ask with it)
+imds() {
+  local token
+  token=$(curl -s -X PUT http://169.254.169.254/latest/api/token -H "X-aws-ec2-metadata-token-ttl-seconds: 60")
+  curl -s -H "X-aws-ec2-metadata-token: $token" http://169.254.169.254/latest/meta-data/$1
+}
+#
+# Setting up ElasticIP
+instid=$(imds instance-id)
 aws ec2 associate-address --instance-id $instid --allocation-id $EIP_ID --region $AWS_REGION
 #
 # Setting up system settings
@@ -191,8 +198,7 @@ ln -s /mnt/mailserver/etc/letsencrypt /etc/letsencrypt
 #
 # Spot instances instructions
 if [ "$INSTANCE_LIFECYCLE" = 'Spot' ]; then
-  AutoScalingGroup=$(aws autoscaling describe-auto-scaling-instances --instance-ids \
-    `curl --silent http://169.254.169.254/latest/meta-data/instance-id 2>&1` \
+  AutoScalingGroup=$(aws autoscaling describe-auto-scaling-instances --instance-ids $instid \
     --region $AWS_REGION | jq -r '.AutoScalingInstances[].AutoScalingGroupName')
   printf "#%c/bin/bash\naws autoscaling set-desired-capacity --auto-scaling-group-name $AutoScalingGroup \
     --desired-capacity 1 --region $AWS_REGION\n" ! > /mnt/mailserver/automation/scale-in
