@@ -365,6 +365,8 @@ if [ "$FAIL2BAN" = 'ENABLED' ]; then
     aws s3 cp s3://$BUCKET_CONFIG/jail.local /mnt/mailserver/etc/fail2ban
   fi
   ln -sf /mnt/mailserver/etc/fail2ban/jail.local /etc/fail2ban/jail.local
+  # a reminder for the admin, next to the credentials
+  printf 'To unban an IP address banned by fail2ban:\n   fail2ban-client unban <IP>\n' > /mnt/mailserver/root/unbanip
   # the webmail jail needs its log file to exist before Roundcube's first error
   [ -f /var/www/webmail/logs/errors.log ] || install -o apache -g apache -m 640 /dev/null /var/www/webmail/logs/errors.log
   cp /usr/lib/systemd/system/fail2ban.service /etc/systemd/system
