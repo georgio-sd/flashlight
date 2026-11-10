@@ -298,29 +298,26 @@ if [ ! -f $flag ]; then
   printf '55  22  *  *  * root /mnt/mailserver/automation/db-backup\n' >> /mnt/mailserver/etc/crontab
 fi
 #
-# Configuring Apache
+# Configuring Apache. The package's own config (httpd.conf, ssl.conf, modules) stays on the instance, so it
+# always matches the installed Apache; only our sites file lives on EFS and survives instance replacement.
 if [ ! -f $flag ]; then
-  aws s3 cp s3://$BUCKET_CONFIG/httpd.conf /etc/httpd/conf
-  sed -i "s/{AdminEmail}/$ADMIN_EMAIL/" /etc/httpd/conf/httpd.conf
-  sed -i "s/{MailDomain}/$MAIL_DOMAIN/" /etc/httpd/conf/httpd.conf
-  aws s3 cp s3://$BUCKET_CONFIG/ssl.conf /etc/httpd/conf.d
-  aws s3 cp s3://$BUCKET_CONFIG/sites.conf /etc/httpd/conf.d
-  sed -i "s/{AdminEmail}/$ADMIN_EMAIL/" /etc/httpd/conf.d/sites.conf
-  sed -i "s/{AdminDomain}/$ADMIN_DOMAIN/" /etc/httpd/conf.d/sites.conf
-  sed -i "s/{MailDomain}/$MAIL_DOMAIN/" /etc/httpd/conf.d/sites.conf
-  rm /etc/httpd/logs /etc/httpd/modules /etc/httpd/state
-  ln -s /var/log/httpd /etc/httpd/logs
-  ln -s /usr/lib64/httpd/modules /etc/httpd/modules
-  ln -s /var/lib/httpd /etc/httpd/state
-  mv /etc/httpd /mnt/mailserver/etc
+  mkdir -p /mnt/mailserver/etc/httpd
+  aws s3 cp s3://$BUCKET_CONFIG/sites.conf /mnt/mailserver/etc/httpd
+  sed -i "s/{AdminEmail}/$ADMIN_EMAIL/g; s/{AdminDomain}/$ADMIN_DOMAIN/g; s/{MailDomain}/$MAIL_DOMAIN/g" \
+    /mnt/mailserver/etc/httpd/sites.conf
 fi
-rm -rf /etc/httpd
-ln -s /mnt/mailserver/etc/httpd /etc/httpd
+ln -sf /mnt/mailserver/etc/httpd/sites.conf /etc/httpd/conf.d/sites.conf
+# the package's httpd.conf needs its DocumentRoot to exist (/var/www is on EFS); nothing is served from it
+mkdir -p /var/www/html
+#
+# PHP-FPM pool sized by memory (local file, rewritten at every boot): about 10 PHP processes per 2 GB
+# (the package default of up to 50 could run a small server out of memory); processes are started
+# on demand and exit when idle instead of being kept running
+php_children=$(awk '/^MemTotal/ {n = int($2 / 1024 / 200); print (n < 5 ? 5 : n)}' /proc/meminfo)
+sed -i "s/^pm = .*/pm = ondemand/; s/^pm.max_children = .*/pm.max_children = $php_children/" /etc/php-fpm.d/www.conf
 cp /usr/lib/systemd/system/httpd.service /etc/systemd/system
-cp /usr/lib/systemd/system/httpd-init.service /etc/systemd/system
 cp /usr/lib/systemd/system/php-fpm.service /etc/systemd/system
 sed -i "s/After=\(.*\)/After=\1 mnt-mailserver.mount/" /etc/systemd/system/httpd.service
-sed -i "s/Documentation\(.*\)/Documentation\1\nAfter=mnt-mailserver.mount/" /etc/systemd/system/httpd-init.service
 sed -i "s/After=\(.*\)/After=\1 mnt-mailserver.mount/" /etc/systemd/system/php-fpm.service
 systemctl enable httpd
 #
