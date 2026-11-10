@@ -7,6 +7,15 @@ imds() {
   curl -s -H "X-aws-ec2-metadata-token: $token" http://169.254.169.254/latest/meta-data/$1
 }
 #
+# Services that keep data or config on EFS: a systemd drop-in makes them start only after /mnt/mailserver
+# is mounted, and not at all if it isn't (so MariaDB can't start on an empty local folder, for example).
+# The package's own unit file stays untouched.
+efs_unit() {
+  mkdir -p /etc/systemd/system/$1.service.d
+  printf '[Unit]\nRequiresMountsFor=/mnt/mailserver\n' > /etc/systemd/system/$1.service.d/efs.conf
+  systemctl daemon-reload
+}
+#
 # Setting up ElasticIP
 instid=$(imds instance-id)
 aws ec2 associate-address --instance-id $instid --allocation-id $EIP_ID --region $AWS_REGION
@@ -91,9 +100,7 @@ fi
 rm -rf /var/lib/mysql /etc/my.cnf.d
 ln -s /mnt/mailserver/etc/my.cnf.d /etc/my.cnf.d
 ln -s /mnt/mailserver/mysql /var/lib/mysql
-cp /usr/lib/systemd/system/mariadb.service /etc/systemd/system
-sed -i "s/After=\(.*\)/After=\1 mnt-mailserver.mount/" /etc/systemd/system/mariadb.service
-systemctl daemon-reload
+efs_unit mariadb
 systemctl enable --now mariadb
 #
 # Installing phpMyAdmin and postfixadmin (pinned releases from the config bucket)
@@ -181,8 +188,7 @@ if [ ! -f $flag ]; then
   mv /etc/crontab /mnt/mailserver/etc
 fi
 rm -f /etc/crontab
-cp /usr/lib/systemd/system/crond.service /etc/systemd/system
-sed -i "s/After=\(.*\)/After=\1 mnt-mailserver.mount/" /etc/systemd/system/crond.service
+efs_unit crond
 ln -s /mnt/mailserver/etc/crontab /etc/crontab
 # the local cron files (hourly runner, anacron daily/weekly jobs) don't send mail either
 sed -i 's/^MAILTO=.*/MAILTO=""/' /etc/cron.d/0hourly /etc/anacrontab
@@ -243,8 +249,7 @@ rm -rf /etc/postfix
 ln -s /mnt/mailserver/etc/postfix /etc/postfix
 rm -rf /var/spool/postfix
 ln -s /mnt/mailserver/spool/postfix /var/spool/postfix
-cp /usr/lib/systemd/system/postfix.service /etc/systemd/system
-sed -i "s/After=\(.*\)/After=\1 mnt-mailserver.mount/" /etc/systemd/system/postfix.service
+efs_unit postfix
 systemctl enable postfix
 #
 # Configuring dovecot
@@ -260,8 +265,7 @@ if [ ! -f $flag ]; then
 fi
 rm -rf /etc/dovecot
 ln -s /mnt/mailserver/etc/dovecot /etc/dovecot
-cp /usr/lib/systemd/system/dovecot.service /etc/systemd/system
-sed -i "s/After=\(.*\)/After=\1 mnt-mailserver.mount/" /etc/systemd/system/dovecot.service
+efs_unit dovecot
 systemctl enable dovecot
 #
 # Installing Roundcube (webmail) with the optional Larry skin (users pick it in their settings)
@@ -325,10 +329,8 @@ mkdir -p /var/www/html
 # on demand and exit when idle instead of being kept running
 php_children=$(awk '/^MemTotal/ {n = int($2 / 1024 / 200); print (n < 5 ? 5 : n)}' /proc/meminfo)
 sed -i "s/^pm = .*/pm = ondemand/; s/^pm.max_children = .*/pm.max_children = $php_children/" /etc/php-fpm.d/www.conf
-cp /usr/lib/systemd/system/httpd.service /etc/systemd/system
-cp /usr/lib/systemd/system/php-fpm.service /etc/systemd/system
-sed -i "s/After=\(.*\)/After=\1 mnt-mailserver.mount/" /etc/systemd/system/httpd.service
-sed -i "s/After=\(.*\)/After=\1 mnt-mailserver.mount/" /etc/systemd/system/php-fpm.service
+efs_unit httpd
+efs_unit php-fpm
 systemctl enable httpd
 #
 # DKIM, SPF and DMARC. Run at every boot, so the server follows the stack's domain list:
@@ -361,8 +363,7 @@ chmod 700 /usr/local/sbin/dnsupd.py
 /usr/local/sbin/dnsupd.py "$DOMAIN_NAMES" "$DOMAIN_ZONE_IDS" "$EIP" "$MAIL_DOMAIN"
 # OpenDKIM reads our config on EFS (local file, rewritten at every boot)
 echo "OPTIONS=\"-x $dkim/opendkim.conf\"" > /etc/sysconfig/opendkim
-cp /usr/lib/systemd/system/opendkim.service /etc/systemd/system
-sed -i "s/After=\(.*\)/After=\1 mnt-mailserver.mount/" /etc/systemd/system/opendkim.service
+efs_unit opendkim
 systemctl enable opendkim
 #
 # fail2ban (stack parameter Fail2ban): bans IP addresses after repeated failed logins (nftables).
@@ -379,7 +380,6 @@ if [ "$FAIL2BAN" = 'ENABLED' ]; then
   printf 'To unban an IP address banned by fail2ban:\n   fail2ban-client unban <IP>\n' > /mnt/mailserver/root/unbanip
   # the webmail jail needs its log file to exist before Roundcube's first error
   [ -f /var/www/webmail/logs/errors.log ] || install -o apache -g apache -m 640 /dev/null /var/www/webmail/logs/errors.log
-  cp /usr/lib/systemd/system/fail2ban.service /etc/systemd/system
-  sed -i "s/After=\(.*\)/After=\1 mnt-mailserver.mount/" /etc/systemd/system/fail2ban.service
+  efs_unit fail2ban
   systemctl enable fail2ban
 fi
