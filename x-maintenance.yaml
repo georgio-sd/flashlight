@@ -15,6 +15,7 @@ Metadata:
       - AdminEmail
       - TimeZone
       - Fail2ban
+      - CertificateMode
       - InstanceType
       - InstanceType2
       - InstanceLifecycle
@@ -38,6 +39,14 @@ Parameters:
     Type: String
     Default: America/Chicago
     Description: Look up https://www.php.net/manual/en/timezones.php
+  CertificateMode:
+    Type: String
+    Description: >-
+      Let's Encrypt certificate. production: a trusted certificate (Let's Encrypt limits repeated issuance for
+      the same names to a few per week). staging: an untrusted test certificate that doesn't count against
+      those limits; use it for test deployments
+    Default: production
+    AllowedValues: [ production, staging ]
   Fail2ban:
     Type: String
     Description: Fail2ban package

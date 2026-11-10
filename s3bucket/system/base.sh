@@ -148,18 +148,24 @@ fi
 rm -r /var/www
 ln -s /mnt/mailserver/www /var/www
 #
-# Getting SSL certificates (certbot) and setting up DB backup
+# Getting SSL certificates (certbot) and preparing crontab
+# Renewal runs from certbot-renew.timer (EPEL package, twice a day); the hooks below apply to it.
 if [ ! -f $flag ]; then
-  certbot certonly --standalone -d $MAIL_DOMAIN,$ADMIN_DOMAIN -m $ADMIN_EMAIL --agree-tos --non-interactive
-  #certbot certonly --standalone -d $MAIL_DOMAIN,$ADMIN_DOMAIN --register-unsafely-without-email --agree-tos --non-interactive
-  printf '#!/bin/bash\nsystemctl stop httpd\nsleep 5\n' > /etc/letsencrypt/renewal-hooks/pre/srv-stop
-  printf '#!/bin/bash\nsystemctl restart httpd postfix dovecot\n' \
-    > /etc/letsencrypt/renewal-hooks/post/srv-start
-  chmod 744 /etc/letsencrypt/renewal-hooks/post/srv-start /etc/letsencrypt/renewal-hooks/pre/srv-stop
+  # CERT_MODE=staging (stack parameter) uses the Let's Encrypt test CA: untrusted certs, no production rate limits
+  certbot_test=""
+  [ "$CERT_MODE" = 'staging' ] && certbot_test="--test-cert"
+  # RSA: understood by every mail server and client, including old ones
+  certbot certonly --standalone $certbot_test --key-type rsa -d $MAIL_DOMAIN,$ADMIN_DOMAIN -m $ADMIN_EMAIL \
+    --agree-tos --non-interactive
+  # standalone renewal needs port 80, so Apache stops for the few seconds of a renewal
+  printf '#!/bin/bash\nsystemctl stop httpd\n' > /etc/letsencrypt/renewal-hooks/pre/srv-stop
+  printf '#!/bin/bash\nsystemctl start httpd\n' > /etc/letsencrypt/renewal-hooks/post/srv-start
+  # only when a new certificate was actually issued: reload mail services, connections stay up
+  printf '#!/bin/bash\nsystemctl try-reload-or-restart postfix dovecot\n' > /etc/letsencrypt/renewal-hooks/deploy/srv-reload
+  chmod 744 /etc/letsencrypt/renewal-hooks/*/srv-*
   mv /etc/letsencrypt /mnt/mailserver/etc
   printf '@reboot         root /usr/bin/cron-boot-runner\n' >> /etc/crontab
   printf '#15   1  *  *  * root /mnt/mailserver/automation/spotprices.py\n' >> /etc/crontab
-  printf '15   3  *  *  6 root certbot renew -q\n' >> /etc/crontab
   mv /etc/crontab /mnt/mailserver/etc
 fi
 rm -f /etc/crontab
