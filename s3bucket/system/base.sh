@@ -87,44 +87,42 @@ sed -i "s/After=\(.*\)/After=\1 mnt-mailserver.mount/" /etc/systemd/system/maria
 systemctl daemon-reload
 systemctl enable --now mariadb
 #
-# Installing phpMyAdmin and postfixadmin
+# Installing phpMyAdmin and postfixadmin (pinned releases from the config bucket)
 if [ ! -f $flag ]; then
   cd ~
+  pfa_tar=postfixadmin-v4.0.6-php74.tar.gz
+  pma_tar=phpMyAdmin-5.2.3-all-languages.tar.gz
   mkdir /mnt/mailserver/www/admin
   webadmpass="$(pwgen 16 1)"
-  htpasswd -bc /mnt/mailserver/www/admin/.htpasswd admin $webadmpass
+  htpasswd -bcB /mnt/mailserver/www/admin/.htpasswd admin $webadmpass
   printf "Admin web access\n   Link: https://$ADMIN_DOMAIN\n" >> /root/credentials
   printf "   login: admin\n   password: $webadmpass\n\n" >> /root/credentials
   postfixadminpassword="$(pwgen 16 1)"
   printf "PostfixAdmin superadmin\n   Link: https://$ADMIN_DOMAIN/padmin\n" >> /root/credentials
   printf "   login: $ADMIN_EMAIL\n   password: $postfixadminpassword\n\n" >> /root/credentials
   #
-  wget https://sourceforge.net/projects/postfixadmin/files/postfixadmin/postfixadmin-3.2/postfixadmin-3.2.4.tar.gz
-  tar xzvf postfixadmin-3.2.4.tar.gz > /dev/null
+  # The release tarball already contains vendor/ (no composer needed); the php74 build runs on PHP 7.4+
+  aws s3 cp s3://$BUCKET_CONFIG/$pfa_tar .
   mkdir /mnt/mailserver/www/admin/padmin
-  cp -R postfixadmin-3.2.4/* /mnt/mailserver/www/admin/padmin
-  mkdir /mnt/mailserver/www/admin/padmin/templates_c
-  chown -R apache. /mnt/mailserver/www/admin/padmin/templates_c
+  tar xzf $pfa_tar -C /mnt/mailserver/www/admin/padmin --strip-components=1
+  rm $pfa_tar
+  chown -R apache: /mnt/mailserver/www/admin/padmin/templates_c
   setuppassword="$(pwgen 16 1)"
-  echo '<?php $salt = md5(time() . mt_rand(0, 60000)); echo $salt . ":" . sha1($salt . ":" . $argv[1]); ?>' \
-    > /root/hash.php
-  setuphash=$(php /root/hash.php $setuppassword)
+  setuphash=$(php -r 'echo password_hash($argv[1], PASSWORD_DEFAULT);' "$setuppassword")
   printf "PostfixAdmin setup password\n   password: $setuppassword\n\n" >> /root/credentials
   db_postfix_password="$(pwgen 16 1)"
   printf "MariaDB\n   login: postfix\n   password: $db_postfix_password\n\n" >> /root/credentials
   aws s3 cp s3://$BUCKET_CONFIG/config.local.php /mnt/mailserver/www/admin/padmin
-  sed -i "s/{database_password}/$db_postfix_password/" /mnt/mailserver/www/admin/padmin/config.local.php
-  sed -i "s/{admin_email}/$ADMIN_EMAIL/" /mnt/mailserver/www/admin/padmin/config.local.php
-  sed -i "s/{admindomain}/$ADMIN_DOMAIN/" /mnt/mailserver/www/admin/padmin/config.local.php
-  sed -i "s/{setup_password}/$setuphash/" /mnt/mailserver/www/admin/padmin/config.local.php
-  rm -r postfixadmin* hash.php
+  # '|' as the sed delimiter: the bcrypt setup hash can contain '/'
+  sed -i "s|{database_password}|$db_postfix_password|; s|{admin_email}|$ADMIN_EMAIL|; \
+    s|{admindomain}|$ADMIN_DOMAIN|g; s|{setup_password}|$setuphash|" /mnt/mailserver/www/admin/padmin/config.local.php
   #
-  wget https://files.phpmyadmin.net/phpMyAdmin/5.0.2/phpMyAdmin-5.0.2-all-languages.tar.gz
-  tar xzvf phpMyAdmin-5.0.2-all-languages.tar.gz > /dev/null
+  aws s3 cp s3://$BUCKET_CONFIG/$pma_tar .
   mkdir /mnt/mailserver/www/admin/phpmyadmin
-  cp -R phpMyAdmin-5.0.2-all-languages/* /mnt/mailserver/www/admin/phpmyadmin
+  tar xzf $pma_tar -C /mnt/mailserver/www/admin/phpmyadmin --strip-components=1
+  rm $pma_tar
   mkdir /mnt/mailserver/www/admin/phpmyadmin/tmp
-  chown -R apache. /mnt/mailserver/www/admin/phpmyadmin/tmp
+  chown -R apache: /mnt/mailserver/www/admin/phpmyadmin/tmp
   pmapassword="$(pwgen 16 1)"
   roundcubepassword="$(pwgen 16 1)"
   blowfishsecret="$(pwgen 32 1)"
@@ -146,7 +144,6 @@ if [ ! -f $flag ]; then
   php /mnt/mailserver/www/admin/padmin/public/upgrade.php
   /mnt/mailserver/www/admin/padmin/scripts/postfixadmin-cli admin add $ADMIN_EMAIL --superadmin 1 --active 1 \
     --password $postfixadminpassword --password2 $postfixadminpassword
-  rm -r phpMyAdmin*
 fi
 rm -r /var/www
 ln -s /mnt/mailserver/www /var/www
