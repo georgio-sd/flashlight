@@ -1,0 +1,7 @@
+# Postfix lookup in the PostfixAdmin database (domains we are a backup MX for: mail is queued and forwarded, not stored).
+# Query from PostfixAdmin 4 DOCUMENTS/POSTFIX_CONF.txt (backup-MX variant). {database_password} is filled in by base.sh.
+user = postfix
+password = {database_password}
+hosts = localhost
+dbname = postfix
+query = SELECT domain FROM domain WHERE domain='%s' AND backupmx = '1' AND active = '1'

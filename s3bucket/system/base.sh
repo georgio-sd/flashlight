@@ -123,7 +123,7 @@ if [ ! -f $flag ]; then
   printf "MariaDB\n   login: postfix\n   password: $db_postfix_password\n\n" >> /root/credentials
   aws s3 cp s3://$BUCKET_CONFIG/config.local.php /mnt/mailserver/www/admin/padmin
   # '|' as the sed delimiter: the bcrypt setup hash can contain '/'
-  sed -i "s|{database_password}|$db_postfix_password|; s|{admin_email}|$ADMIN_EMAIL|; \
+  sed -i "s|{database_password}|$db_postfix_password|; s|{admin_email}|$ADMIN_EMAIL|g; \
     s|{admindomain}|$ADMIN_DOMAIN|g; s|{setup_password}|$setuphash|" /mnt/mailserver/www/admin/padmin/config.local.php
   #
   aws s3 cp s3://$BUCKET_CONFIG/$pma_tar .
@@ -214,14 +214,20 @@ if [ ! -f $flag ]; then
   cd ~
   aws s3 cp s3://$BUCKET_CONFIG/main.cf /etc/postfix
   aws s3 cp s3://$BUCKET_CONFIG/master.cf /etc/postfix
-  aws s3 cp s3://$BUCKET_CONFIG/postfix-mysql.tar.gz /root
-  tar -xzvf postfix-mysql.tar.gz -C /etc/postfix
+  # lookups in the PostfixAdmin database
+  mkdir /etc/postfix/mysql
+  for map in virtual_mailbox_domains virtual_mailbox_maps virtual_alias_domain_mailbox_maps virtual_alias_maps \
+      virtual_alias_domain_maps virtual_alias_domain_catchall_maps relay_domains; do
+    aws s3 cp s3://$BUCKET_CONFIG/$map.cf /etc/postfix/mysql/
+  done
+  sed -i "s/{database_password}/$db_postfix_password/" /etc/postfix/mysql/*.cf
+  # the files hold the database password: root and the postfix group only
+  chown root:postfix /etc/postfix/mysql/*.cf
+  chmod 640 /etc/postfix/mysql/*.cf
   sed -i "s/{MainDomain}/$(echo "$DOMAIN_NAMES" | cut -d',' -f 1)/" /etc/postfix/main.cf
   sed -i "s/{MailDomain}/$MAIL_DOMAIN/" /etc/postfix/main.cf
-  sed -i "s/{database_password}/$db_postfix_password/" /etc/postfix/mysql/*.cf
   mv /etc/postfix /mnt/mailserver/etc
   mv /var/spool/postfix /mnt/mailserver/spool
-  rm postfix-mysql.tar.gz
 fi
 rm -rf /etc/postfix
 ln -s /mnt/mailserver/etc/postfix /etc/postfix

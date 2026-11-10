@@ -1,0 +1,7 @@
+# Postfix lookup in the PostfixAdmin database (aliases and forwards).
+# Query from PostfixAdmin 4 DOCUMENTS/POSTFIX_CONF.txt. {database_password} is filled in by base.sh.
+user = postfix
+password = {database_password}
+hosts = localhost
+dbname = postfix
+query = SELECT goto FROM alias WHERE address='%s' AND active = '1'

@@ -18,6 +18,13 @@ $CONF['database_name'] = 'postfix';
 
 $CONF['admin_email'] = '{admin_email}';
 
+// Aliases created with every new domain: postmaster@ is required for any mail domain (RFC 5321),
+// abuse@ receives spam complaints about this server. Others (hostmaster@, webmaster@...) are added by hand if needed.
+$CONF['default_aliases'] = array(
+    'abuse' => '{admin_email}',
+    'postmaster' => '{admin_email}',
+);
+
 // Mail lives in /mnt/mailserver/mail/<domain>/<user@domain>/ (matches Dovecot's mail_location)
 $CONF['domain_path'] = 'YES';
 $CONF['domain_in_mailbox'] = 'YES';
