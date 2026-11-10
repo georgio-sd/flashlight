@@ -44,6 +44,7 @@ if [ ! -f $flag ]; then
   mkdir /mnt/mailserver/root /mnt/mailserver/automation /mnt/mailserver/log /mnt/mailserver/backup
   mkdir /mnt/mailserver/www /mnt/mailserver/etc /mnt/mailserver/etc/sysconfig /mnt/mailserver/mail
   mkdir /mnt/mailserver/mail/shared-folders /mnt/mailserver/spool
+  chmod 700 /mnt/mailserver/backup
   chown -R vmail: /mnt/mailserver/mail
 fi
 #
@@ -74,8 +75,8 @@ ln -s /mnt/mailserver/root/credentials /root/credentials
 # Starting MariaDB
 if [ ! -f $flag ]; then
   mv /etc/my.cnf.d /mnt/mailserver/etc
-  sed -i 's/#bind-address/bind-address/' /mnt/mailserver/etc/my.cnf.d/mariadb-server.cnf
-  sed -i 's/plugin-load-add/# plugin-load-add/' /mnt/mailserver/etc/my.cnf.d/auth_gssapi.cnf
+  # all clients are local (unix socket), so don't listen on the network
+  sed -i 's/^#bind-address=.*/bind-address=127.0.0.1/' /mnt/mailserver/etc/my.cnf.d/mariadb-server.cnf
   mv /var/lib/mysql /mnt/mailserver
 fi
 rm -rf /var/lib/mysql /etc/my.cnf.d
@@ -83,8 +84,6 @@ ln -s /mnt/mailserver/etc/my.cnf.d /etc/my.cnf.d
 ln -s /mnt/mailserver/mysql /var/lib/mysql
 cp /usr/lib/systemd/system/mariadb.service /etc/systemd/system
 sed -i "s/After=\(.*\)/After=\1 mnt-mailserver.mount/" /etc/systemd/system/mariadb.service
-ln -sf /etc/systemd/system/mariadb.service /etc/systemd/system/mysql.service
-ln -sf /etc/systemd/system/mariadb.service /etc/systemd/system/mysqld.service
 systemctl daemon-reload
 systemctl enable --now mariadb
 #
@@ -136,8 +135,8 @@ if [ ! -f $flag ]; then
   printf "MariaDB\n   login: roundcube\n   password: $roundcubepassword\n\n" >> /root/credentials
   #
   mysql -u root < /mnt/mailserver/www/admin/phpmyadmin/sql/create_tables.sql
-  mysql -u root -e "CREATE DATABASE postfix CHARACTER SET utf8 COLLATE utf8_general_ci;"
-  mysql -u root -e "CREATE DATABASE roundcube CHARACTER SET utf8 COLLATE utf8_general_ci;"
+  mysql -u root -e "CREATE DATABASE postfix CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
+  mysql -u root -e "CREATE DATABASE roundcube CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
   mysql -u root -e "GRANT ALL PRIVILEGES ON postfix.* TO 'postfix'@'localhost' identified by '$db_postfix_password';"
   mysql -u root -e "GRANT ALL PRIVILEGES ON phpmyadmin.* TO 'pma'@'localhost' identified by '$pmapassword';"
   mysql -u root -e "GRANT ALL PRIVILEGES ON roundcube.* TO 'roundcube'@'localhost' identified by '$roundcubepassword';"

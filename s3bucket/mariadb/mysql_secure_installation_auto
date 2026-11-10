@@ -3,53 +3,20 @@
 # A non-interactive replacement for mysql_secure_installation
 # Mail Server Project (c) Sam Stewart
 #
-# Tested on CentOS 8
+# MariaDB 10.4+ (tested on 10.11, AlmaLinux 10): a fresh install has no anonymous users and
+# no test database, so the only step left is giving root a password.
+# root keeps unix_socket login: root on the server (shell, db-backup) needs no password,
+# phpMyAdmin logs in as root with the password.
 #
 
 set -o errexit # abort on nonzero exitstatus
 set -o nounset # abort on unbound variable
 
-# Predicate that returns exit status 0 if the database root password
-# is set, a nonzero exit status otherwise.
-is_mysql_root_password_set() {
-  ! mysqladmin --user=root status > /dev/null 2>&1
-}
-
-# Predicate that returns exit status 0 if the mysql(1) command is available,
-# nonzero exit status otherwise.
-is_mysql_command_available() {
-  which mysql > /dev/null 2>&1
-}
-
-#}}}
-#{{{ Variables
 db_root_password="$(pwgen 16 1)"
-#}}}
 
 printf "MariaDB\n   Link: https://$ADMIN_DOMAIN/myadmin\n" >> /root/credentials
 printf "   login: root\n   password: $db_root_password\n\n" >> /root/credentials
-sed -i "s/{mysqlpasswd}/$db_root_password/" /mnt/mailserver/automation/db-backup
 chmod 700 /mnt/mailserver/automation/db-backup
 printf '55  22  *  *  * root /mnt/mailserver/automation/db-backup\n' >> /mnt/mailserver/etc/crontab
 
-# Script proper
-
-if ! is_mysql_command_available; then
-  echo "The MySQL/MariaDB client mysql(1) is not installed."
-  exit 1
-fi
-
-if is_mysql_root_password_set; then
-  echo "Database root password already set"
-  exit 0
-fi
-
-mysql --user=root <<_EOF_
-  UPDATE mysql.user SET authentication_string = PASSWORD('${db_root_password}') WHERE User='root';
-  UPDATE mysql.user SET plugin = 'mysql_native_password' WHERE User = 'root';
-  DELETE FROM mysql.user WHERE User='';
-  DELETE FROM mysql.user WHERE User='root' AND Host NOT IN ('localhost', '127.0.0.1');
-  DROP DATABASE IF EXISTS test;
-  DELETE FROM mysql.db WHERE Db='test' OR Db='test\\_%';
-  FLUSH PRIVILEGES;
-_EOF_
+mysql --user=root -e "ALTER USER root@localhost IDENTIFIED VIA unix_socket OR mysql_native_password USING PASSWORD('${db_root_password}');"

@@ -1,12 +1,14 @@
 #!/usr/bin/bash
 #
-# Make database backups
+# Make database backups (runs as root, which logs in to MariaDB through the unix socket without a password)
 #
+# Dumps contain password hashes and mailbox data: readable by root only
+umask 077
 DATE=$(date +%Y-%m-%d)
-mysqldump --opt -u root -p{mysqlpasswd} --events mysql | gzip -c > /mnt/mailserver/backup/mysql.${DATE}.sql.gz
-mysqldump --opt -u root -p{mysqlpasswd} --default-character-set=utf8 postfix | gzip -c > /mnt/mailserver/backup/postfix.${DATE}.sql.gz
-mysqldump --opt -u root -p{mysqlpasswd} --default-character-set=utf8 phpmyadmin | gzip -c > /mnt/mailserver/backup/phpmyadmin.${DATE}.sql.gz
-mysqldump --opt -u root -p{mysqlpasswd} --default-character-set=utf8 roundcube | gzip -c > /mnt/mailserver/backup/roundcube.${DATE}.sql.gz
+mysqldump --opt -u root --events mysql | gzip -c > /mnt/mailserver/backup/mysql.${DATE}.sql.gz
+mysqldump --opt -u root --default-character-set=utf8mb4 postfix | gzip -c > /mnt/mailserver/backup/postfix.${DATE}.sql.gz
+mysqldump --opt -u root --default-character-set=utf8mb4 phpmyadmin | gzip -c > /mnt/mailserver/backup/phpmyadmin.${DATE}.sql.gz
+mysqldump --opt -u root --default-character-set=utf8mb4 roundcube | gzip -c > /mnt/mailserver/backup/roundcube.${DATE}.sql.gz
 #
 # Delete old backups
 #
