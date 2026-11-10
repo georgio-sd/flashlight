@@ -396,13 +396,6 @@ Resources:
             echo "base.sh finished with code $? (details: /var/log/flashlight-install.log)"
             rm /root/base.sh
             #
-            # Deploying fail2ban
-            aws s3 cp s3://${bucketconfig}/fail2ban.sh /root
-            chmod 744 /root/fail2ban.sh
-            /root/fail2ban.sh >> /var/log/flashlight-install.log 2>&1
-            echo "fail2ban.sh finished with code $? (details: /var/log/flashlight-install.log)"
-            rm /root/fail2ban.sh
-            #
             # Deploying user script if presented
             aws s3 ls s3://${bucketconfig}/user-script.sh
             if [ $? -eq 0 ]; then

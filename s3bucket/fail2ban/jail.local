@@ -1,30 +1,47 @@
+# Flashlight fail2ban jails (fail2ban 1.1, AlmaLinux 10).
+# Lives on EFS (/mnt/mailserver/etc/fail2ban/jail.local) and is linked into /etc/fail2ban; everything else is the
+# package's own config. sshd, Postfix and Dovecot are read from the systemd journal (the package default here).
+# Unban by hand: fail2ban-client unban <IP>
+
 [DEFAULT]
-# Ban IP/hosts for 3 hours (3h*60m*60s = 10800s):
-bantime = 10800
-
-# An ip address/host is banned if it has generated "maxretry" during the last "findtime" seconds. (60m*60s = 3600s)
-findtime = 3600
-maxretry = 3
-
-# "ignoreip" can be a list of IP addresses, CIDR masks or DNS hosts. Fail2ban
-# will not ban a host which matches an address in this list. Several addresses
-# can be defined using space (and/or comma) separator. For example, add your 
-# static IP address that you always use for login such as 103.1.2.3
-#ignoreip = 127.0.0.1/8 ::1 103.1.2.3
-
-# Call iptables to ban IP address
-banaction = iptables-multiport
-
-# Do not resolve domain names
+# 5 failures within 10 minutes -> banned for 1 hour, only on the ports of that service
+maxretry = 5
+findtime = 10m
+bantime = 1h
+# repeat offenders are banned longer each time: 1h, 2h, 4h ... up to a week
+bantime.increment = true
+bantime.maxtime = 1w
+banaction = nftables-multiport
+banaction_allports = nftables-allports
 usedns = no
 
-# Enable sshd protection
+# SSH accepts keys only (password login is off), so this only keeps scanners out of the log.
+# normal mode counts one wrong login as one failure (aggressive also counts the closed connection)
 [sshd]
 enabled = true
-mode = aggressive
+mode = normal
+bantime.increment = false
 
-[postfix-sasl]
-enabled = true
-
+# IMAP logins. Only the login process's own line ("imap-login: ... auth failed") is counted, once per
+# connection; Dovecot's password check lines are skipped: they repeat that line and also appear for
+# logins on ports 587/465, which the postfix-sasl jail counts.
 [dovecot]
 enabled = true
+port = imap,imaps
+ignoreregex = ^\w[\w-]*\([^)]*\):
+
+# Logins for sending mail (ports 587 and 465; port 25 has no login)
+[postfix-sasl]
+enabled = true
+port = submission,465
+
+# Webmail logins (Roundcube logs the client's real address)
+[roundcube-auth]
+enabled = true
+logpath = /var/www/webmail/logs/errors.log
+backend = auto
+
+# Password of the administration site (PostfixAdmin, phpMyAdmin)
+[apache-auth]
+enabled = true
+backend = auto

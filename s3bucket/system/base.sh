@@ -354,3 +354,20 @@ echo "OPTIONS=\"-x $dkim/opendkim.conf\"" > /etc/sysconfig/opendkim
 cp /usr/lib/systemd/system/opendkim.service /etc/systemd/system
 sed -i "s/After=\(.*\)/After=\1 mnt-mailserver.mount/" /etc/systemd/system/opendkim.service
 systemctl enable opendkim
+#
+# fail2ban (stack parameter Fail2ban): bans IP addresses after repeated failed logins (nftables).
+# The package's config stays on the instance; only our jail.local lives on EFS.
+if [ "$FAIL2BAN" = 'ENABLED' ]; then
+  # fail2ban-server only: the fail2ban meta package would also pull in firewalld
+  dnf install -y fail2ban-server
+  if [ ! -f /mnt/mailserver/etc/fail2ban/jail.local ]; then
+    mkdir -p /mnt/mailserver/etc/fail2ban
+    aws s3 cp s3://$BUCKET_CONFIG/jail.local /mnt/mailserver/etc/fail2ban
+  fi
+  ln -sf /mnt/mailserver/etc/fail2ban/jail.local /etc/fail2ban/jail.local
+  # the webmail jail needs its log file to exist before Roundcube's first error
+  [ -f /var/www/webmail/logs/errors.log ] || install -o apache -g apache -m 640 /dev/null /var/www/webmail/logs/errors.log
+  cp /usr/lib/systemd/system/fail2ban.service /etc/systemd/system
+  sed -i "s/After=\(.*\)/After=\1 mnt-mailserver.mount/" /etc/systemd/system/fail2ban.service
+  systemctl enable fail2ban
+fi
