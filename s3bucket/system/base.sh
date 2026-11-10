@@ -113,7 +113,7 @@ if [ ! -f $flag ]; then
   # The release tarball already contains vendor/ (no composer needed); the php74 build runs on PHP 7.4+
   aws s3 cp s3://$BUCKET_CONFIG/$pfa_tar .
   mkdir /mnt/mailserver/www/admin/padmin
-  tar xzf $pfa_tar -C /mnt/mailserver/www/admin/padmin --strip-components=1
+  tar xzf $pfa_tar -C /mnt/mailserver/www/admin/padmin --strip-components=1 --no-same-owner
   rm $pfa_tar
   chown -R apache: /mnt/mailserver/www/admin/padmin/templates_c
   setuppassword="$(pwgen 16 1)"
@@ -128,7 +128,7 @@ if [ ! -f $flag ]; then
   #
   aws s3 cp s3://$BUCKET_CONFIG/$pma_tar .
   mkdir /mnt/mailserver/www/admin/phpmyadmin
-  tar xzf $pma_tar -C /mnt/mailserver/www/admin/phpmyadmin --strip-components=1
+  tar xzf $pma_tar -C /mnt/mailserver/www/admin/phpmyadmin --strip-components=1 --no-same-owner
   rm $pma_tar
   mkdir /mnt/mailserver/www/admin/phpmyadmin/tmp
   chown -R apache: /mnt/mailserver/www/admin/phpmyadmin/tmp
@@ -254,31 +254,36 @@ cp /usr/lib/systemd/system/dovecot.service /etc/systemd/system
 sed -i "s/After=\(.*\)/After=\1 mnt-mailserver.mount/" /etc/systemd/system/dovecot.service
 systemctl enable dovecot
 #
-# Installing roundcube
+# Installing Roundcube (webmail) with the optional Larry skin (users pick it in their settings)
 if [ ! -f $flag ]; then
   cd ~
-  wget https://github.com/roundcube/roundcubemail/releases/download/1.4.13/roundcubemail-1.4.13-complete.tar.gz
-  tar xzvf roundcubemail-1.4.13-complete.tar.gz > /dev/null
+  rc_tar=roundcubemail-1.7.6-complete.tar.gz
+  larry_tar=roundcube-larry-03ccd35.tar.gz
+  aws s3 cp s3://$BUCKET_CONFIG/$rc_tar .
+  aws s3 cp s3://$BUCKET_CONFIG/$larry_tar .
   mkdir /var/www/webmail
-  cp -R /root/roundcubemail-1.4.13/* /var/www/webmail
-  chown -R apache. /var/www/webmail/temp /var/www/webmail/logs
+  tar xzf $rc_tar -C /var/www/webmail --strip-components=1 --no-same-owner
+  mkdir /var/www/webmail/skins/larry
+  tar xzf $larry_tar -C /var/www/webmail/skins/larry --strip-components=1 --no-same-owner
+  rm $rc_tar $larry_tar
+  # the web installer isn't needed: the database and the config are prepared here
+  rm -rf /var/www/webmail/installer /var/www/webmail/public_html/installer.php
+  chown -R apache: /var/www/webmail/temp /var/www/webmail/logs
   aws s3 cp s3://$BUCKET_CONFIG/config.inc.php.rc /var/www/webmail/config/config.inc.php
-  sed -i "s/{des_key}/$(pwgen 24 1)/" /var/www/webmail/config/config.inc.php
-  sed -i "s/{RoundcubePassword}/$roundcubepassword/" /var/www/webmail/config/config.inc.php
-  aws s3 cp s3://$BUCKET_CONFIG/roundcubemail.sql /root
-  mysql roundcube < roundcubemail.sql
-  cp /var/www/webmail/plugins/managesieve/config.inc.php.dist /var/www/webmail/plugins/managesieve/config.inc.php
-  sed -i "s/config\['managesieve_port'\] = null/config\['managesieve_port'\] = 4190/" \
-    /var/www/webmail/plugins/managesieve/config.inc.php
-  sed -i "s/config\['managesieve_vacation'\] = 0/config\['managesieve_vacation'\] = 1/" \
-    /var/www/webmail/plugins/managesieve/config.inc.php
-  rm -r roundcubemail*
-  TimeZoneFixed=$(echo $TIMEZONE|sed 's#/#\\/#g')
-  sed -i "s/;date.timezone =/date.timezone = $TimeZoneFixed/" /etc/php.ini
-  mv /etc/php.ini /mnt/mailserver/etc
+  sed -i "s|{des_key}|$(pwgen 32 1)|; s|{RoundcubePassword}|$roundcubepassword|" /var/www/webmail/config/config.inc.php
+  # the config holds the database password: readable by the web server only
+  chown root:apache /var/www/webmail/config/config.inc.php
+  chmod 640 /var/www/webmail/config/config.inc.php
+  mysql roundcube < /var/www/webmail/SQL/mysql.initial.sql
 fi
-rm -f /etc/php.ini
-ln -s /mnt/mailserver/etc/php.ini /etc/php.ini
+#
+# PHP settings, rewritten at every boot (the package's php.ini stays untouched):
+# time zone, and attachments up to the 20 MB message limit of Postfix
+cat > /etc/php.d/99-flashlight.ini <<EOF
+date.timezone = $TIMEZONE
+upload_max_filesize = 15M
+post_max_size = 20M
+EOF
 #
 # Securing MariaDB
 if [ ! -f $flag ]; then

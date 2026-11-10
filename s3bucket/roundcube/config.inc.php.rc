@@ -1,61 +1,35 @@
 <?php
+/**
+ * Flashlight overrides for Roundcube 1.7.
+ * Only settings that differ from Roundcube's config/defaults.inc.php are listed here;
+ * everything else keeps the upstream default. Values in curly braces are filled in by base.sh.
+ */
 
-/* Local configuration for Roundcube Webmail */
-
-// ----------------------------------
-// SQL DATABASE
-// ----------------------------------
-// Database connection string (DSN) for read+write operations
-// Format (compatible with PEAR MDB2): db_provider://user:password@host/database
-// Currently supported db_providers: mysql, pgsql, sqlite, mssql, sqlsrv, oracle
-// For examples see http://pear.php.net/manual/en/package.database.mdb2.intro-dsn.php
-// Note: for SQLite use absolute path (Linux): 'sqlite:////full/path/to/sqlite.db?mode=0646'
-//       or (Windows): 'sqlite:///C:/full/path/to/sqlite.db'
-// Note: Various drivers support various additional arguments for connection,
-//       for Mysql: key, cipher, cert, capath, ca, verify_server_cert,
-//       for Postgres: application_name, sslmode, sslcert, sslkey, sslrootcert, sslcrl, sslcompression, service.
-//       e.g. 'mysql://roundcube:@localhost/roundcubemail?verify_server_cert=false'
 $config['db_dsnw'] = 'mysql://roundcube:{RoundcubePassword}@localhost/roundcube';
 
-// ----------------------------------
-// IMAP
-// ----------------------------------
-// The IMAP host chosen to perform the log-in.
-// Leave blank to show a textbox at login, give a list of hosts
-// to display a pulldown menu or set one host as string.
-// Enter hostname with prefix ssl:// to use Implicit TLS, or use
-// prefix tls:// to use STARTTLS.
-// Supported replacement variables:
-// %n - hostname ($_SERVER['SERVER_NAME'])
-// %t - hostname without the first part
-// %d - domain (http hostname $_SERVER['HTTP_HOST'] without the first part)
-// %s - domain name after the '@' from e-mail address provided at login screen
-// For example %n = mail.domain.tld, %t = domain.tld
-// WARNING: After hostname change update of mail_host column in users table is
-//          required to match old user data records with the new host.
-$config['default_host'] = 'localhost';
+// IMAP: the default localhost:143 (Dovecot on the same server)
 
-// Default mail domain
+// Sending: port 587 with the user's own webmail login and password (the defaults smtp_user = %u, smtp_pass = %p).
+// tls:// makes Roundcube start TLS, which Postfix requires on 587. The certificate isn't checked:
+// it is issued for the mail host name, not localhost, and this connection never leaves the server.
+$config['smtp_host'] = 'tls://localhost:587';
+$config['smtp_conn_options'] = [
+    'ssl' => ['verify_peer' => false, 'verify_peer_name' => false],
+];
+
+// Same limit as Postfix (message_size_limit), so the user sees it before sending
+$config['max_message_size'] = '20M';
+
+// A login without @domain gets the main domain (mail.example.com -> example.com)
 $config['username_domain'] = '%t';
 
-// SMTP port. Use 25 for cleartext, 465 for Implicit TLS, or 587 for STARTTLS (default)
-$config['smtp_port'] = 25;
-
-// provide an URL where a user can get support for this Roundcube installation
-// PLEASE DO NOT LINK TO THE ROUNDCUBE.NET WEBSITE HERE!
-$config['support_url'] = '';
-
-// This key is used for encrypting purposes, like storing of imap password
-// in the session. For historical reasons it's called DES_key, but it's used
-// with any configured cipher_method (see below).
-// For the default cipher_method a required key length is 24 characters.
+// Encrypts the user's password inside the session (AES-256 needs a 32-character key)
 $config['des_key'] = '{des_key}';
+$config['cipher_method'] = 'AES-256-CBC';
 
-// ----------------------------------
-// PLUGINS
-// ----------------------------------
-// List of active plugins (in plugins/ directory)
-$config['plugins'] = array('acl', 'managesieve', 'userinfo');
+$config['plugins'] = ['acl', 'managesieve', 'userinfo'];
 
-// Skin name: folder from skins/
-$config['skin'] = 'larry';
+// Filters and vacation replies (Dovecot ManageSieve on localhost:4190)
+$config['managesieve_vacation'] = 1;
+
+// Elastic is the default skin; users can switch to Larry in Settings > Preferences > User Interface

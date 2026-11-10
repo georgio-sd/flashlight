@@ -173,7 +173,6 @@ Resources:
       - 'dovecot/dovecot.conf'
       - 'dovecot/dovecot-mysql.conf'
       - 'roundcube/config.inc.php.rc'
-      - 'roundcube/roundcubemail.sql'
       - 'opendkim/opendkim.conf'
       - 'opendkim/dnsupd.py'
       - 'fail2ban/jail.local'
@@ -181,6 +180,8 @@ Resources:
       - 'packages/amazon-efs-utils-3.3.5-1.el10.x86_64.rpm'
       - 'packages/postfixadmin-v4.0.6-php74.tar.gz'
       - 'packages/phpMyAdmin-5.2.3-all-languages.tar.gz'
+      - 'packages/roundcubemail-1.7.6-complete.tar.gz'
+      - 'packages/roundcube-larry-03ccd35.tar.gz'
   DownloadBundlesLambdaFunction:
     Type: 'AWS::Lambda::Function'
     Properties:
