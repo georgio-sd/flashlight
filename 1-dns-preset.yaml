@@ -1,5 +1,6 @@
-# Request to remove email sending limitations and add PTR record
+# Before deploying, ask AWS to remove the email sending (port 25) limitation for your account:
 # https://console.aws.amazon.com/support/contacts?#/rdns-limits
+# Reverse DNS (PTR) of the Elastic IP is set by this stack itself (DnsPreset).
 #
 Metadata:
   AWS::CloudFormation::Interface:
@@ -125,8 +126,15 @@ Resources:
             Action: [ 'route53:GetHostedZone', 'route53:ChangeResourceRecordSets' ]
             Resource: !Sub "arn:${AWS::Partition}:route53:::hostedzone/*"
           - Effect: Allow
-            Action: [ 'ec2:DescribeImages', 'ec2:CopyImage' ]
+            Action: [ 'ec2:DescribeImages', 'ec2:CopyImage', 'ec2:DescribeAddressesAttribute' ]
             Resource: '*'
+          # reverse DNS of this stack's Elastic IP; GetChange waits until the A records are applied
+          - Effect: Allow
+            Action: [ 'ec2:ModifyAddressAttribute', 'ec2:ResetAddressAttribute' ]
+            Resource: !Sub "arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:elastic-ip/${IPAddressMS.AllocationId}"
+          - Effect: Allow
+            Action: 'route53:GetChange'
+            Resource: !Sub "arn:${AWS::Partition}:route53:::change/*"
   DownloadBundles:
     Type: 'Custom::DownloadBundles'
     Properties:
@@ -260,6 +268,7 @@ Resources:
       AdminSubDomain: !Ref AdminSubDomain
       MailSubDomain: !Ref MailSubDomain
       ElasticIP: !Ref IPAddressMS
+      EipAllocationId: !GetAtt IPAddressMS.AllocationId
       Updater: !Ref Updater
   DnsPresetLambdaFunction:
     Type: 'AWS::Lambda::Function'
@@ -267,7 +276,8 @@ Resources:
       Code:
         ZipFile: |
           # Finds the latest Flashlight server image (copies it into this region if needed)
-          # and creates the base DNS records: A for admin/mail subdomains, MX for every mail domain.
+          # and creates the base DNS records: A for admin/mail subdomains, MX for every mail domain,
+          # plus reverse DNS (PTR) of the Elastic IP pointing to the mail subdomain.
           # DKIM, SPF and DMARC records are created later by the server itself (dnsupd.py).
           import json
           import time
@@ -335,9 +345,33 @@ Resources:
               changes = [{'Action': 'UPSERT', 'ResourceRecordSet': {
                   'Name': name, 'Type': rtype, 'TTL': TTL, 'ResourceRecords': [{'Value': value}]}}
                   for name, rtype, value in records]
-              route53.change_resource_record_sets(HostedZoneId=zone_id, ChangeBatch={'Changes': changes})
+              change = route53.change_resource_record_sets(HostedZoneId=zone_id, ChangeBatch={'Changes': changes})
               print('Zone ' + zone_id + ': ' + ', '.join(rtype + ' ' + name for name, rtype, _ in records))
               time.sleep(0.25)  # Route 53 API allows 5 requests per second
+              return change['ChangeInfo']['Id']
+
+
+          def set_reverse_dns(allocation_id, name, change_id):
+              # AWS accepts a reverse DNS name only if its A record already points to the address,
+              # so wait until Route 53 has applied the A records (INSYNC, usually within a minute)
+              route53.get_waiter('resource_record_sets_changed').wait(Id=change_id, WaiterConfig={'Delay': 10, 'MaxAttempts': 18})
+              try:
+                  update = ec2.modify_address_attribute(AllocationId=allocation_id, DomainName=name)['Address']
+                  status = update.get('PtrRecordUpdate', {}).get('Status', 'unknown')
+                  print('Reverse DNS ' + allocation_id + ' -> ' + name + ': ' + status)
+                  return name
+              except Exception as e:
+                  # not fatal for the stack: mail works, but other servers may treat it as spam until it's set
+                  print('Reverse DNS not set: ' + repr(e))
+                  return 'NOT SET (' + str(e)[:150] + ')'
+
+
+          def remove_reverse_dns(allocation_id):
+              # an Elastic IP with a reverse DNS record is locked to the account and can't be released,
+              # so remove the record before CloudFormation deletes the address
+              if ec2.describe_addresses_attribute(AllocationIds=[allocation_id], Attribute='domain-name')['Addresses']:
+                  ec2.reset_address_attribute(AllocationId=allocation_id, Attribute='domain-name')
+                  print('Reverse DNS removed from ' + allocation_id)
 
 
           def lambda_handler(event, context):
@@ -357,10 +391,15 @@ Resources:
                           records = [(domain, 'MX', '10 ' + mail + '.')]
                           if i == 0:
                               records += [(admin, 'A', ip), (mail, 'A', ip)]
-                          upsert(zone_id, records)
+                          change_id = upsert(zone_id, records)
+                          if i == 0:
+                              main_change_id = change_id
+                      reverse_dns = set_reverse_dns(props['EipAllocationId'], mail, main_change_id)
                       data = {'DomainNames': ','.join(domains), 'DomainZoneIDs': ','.join(zone_ids),
                               'NumberOfDomains': len(domains), 'DNSRecAdmin': admin, 'DNSRecMail': mail,
-                              'ImageId': image_id}
+                              'ImageId': image_id, 'ReverseDNS': reverse_dns}
+                  elif event['RequestType'] == 'Delete':
+                      remove_reverse_dns(event['ResourceProperties']['EipAllocationId'])
                   send(event, context, 'SUCCESS', data)
               except Exception as e:
                   print('ERROR: ' + repr(e))
@@ -408,6 +447,9 @@ Outputs:
     Value: !GetAtt [ DnsPreset, DNSRecAdmin ]
     Export:
       Name: !Sub "${AWS::StackName}-DNSRecAdmin"
+  ReverseDNS:
+    Description: Reverse DNS (PTR) of the Elastic IP, or NOT SET with the reason
+    Value: !GetAtt [ DnsPreset, ReverseDNS ]
   DNSRecMail:
     Value: !GetAtt [ DnsPreset, DNSRecMail ]
     Export:
