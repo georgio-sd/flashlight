@@ -23,6 +23,17 @@ efs_unit() {
   systemctl daemon-reload
 }
 #
+# The admin's own settings file of a program, on EFS: created once with an explanation, then never changed
+# (our files are rewritten at every boot; settings that must survive upgrades go to these files)
+# usage: custom_file PATH "comment line" ...
+custom_file() {
+  local file=$1
+  shift
+  [ -f "$file" ] && return 0
+  mkdir -p "${file%/*}"
+  printf '%s\n' "$@" > "$file"
+}
+#
 # Setting up system settings
 timedatectl set-timezone $TIMEZONE
 hostnamectl set-hostname $MAIL_DOMAIN
@@ -137,13 +148,11 @@ ln -s /mnt/mailserver/mysql /var/lib/mysql
 printf '%s\n' "# Flashlight's MariaDB settings. DON'T EDIT: rewritten at every boot from the Flashlight release." \
   "# Your own settings go to /mnt/mailserver/etc/mariadb/custom.cnf (zz-custom.cnf here, read last)." \
   "[mysqld]" "bind-address = 127.0.0.1" > /etc/my.cnf.d/flashlight.cnf
-mkdir -p /mnt/mailserver/etc/mariadb
-custom=/mnt/mailserver/etc/mariadb/custom.cnf
-[ -f $custom ] || printf '%s\n' \
+custom_file /mnt/mailserver/etc/mariadb/custom.cnf \
   "# Your MariaDB settings. MariaDB reads this file last (as /etc/my.cnf.d/zz-custom.cnf), so the values set" \
   "# here win; Flashlight upgrades never change this file. Restart MariaDB after editing it. Example:" \
-  "#   [mysqld]" "#   max_connections = 200" > $custom
-ln -sf $custom /etc/my.cnf.d/zz-custom.cnf
+  "#   [mysqld]" "#   max_connections = 200"
+ln -sf /mnt/mailserver/etc/mariadb/custom.cnf /etc/my.cnf.d/zz-custom.cnf
 # v1.0 kept the whole config folder on EFS; the package's own files are used now
 rm -rf /mnt/mailserver/etc/my.cnf.d
 efs_unit mariadb
@@ -404,14 +413,33 @@ if [ ! -f $flag ]; then
 fi
 #
 # Configuring Apache. The package's own config (httpd.conf, ssl.conf, modules) stays on the instance, so it
-# always matches the installed Apache; only our sites file lives on EFS and survives instance replacement.
-if [ ! -f $flag ]; then
-  mkdir -p /mnt/mailserver/etc/httpd
-  aws s3 cp s3://$BUCKET_CONFIG/sites.conf /mnt/mailserver/etc/httpd
-  sed -i "s/{AdminEmail}/$ADMIN_EMAIL/g; s/{AdminDomain}/$ADMIN_DOMAIN/g; s/{MailDomain}/$MAIL_DOMAIN/g" \
-    /mnt/mailserver/etc/httpd/sites.conf
-fi
-ln -sf /mnt/mailserver/etc/httpd/sites.conf /etc/httpd/conf.d/sites.conf
+# always matches the installed Apache. Our sites (sites.conf) come from the release at every boot; the admin's
+# own settings live on EFS in custom.conf (global, read after ours) and custom-mail.conf / custom-admin.conf
+# (included inside our webmail and administration sites).
+# (a v1.0 install has a link to EFS here: replace it, don't write through it)
+rm -f /etc/httpd/conf.d/sites.conf
+aws s3 cp s3://$BUCKET_CONFIG/sites.conf /etc/httpd/conf.d/sites.conf
+sed -i "s/{AdminEmail}/$ADMIN_EMAIL/g; s/{AdminDomain}/$ADMIN_DOMAIN/g; s/{MailDomain}/$MAIL_DOMAIN/g" \
+  /etc/httpd/conf.d/sites.conf
+custom_file /mnt/mailserver/etc/httpd/custom.conf \
+  "# Your Apache settings: global ones, or your own sites. Apache reads this file after Flashlight's" \
+  "# /etc/httpd/conf.d/sites.conf (as zz-custom.conf); Flashlight upgrades never change this file." \
+  "# Settings for the webmail or the administration site go to custom-mail.conf / custom-admin.conf." \
+  "# Reload Apache after editing (apachectl configtest && systemctl reload httpd). Example:" \
+  "#   Timeout 120"
+custom_file /mnt/mailserver/etc/httpd/custom-mail.conf \
+  "# Your settings inside the webmail site (https://$MAIL_DOMAIN), included at the end of it." \
+  "# Flashlight upgrades never change this file. Reload Apache after editing. Example:" \
+  "#   Header always set Referrer-Policy \"same-origin\""
+custom_file /mnt/mailserver/etc/httpd/custom-admin.conf \
+  "# Your settings inside the administration site (https://$ADMIN_DOMAIN), included at the end of it." \
+  "# Flashlight upgrades never change this file. Reload Apache after editing." \
+  "# Example, the site password and your own addresses only:" \
+  "#   <Location \"/\">" "#     <RequireAll>" "#       Require valid-user" "#       Require ip 203.0.113.0/24" \
+  "#     </RequireAll>" "#   </Location>"
+ln -sf /mnt/mailserver/etc/httpd/custom.conf /etc/httpd/conf.d/zz-custom.conf
+# v1.0 kept our sites.conf on EFS; it is rewritten on the instance now
+rm -f /mnt/mailserver/etc/httpd/sites.conf
 # the package's httpd.conf needs its DocumentRoot to exist (/var/www is on EFS); nothing is served from it
 mkdir -p /var/www/html
 #
@@ -468,13 +496,11 @@ if [ "$FAIL2BAN" = 'ENABLED' ]; then
   # (a v1.0 install has a link to EFS here: replace it, don't write through it)
   rm -f /etc/fail2ban/jail.local
   aws s3 cp s3://$BUCKET_CONFIG/jail.local /etc/fail2ban/jail.local
-  mkdir -p /mnt/mailserver/etc/fail2ban
-  custom=/mnt/mailserver/etc/fail2ban/custom.local
-  [ -f $custom ] || printf '%s\n' \
+  custom_file /mnt/mailserver/etc/fail2ban/custom.local \
     "# Your fail2ban settings. fail2ban reads this file after Flashlight's /etc/fail2ban/jail.local, so the values" \
     "# set here win; Flashlight upgrades never change this file. Restart fail2ban after editing it." \
-    "# Example:" "#   [sshd]" "#   maxretry = 10" "#   [DEFAULT]" "#   ignoreip = 203.0.113.5" > $custom
-  ln -sf $custom /etc/fail2ban/jail.d/custom.local
+    "# Example:" "#   [sshd]" "#   maxretry = 10" "#   [DEFAULT]" "#   ignoreip = 203.0.113.5"
+  ln -sf /mnt/mailserver/etc/fail2ban/custom.local /etc/fail2ban/jail.d/custom.local
   # v1.0 kept our jail.local on EFS; it is rewritten on the instance now
   rm -f /mnt/mailserver/etc/fail2ban/jail.local
   # a reminder for the admin, next to the credentials
