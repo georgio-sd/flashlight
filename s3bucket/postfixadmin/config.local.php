@@ -1,6 +1,8 @@
 <?php
 /**
  * Flashlight overrides for PostfixAdmin 4.
+ * DON'T EDIT THIS FILE: base.sh rewrites it at every boot from the Flashlight release, so upgrades can
+ * change it. Your own settings go to /mnt/mailserver/etc/postfixadmin/custom.php, included at the end.
  * Only settings that differ from PostfixAdmin's own config.inc.php are listed here;
  * everything else keeps the upstream default. For example, encrypt = php_crypt stores
  * mailbox passwords as bcrypt ($2y$) hashes, which Dovecot reads through
@@ -39,3 +41,9 @@ $CONF['quota_multiplier'] = '1048576';
 
 $CONF['footer_text'] = 'Return to https://{admindomain}/padmin/';
 $CONF['footer_link'] = 'https://{admindomain}/padmin/';
+
+// Your own settings (read last, so they win): /mnt/mailserver/etc/postfixadmin/custom.php
+// It is never changed by Flashlight upgrades; set values there as in this file, e.g. $CONF['page_size'] = '50';
+if (is_file('/mnt/mailserver/etc/postfixadmin/custom.php')) {
+    include '/mnt/mailserver/etc/postfixadmin/custom.php';
+}

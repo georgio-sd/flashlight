@@ -1,6 +1,8 @@
 <?php
 /**
  * Flashlight overrides for Roundcube 1.7.
+ * DON'T EDIT THIS FILE: base.sh rewrites it at every boot from the Flashlight release, so upgrades can
+ * change it. Your own settings go to /mnt/mailserver/etc/roundcube/custom.inc.php, included at the end.
  * Only settings that differ from Roundcube's config/defaults.inc.php are listed here;
  * everything else keeps the upstream default. Values in curly braces are filled in by base.sh.
  */
@@ -33,3 +35,9 @@ $config['plugins'] = ['acl', 'managesieve', 'userinfo'];
 $config['managesieve_vacation'] = 1;
 
 // Elastic is the default skin; users can switch to Larry in Settings > Preferences > User Interface
+
+// Your own settings (read last, so they win): /mnt/mailserver/etc/roundcube/custom.inc.php
+// It is never changed by Flashlight upgrades; set values there as in this file, e.g. $config['product_name'] = 'My Mail';
+if (is_file('/mnt/mailserver/etc/roundcube/custom.inc.php')) {
+    include '/mnt/mailserver/etc/roundcube/custom.inc.php';
+}

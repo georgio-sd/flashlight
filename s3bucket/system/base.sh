@@ -189,10 +189,6 @@ if [ ! -f $flag ]; then
   db_postfix_password="$(pwgen 16 1)"
   /usr/local/sbin/secrets set postfix_db_password $db_postfix_password
   printf "MariaDB\n   login: postfix\n   password: $db_postfix_password\n\n" >> /root/credentials
-  aws s3 cp s3://$BUCKET_CONFIG/config.local.php /mnt/mailserver/www/admin/padmin
-  # '|' as the sed delimiter: the bcrypt setup hash can contain '/'
-  sed -i "s|{database_password}|$db_postfix_password|; s|{admin_email}|$ADMIN_EMAIL|g; \
-    s|{admindomain}|$ADMIN_DOMAIN|g; s|{setup_password}|$setuphash|" /mnt/mailserver/www/admin/padmin/config.local.php
   #
   aws s3 cp s3://$BUCKET_CONFIG/$pma_tar .
   mkdir /mnt/mailserver/www/admin/phpmyadmin
@@ -207,12 +203,37 @@ if [ ! -f $flag ]; then
   /usr/local/sbin/secrets set pma_db_password $pmapassword
   /usr/local/sbin/secrets set roundcube_db_password $roundcubepassword
   /usr/local/sbin/secrets set pma_blowfish_secret $blowfishsecret
-  aws s3 cp s3://$BUCKET_CONFIG/config.inc.php /mnt/mailserver/www/admin/phpmyadmin
-  sed -i "s/{pmapassword}/$pmapassword/" /mnt/mailserver/www/admin/phpmyadmin/config.inc.php
-  sed -i "s/{blowfish_secret}/$blowfishsecret/" /mnt/mailserver/www/admin/phpmyadmin/config.inc.php
   printf "MariaDB\n   login: pma\n   password: $pmapassword\n\n" >> /root/credentials
   printf "MariaDB\n   login: roundcube\n   password: $roundcubepassword\n\n" >> /root/credentials
-  #
+fi
+#
+# Our configs of PostfixAdmin and phpMyAdmin, rebuilt at every boot from the release with the values from the
+# secrets file. Each ends by including the admin's own settings from EFS (custom.php), so those win.
+# (the values are read in separate assignments, so a missing secret stops the install)
+padmin_conf=/mnt/mailserver/www/admin/padmin/config.local.php
+padmin_db_password=$(/usr/local/sbin/secrets get postfix_db_password)
+padmin_setup_hash=$(/usr/local/sbin/secrets get padmin_setup_hash)
+aws s3 cp s3://$BUCKET_CONFIG/config.local.php $padmin_conf
+# '|' as the sed delimiter: the bcrypt setup hash can contain '/'
+sed -i "s|{database_password}|$padmin_db_password|; s|{admin_email}|$ADMIN_EMAIL|g; \
+  s|{admindomain}|$ADMIN_DOMAIN|g; s|{setup_password}|$padmin_setup_hash|" $padmin_conf
+pma_conf=/mnt/mailserver/www/admin/phpmyadmin/config.inc.php
+pma_db_password=$(/usr/local/sbin/secrets get pma_db_password)
+pma_blowfish_secret=$(/usr/local/sbin/secrets get pma_blowfish_secret)
+aws s3 cp s3://$BUCKET_CONFIG/config.inc.php $pma_conf
+sed -i "s/{pmapassword}/$pma_db_password/; s/{blowfish_secret}/$pma_blowfish_secret/" $pma_conf
+custom_file /mnt/mailserver/etc/postfixadmin/custom.php "<?php" \
+  "// Your PostfixAdmin settings. Flashlight's config.local.php includes this file at its end, so the values set" \
+  "// here win; Flashlight upgrades never change this file. Example:" "//   \$CONF['page_size'] = '50';"
+custom_file /mnt/mailserver/etc/phpmyadmin/custom.php "<?php" \
+  "// Your phpMyAdmin settings. Flashlight's config.inc.php includes this file at its end, so the values set" \
+  "// here win; Flashlight upgrades never change this file. Example:" "//   \$cfg['MaxRows'] = 100;"
+# the configs hold database passwords (and so may the admin's files): readable by the web server only
+chown root:apache $padmin_conf $pma_conf /mnt/mailserver/etc/postfixadmin/custom.php /mnt/mailserver/etc/phpmyadmin/custom.php
+chmod 640 $padmin_conf $pma_conf /mnt/mailserver/etc/postfixadmin/custom.php /mnt/mailserver/etc/phpmyadmin/custom.php
+#
+# Databases and the PostfixAdmin superadmin (first install only; PostfixAdmin needs its config above for this)
+if [ ! -f $flag ]; then
   mysql -u root < /mnt/mailserver/www/admin/phpmyadmin/sql/create_tables.sql
   mysql -u root -e "CREATE DATABASE postfix CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
   mysql -u root -e "CREATE DATABASE roundcube CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
@@ -391,15 +412,22 @@ if [ ! -f $flag ]; then
   # the web installer isn't needed: the database and the config are prepared here
   rm -rf /var/www/webmail/installer /var/www/webmail/public_html/installer.php
   chown -R apache: /var/www/webmail/temp /var/www/webmail/logs
-  aws s3 cp s3://$BUCKET_CONFIG/config.inc.php.rc /var/www/webmail/config/config.inc.php
-  des_key="$(pwgen 32 1)"
-  /usr/local/sbin/secrets set roundcube_des_key $des_key
-  sed -i "s|{des_key}|$des_key|; s|{RoundcubePassword}|$roundcubepassword|" /var/www/webmail/config/config.inc.php
-  # the config holds the database password: readable by the web server only
-  chown root:apache /var/www/webmail/config/config.inc.php
-  chmod 640 /var/www/webmail/config/config.inc.php
+  /usr/local/sbin/secrets set roundcube_des_key "$(pwgen 32 1)"
   mysql roundcube < /var/www/webmail/SQL/mysql.initial.sql
 fi
+# Our Roundcube config, rebuilt at every boot from the release with the values from the secrets file; it ends by
+# including the admin's own settings from EFS (custom.inc.php), so those win
+rc_conf=/var/www/webmail/config/config.inc.php
+rc_db_password=$(/usr/local/sbin/secrets get roundcube_db_password)
+rc_des_key=$(/usr/local/sbin/secrets get roundcube_des_key)
+aws s3 cp s3://$BUCKET_CONFIG/config.inc.php.rc $rc_conf
+sed -i "s|{des_key}|$rc_des_key|; s|{RoundcubePassword}|$rc_db_password|" $rc_conf
+custom_file /mnt/mailserver/etc/roundcube/custom.inc.php "<?php" \
+  "// Your Roundcube settings. Flashlight's config/config.inc.php includes this file at its end, so the values set" \
+  "// here win; Flashlight upgrades never change this file. Example:" "//   \$config['product_name'] = 'My Mail';"
+# the config holds the database password (and so may the admin's file): readable by the web server only
+chown root:apache $rc_conf /mnt/mailserver/etc/roundcube/custom.inc.php
+chmod 640 $rc_conf /mnt/mailserver/etc/roundcube/custom.inc.php
 #
 # PHP settings, rewritten at every boot (the package's php.ini stays untouched):
 # time zone, and attachments up to the 20 MB message limit of Postfix
