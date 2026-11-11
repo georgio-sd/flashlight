@@ -148,6 +148,7 @@ Resources:
       - 'system/spot-instance-shutdown'
       - 'system/replace-instance'
       - 'system/rebuild-check'
+      - 'system/mailbox-cleanup'
       - 'system/imds'
       - 'system/instance-log'
       - 'system/spotprices.py'

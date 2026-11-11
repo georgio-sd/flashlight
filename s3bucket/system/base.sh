@@ -226,7 +226,7 @@ fi
 #
 # Spot instances: on the interruption notice and on the weekly price check the instance stops its
 # services and asks the ASG to replace it (replace-instance); events go to /mnt/mailserver/log/instance.log
-for tool in replace-instance rebuild-check; do
+for tool in replace-instance rebuild-check mailbox-cleanup; do
   aws s3 cp s3://$BUCKET_CONFIG/$tool /mnt/mailserver/automation/
   chmod 700 /mnt/mailserver/automation/$tool
 done
@@ -247,6 +247,9 @@ sed -i '/rebuild-check/d' /mnt/mailserver/etc/crontab
 if [ "$REBUILD_AFTER_DAYS" -gt 0 ]; then
   printf '15   3  *  *  0 root /mnt/mailserver/automation/rebuild-check %s\n' "$REBUILD_AFTER_DAYS" >> /mnt/mailserver/etc/crontab
 fi
+# Mailboxes deleted in PostfixAdmin: their mail goes to the trash, kept 30 days (every 10 minutes)
+sed -i '/mailbox-cleanup/d' /mnt/mailserver/etc/crontab
+printf '*/10 *  *  *  * root /mnt/mailserver/automation/mailbox-cleanup\n' >> /mnt/mailserver/etc/crontab
 #
 # Double instance service protection
 aws s3 cp s3://$BUCKET_CONFIG/double-inst-prot.service /etc/systemd/system
