@@ -1,6 +1,8 @@
 # Flashlight fail2ban jails (fail2ban 1.1, AlmaLinux 10).
-# Lives on EFS (/mnt/mailserver/etc/fail2ban/jail.local) and is linked into /etc/fail2ban; everything else is the
-# package's own config. sshd, Postfix and Dovecot are read from the systemd journal (the package default here).
+# DON'T EDIT THIS FILE: base.sh rewrites it at every boot from the Flashlight release, so upgrades can change it.
+# Your own settings go to /mnt/mailserver/etc/fail2ban/custom.local (linked as /etc/fail2ban/jail.d/custom.local):
+# fail2ban reads it after this file, so its settings win, and upgrades never touch it.
+# sshd, Postfix and Dovecot are read from the systemd journal (the package default here).
 # Unban by hand: fail2ban-client unban <IP>
 
 [DEFAULT]

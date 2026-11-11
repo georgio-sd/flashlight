@@ -450,15 +450,23 @@ efs_unit opendkim
 systemctl enable opendkim
 #
 # fail2ban (stack parameter Fail2ban): bans IP addresses after repeated failed logins (nftables).
-# The package's config stays on the instance; only our jail.local lives on EFS.
+# Our jails (jail.local) come from the release at every boot; the admin's own settings live on EFS in custom.local,
+# which fail2ban reads after ours (so they win) and upgrades never touch.
 if [ "$FAIL2BAN" = 'ENABLED' ]; then
   # fail2ban-server only: the fail2ban meta package would also pull in firewalld
   dnf install -y fail2ban-server
-  if [ ! -f /mnt/mailserver/etc/fail2ban/jail.local ]; then
-    mkdir -p /mnt/mailserver/etc/fail2ban
-    aws s3 cp s3://$BUCKET_CONFIG/jail.local /mnt/mailserver/etc/fail2ban
-  fi
-  ln -sf /mnt/mailserver/etc/fail2ban/jail.local /etc/fail2ban/jail.local
+  # (a v1.0 install has a link to EFS here: replace it, don't write through it)
+  rm -f /etc/fail2ban/jail.local
+  aws s3 cp s3://$BUCKET_CONFIG/jail.local /etc/fail2ban/jail.local
+  mkdir -p /mnt/mailserver/etc/fail2ban
+  custom=/mnt/mailserver/etc/fail2ban/custom.local
+  [ -f $custom ] || printf '%s\n' \
+    "# Your fail2ban settings. fail2ban reads this file after Flashlight's /etc/fail2ban/jail.local, so the values" \
+    "# set here win; Flashlight upgrades never change this file. Restart fail2ban after editing it." \
+    "# Example:" "#   [sshd]" "#   maxretry = 10" "#   [DEFAULT]" "#   ignoreip = 203.0.113.5" > $custom
+  ln -sf $custom /etc/fail2ban/jail.d/custom.local
+  # v1.0 kept our jail.local on EFS; it is rewritten on the instance now
+  rm -f /mnt/mailserver/etc/fail2ban/jail.local
   # a reminder for the admin, next to the credentials
   printf 'To unban an IP address banned by fail2ban:\n   fail2ban-client unban <IP>\n' > /mnt/mailserver/root/unbanip
   # the webmail jail needs its log file to exist before Roundcube's first error
