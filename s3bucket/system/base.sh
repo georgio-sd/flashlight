@@ -1,5 +1,12 @@
 #!/bin/bash -xe
 #
+# The stack's variables come from UserData. Without them some steps would act on empty values (an empty
+# domain list, for example, would delete every DKIM key), so stop before touching anything.
+for var in EIP_ID EIP AWS_REGION STACK MAIL_STORAGE BUCKET_CONFIG TIMEZONE ADMIN_EMAIL CERT_MODE INSTANCE_LIFECYCLE \
+    DOMAIN_NAMES DOMAIN_ZONE_IDS ADMIN_DOMAIN MAIL_DOMAIN REBUILD_AFTER_DAYS; do
+  [ -n "${!var}" ] || { echo "base.sh: $var is not set, nothing done"; exit 1; }
+done
+#
 # EC2 instance metadata (IMDSv2: get a token, then ask with it)
 imds() {
   local token
@@ -373,6 +380,8 @@ if [ ! -f $flag ]; then
   aws s3 cp s3://$BUCKET_CONFIG/opendkim.conf $dkim
 fi
 IFS=',' read -ra domains <<< "$DOMAIN_NAMES"
+# without a domain list every key would look unused: keep them all and stop
+[ ${#domains[@]} -gt 0 ] || { echo "base.sh: no mail domains, DKIM keys left as they are"; exit 1; }
 for dir in $(find $dkim -mindepth 1 -maxdepth 1 -type d -printf '%f\n'); do
   [[ " ${domains[*]} " == *" $dir "* ]] || rm -r "$dkim/$dir"
 done

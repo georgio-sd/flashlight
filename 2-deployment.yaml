@@ -390,6 +390,11 @@ Resources:
             # and anything printed here also goes to the systemd journal and the EC2 console log
             install -m 600 /dev/null /var/log/flashlight-install.log
             #
+            # AWS calls made as root (AWS CLI here and in base.sh, boto3 scripts, cron jobs) retry temporary
+            # errors up to 6 times with growing pauses: a failed download would stop an unattended install
+            mkdir -p /root/.aws
+            printf '[default]\nretry_mode = standard\nmax_attempts = 6\n' > /root/.aws/config
+            #
             # Updating the OS first, so everything below is installed and configured on the current
             # package versions (a new kernel starts with the reboot at the end)
             dnf upgrade -y >> /var/log/flashlight-install.log 2>&1
