@@ -170,6 +170,17 @@ fi
 rm -r /var/www
 ln -s /mnt/mailserver/www /var/www
 #
+# Mail domains of the stack that PostfixAdmin doesn't have yet are added at every boot (no limits, with the
+# abuse@ and postmaster@ aliases from config.local.php). Existing domains, mailboxes and aliases are never
+# changed, and domains removed from the stack stay in PostfixAdmin: deleting one would delete its mailboxes.
+pfa_cli=/mnt/mailserver/www/admin/padmin/scripts/postfixadmin-cli
+for domain in ${DOMAIN_NAMES//,/ }; do
+  if ! $pfa_cli domain view $domain > /dev/null 2>&1; then
+    $pfa_cli domain add $domain --description "added from the stack's domain list" ||
+      echo "PostfixAdmin: could not add domain $domain"
+  fi
+done
+#
 # Getting SSL certificates (certbot) and preparing crontab
 # Renewal runs from certbot-renew.timer (EPEL package, twice a day); the hooks below apply to it.
 # Domain validation is DNS-01 through Route 53: certbot adds a temporary _acme-challenge TXT record to the
