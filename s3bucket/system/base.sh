@@ -120,6 +120,9 @@ if [ ! -f $flag ]; then
   chmod 600 /mnt/mailserver/root/credentials
 fi
 ln -s /mnt/mailserver/root/credentials /root/credentials
+# root-only folders and files stay root-only (checked at every boot)
+chmod 700 /mnt/mailserver/root /mnt/mailserver/backup
+chmod 600 /mnt/mailserver/root/credentials
 #
 # Starting MariaDB
 if [ ! -f $flag ]; then
@@ -223,15 +226,9 @@ if [ ! -f $flag ]; then
   # RSA: understood by every mail server and client, including old ones
   certbot certonly --dns-route53 $certbot_test --key-type rsa -d $MAIL_DOMAIN,$ADMIN_DOMAIN -m $ADMIN_EMAIL \
     --agree-tos --non-interactive
-  # only when a new certificate was actually issued: services reload it, connections stay up
-  printf '#!/bin/bash\nsystemctl try-reload-or-restart postfix dovecot httpd\n' > /etc/letsencrypt/renewal-hooks/deploy/srv-reload
-  chmod 744 /etc/letsencrypt/renewal-hooks/*/srv-*
   mv /etc/letsencrypt /mnt/mailserver/etc
-  # no cron mail: jobs write their own logs to /mnt/mailserver/log
+  # no cron mail: jobs write their own logs to /mnt/mailserver/log (our jobs are added below, at every boot)
   sed -i 's/^MAILTO=.*/MAILTO=""/' /etc/crontab
-  printf '@reboot         root /usr/bin/cron-boot-runner\n' >> /etc/crontab
-  # weekly spot price check, Saturday -> Sunday night (enabled below for spot instances only)
-  printf '#15   1  *  *  0 root /mnt/mailserver/automation/spotprices.py\n' >> /etc/crontab
   mv /etc/crontab /mnt/mailserver/etc
 fi
 rm -f /etc/crontab
@@ -241,6 +238,9 @@ ln -s /mnt/mailserver/etc/crontab /etc/crontab
 sed -i 's/^MAILTO=.*/MAILTO=""/' /etc/cron.d/0hourly /etc/anacrontab
 rm -rf /etc/letsencrypt
 ln -s /mnt/mailserver/etc/letsencrypt /etc/letsencrypt
+# only when a new certificate was actually issued: services reload it, connections stay up (written at every boot)
+printf '#!/bin/bash\nsystemctl try-reload-or-restart postfix dovecot httpd\n' > /etc/letsencrypt/renewal-hooks/deploy/srv-reload
+chmod 744 /etc/letsencrypt/renewal-hooks/deploy/srv-reload
 # CertificateMode can be switched from staging to production with a stack update: the next instance replaces
 # the test certificate on EFS with a trusted one (same names and key type; renewals then use production too).
 # If that fails (e.g. Let's Encrypt limits), the server keeps working on the test certificate.
@@ -256,7 +256,7 @@ fi
 #
 # Spot instances: on the interruption notice and on the weekly price check the instance stops its
 # services and asks the ASG to replace it (replace-instance); events go to /mnt/mailserver/log/instance.log
-for tool in replace-instance rebuild-check mailbox-cleanup; do
+for tool in replace-instance rebuild-check mailbox-cleanup db-backup; do
   aws s3 cp s3://$BUCKET_CONFIG/$tool /mnt/mailserver/automation/
   chmod 700 /mnt/mailserver/automation/$tool
 done
@@ -265,21 +265,32 @@ if [ "$INSTANCE_LIFECYCLE" = 'Spot' ]; then
     aws s3 cp s3://$BUCKET_CONFIG/$tool /mnt/mailserver/automation/
     chmod 700 /mnt/mailserver/automation/$tool
   done
-  sed -i "s/\([^0-9]*\)\(.*\)spotprices\(.*\)/\2spotprices\3/" /mnt/mailserver/etc/crontab
   aws s3 cp s3://$BUCKET_CONFIG/autoshutdown.service /etc/systemd/system
   systemctl enable autoshutdown
-else
-  sed -i "s/\(^[0-9].*\)spotprices\(.*\)/\#\1spotprices\2/" /mnt/mailserver/etc/crontab
 fi
-# Scheduled rebuild (stack parameter RebuildAfterDays, 0 = off): Sunday 03:15, two hours after the price check.
-# The line is rewritten at every boot, so a stack update changes or removes it.
-sed -i '/rebuild-check/d' /mnt/mailserver/etc/crontab
-if [ "$REBUILD_AFTER_DAYS" -gt 0 ]; then
-  printf '15   3  *  *  0 root /mnt/mailserver/automation/rebuild-check %s\n' "$REBUILD_AFTER_DAYS" >> /mnt/mailserver/etc/crontab
-fi
-# Mailboxes deleted in PostfixAdmin: their mail goes to the trash, kept 30 days (every 10 minutes)
-sed -i '/mailbox-cleanup/d' /mnt/mailserver/etc/crontab
-printf '*/10 *  *  *  * root /mnt/mailserver/automation/mailbox-cleanup\n' >> /mnt/mailserver/etc/crontab
+#
+# Our cron jobs: one block between markers, rewritten at every boot, so a new release or a stack update
+# changes them. Lines outside the block are the admin's and stay as they are.
+crontab=/mnt/mailserver/etc/crontab
+{
+  # everything outside our block, without our jobs from the time before the block existed
+  awk '/^# Flashlight begin/ {skip=1} !skip {print} /^# Flashlight end/ {skip=0}' $crontab |
+    grep -vE 'cron-boot-runner|/mnt/mailserver/automation/(db-backup|mailbox-cleanup|spotprices\.py|rebuild-check)' || true
+  echo '# Flashlight begin: our jobs, rewritten at every boot (add your own jobs outside this block)'
+  echo 'MAILTO=""'
+  # one-time jobs after the final reboot of an install (READY check)
+  echo '@reboot         root /usr/bin/cron-boot-runner'
+  # database backups, kept 28 days
+  echo '55  22  *  *  * root /mnt/mailserver/automation/db-backup'
+  # mailboxes deleted in PostfixAdmin: their mail goes to the trash, kept 30 days
+  echo '*/10 *  *  *  * root /mnt/mailserver/automation/mailbox-cleanup'
+  # spot instances: weekly price check, Saturday -> Sunday night
+  [ "$INSTANCE_LIFECYCLE" = 'Spot' ] && echo '15   1  *  *  0 root /mnt/mailserver/automation/spotprices.py'
+  # scheduled rebuild (stack parameter RebuildAfterDays, 0 = off), two hours after the price check
+  [ "$REBUILD_AFTER_DAYS" -gt 0 ] && echo "15   3  *  *  0 root /mnt/mailserver/automation/rebuild-check $REBUILD_AFTER_DAYS"
+  echo '# Flashlight end'
+} > $crontab.new
+mv $crontab.new $crontab
 #
 # Double instance service protection
 aws s3 cp s3://$BUCKET_CONFIG/double-inst-prot.service /etc/systemd/system
@@ -371,9 +382,6 @@ if [ ! -f $flag ]; then
   printf "MariaDB\n   Link: https://$ADMIN_DOMAIN/myadmin\n" >> /root/credentials
   printf "   login: root\n   password: $db_root_password\n\n" >> /root/credentials
   mysql -u root -e "ALTER USER root@localhost IDENTIFIED VIA unix_socket OR mysql_native_password USING PASSWORD('$db_root_password');"
-  aws s3 cp s3://$BUCKET_CONFIG/db-backup /mnt/mailserver/automation
-  chmod 700 /mnt/mailserver/automation/db-backup
-  printf '55  22  *  *  * root /mnt/mailserver/automation/db-backup\n' >> /mnt/mailserver/etc/crontab
 fi
 #
 # Configuring Apache. The package's own config (httpd.conf, ssl.conf, modules) stays on the instance, so it
