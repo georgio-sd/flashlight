@@ -6,5 +6,5 @@
 #
 # imds and instance-log live in /usr/local/sbin, which is not in cron's PATH
 export PATH=/usr/local/sbin:$PATH
-printf '%s %s %-22s %-7s %s\n' "$(date '+%F %T')" "$(imds instance-id)" \
+printf '%s %s %-22s %-8s %s\n' "$(date '+%F %T')" "$(imds instance-id)" \
   "$(imds instance-type)/$(imds placement/availability-zone)" "$1" "$2" | tee -a /mnt/mailserver/log/instance.log

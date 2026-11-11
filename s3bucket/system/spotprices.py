@@ -46,7 +46,7 @@ current = imds('instance-type') + '/' + imds('placement/availability-zone')
 
 
 def log(event, message):
-    line = f'{datetime.datetime.now():%Y-%m-%d %H:%M:%S} {instance_id} {current:<22} {event:<7} {message}'
+    line = f'{datetime.datetime.now():%Y-%m-%d %H:%M:%S} {instance_id} {current:<22} {event:<8} {message}'
     print(line)
     with open(LOG, 'a') as f:
         f.write(line + '\n')

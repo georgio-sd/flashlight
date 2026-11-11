@@ -38,7 +38,7 @@ pool="$(imds instance-type)/$(imds placement/availability-zone)"
 # the same line format as /usr/local/sbin/instance-log, written directly (that helper may not exist yet)
 event() {
   local line
-  line=$(printf '%s %s %-22s %-7s %s' "$(date '+%F %T')" "$id" "$pool" "$1" "$2")
+  line=$(printf '%s %s %-22s %-8s %s' "$(date '+%F %T')" "$id" "$pool" "$1" "$2")
   echo "$line"
   mountpoint -q $efs && { mkdir -p $efs/log; echo "$line" >> $efs/log/instance.log; }
 }

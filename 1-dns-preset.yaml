@@ -159,6 +159,8 @@ Resources:
       - 'system/install-finish'
       - 'system/imds'
       - 'system/instance-log'
+      - 'system/instance-shutdown-log'
+      - 'system/shutdown-log.service'
       - 'system/spotprices.py'
       - 'system/base.sh'
       - 'system/double-inst-prot.service'

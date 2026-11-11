@@ -1,0 +1,21 @@
+#!/bin/bash
+#
+# Writes a SHUTDOWN or REBOOT line to /mnt/mailserver/log/instance.log while the instance goes down
+# (run by shutdown-log.service when systemd stops it, before EFS and the network are gone).
+# For a shutdown, EC2 says why: the instance is terminated (ASG replacement, spot reclaimed, stack update or
+# maintenance mode), stopped, or it was shut down from inside the OS.
+#
+export PATH=/usr/local/sbin:$PATH
+if systemctl list-jobs --no-legend | grep -q 'reboot\.target'; then
+  instance-log REBOOT "rebooting"
+  exit 0
+fi
+state=$(aws ec2 describe-instances --instance-ids "$(imds instance-id)" --region "$(imds placement/region)" \
+  --query 'Reservations[0].Instances[0].State.Name' --output text 2> /dev/null)
+case "$state" in
+  shutting-down) why="the instance is being terminated" ;;
+  stopping)      why="the instance is being stopped" ;;
+  running)       why="shut down from inside the OS" ;;
+  *)             why="EC2 state unknown" ;;
+esac
+instance-log SHUTDOWN "shutting down: $why"

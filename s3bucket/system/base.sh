@@ -73,11 +73,15 @@ if [ ! -f $flag ]; then
 fi
 #
 # Instance helpers (imds: IMDSv2 metadata; instance-log: event log on EFS) and the BOOT record
-for tool in imds instance-log; do
+for tool in imds instance-log instance-shutdown-log; do
   aws s3 cp s3://$BUCKET_CONFIG/$tool /usr/local/sbin/
   chmod 755 /usr/local/sbin/$tool
 done
 /usr/local/sbin/instance-log BOOT "new $INSTANCE_LIFECYCLE instance, installing"
+# SHUTDOWN / REBOOT lines when the instance goes down (started now, so the install's own reboot is logged too)
+aws s3 cp s3://$BUCKET_CONFIG/shutdown-log.service /etc/systemd/system
+systemctl daemon-reload
+systemctl enable --now shutdown-log
 #
 # Installing the base set of packages (AlmaLinux AppStream/BaseOS + EPEL)
 dnf install -y epel-release
