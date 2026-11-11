@@ -23,18 +23,6 @@ efs_unit() {
   systemctl daemon-reload
 }
 #
-# Setting up ElasticIP
-instid=$(imds instance-id)
-# right after boot the instance's network interface may not be visible to the Elastic IP service yet
-# (InvalidNetworkInterfaceID.NotFound, which the AWS CLI doesn't retry): try every 10 seconds for up to 3 minutes
-for try in $(seq 18); do
-  aws ec2 associate-address --instance-id $instid --allocation-id $EIP_ID --region $AWS_REGION && break
-  [ $try -lt 18 ] || exit 1
-  sleep 10
-done
-# kept for services-shutdown, which takes the address back if a newer instance fails and is terminated
-echo "$EIP_ID" > /usr/local/etc/eip-allocation-id
-#
 # Setting up system settings
 timedatectl set-timezone $TIMEZONE
 hostnamectl set-hostname $MAIL_DOMAIN
@@ -59,7 +47,31 @@ mkdir /mnt/mailserver
 echo -e "$MAIL_STORAGE:/ /mnt/mailserver efs _netdev,tls 0 0" >> /etc/fstab
 mount -a
 #
-# Creating directories and the vmail user (owner of all mailboxes)
+# Instance helpers: imds (IMDSv2 metadata), instance-log (event log on EFS), instance-shutdown-log,
+# upgrade-data (Flashlight data version on EFS and upgrades between releases)
+for tool in imds instance-log instance-shutdown-log upgrade-data; do
+  aws s3 cp s3://$BUCKET_CONFIG/$tool /usr/local/sbin/
+  chmod 755 /usr/local/sbin/$tool
+done
+#
+# Data from a newer Flashlight release must not be touched by this one: stop before taking over anything
+# (the Elastic IP and the EFS flag below), so the instance that runs now doesn't even notice
+/usr/local/sbin/upgrade-data check
+#
+# Setting up ElasticIP
+instid=$(imds instance-id)
+# right after boot the instance's network interface may not be visible to the Elastic IP service yet
+# (InvalidNetworkInterfaceID.NotFound, which the AWS CLI doesn't retry): try every 10 seconds for up to 3 minutes
+for try in $(seq 18); do
+  aws ec2 associate-address --instance-id $instid --allocation-id $EIP_ID --region $AWS_REGION && break
+  [ $try -lt 18 ] || exit 1
+  sleep 10
+done
+# kept for services-shutdown, which takes the address back if a newer instance fails and is terminated
+echo "$EIP_ID" > /usr/local/etc/eip-allocation-id
+#
+# Creating directories and the vmail user (owner of all mailboxes).
+# Writing this instance's EFS flag makes the instance that runs now stop its services (double-inst-prot).
 rm -f /mnt/mailserver/flag-ec2id-*
 printf "Do not delete this file" > /mnt/mailserver/flag-ec2id-$instid
 groupadd -g 5000 vmail
@@ -71,13 +83,10 @@ if [ ! -f $flag ]; then
   chmod 700 /mnt/mailserver/backup
   chown -R vmail: /mnt/mailserver/mail
 fi
-#
-# Instance helpers (imds: IMDSv2 metadata; instance-log: event log on EFS) and the BOOT record
-for tool in imds instance-log instance-shutdown-log; do
-  aws s3 cp s3://$BUCKET_CONFIG/$tool /usr/local/sbin/
-  chmod 755 /usr/local/sbin/$tool
-done
 /usr/local/sbin/instance-log BOOT "new $INSTANCE_LIFECYCLE instance, installing"
+# image of this instance and its OS before and after the OS update (information only)
+/usr/local/sbin/upgrade-data set image "$(imds ami-id) ${IMAGE_OS:-unknown OS}"
+/usr/local/sbin/upgrade-data set os "$(. /etc/os-release && echo "$PRETTY_NAME")"
 # SHUTDOWN / REBOOT lines when the instance goes down (started now, so the install's own reboot is logged too)
 aws s3 cp s3://$BUCKET_CONFIG/shutdown-log.service /etc/systemd/system
 systemctl daemon-reload
@@ -125,6 +134,9 @@ ln -s /mnt/mailserver/mysql /var/lib/mysql
 efs_unit mariadb
 systemctl enable --now mariadb
 #
+# Data from an older Flashlight release: back up, run the migrations up to this release, restore all on a failure
+/usr/local/sbin/upgrade-data run
+#
 # Installing phpMyAdmin and postfixadmin (pinned releases from the config bucket)
 if [ ! -f $flag ]; then
   cd ~
@@ -143,6 +155,7 @@ if [ ! -f $flag ]; then
   aws s3 cp s3://$BUCKET_CONFIG/$pfa_tar .
   mkdir /mnt/mailserver/www/admin/padmin
   tar xzf $pfa_tar -C /mnt/mailserver/www/admin/padmin --strip-components=1 --no-same-owner
+  /usr/local/sbin/upgrade-data set postfixadmin $pfa_tar
   rm $pfa_tar
   chown -R apache: /mnt/mailserver/www/admin/padmin/templates_c
   setuppassword="$(pwgen 16 1)"
@@ -158,6 +171,7 @@ if [ ! -f $flag ]; then
   aws s3 cp s3://$BUCKET_CONFIG/$pma_tar .
   mkdir /mnt/mailserver/www/admin/phpmyadmin
   tar xzf $pma_tar -C /mnt/mailserver/www/admin/phpmyadmin --strip-components=1 --no-same-owner
+  /usr/local/sbin/upgrade-data set phpmyadmin $pma_tar
   rm $pma_tar
   mkdir /mnt/mailserver/www/admin/phpmyadmin/tmp
   chown -R apache: /mnt/mailserver/www/admin/phpmyadmin/tmp
@@ -325,8 +339,10 @@ if [ ! -f $flag ]; then
   aws s3 cp s3://$BUCKET_CONFIG/$larry_tar .
   mkdir /var/www/webmail
   tar xzf $rc_tar -C /var/www/webmail --strip-components=1 --no-same-owner
+  /usr/local/sbin/upgrade-data set roundcube $rc_tar
   mkdir /var/www/webmail/skins/larry
   tar xzf $larry_tar -C /var/www/webmail/skins/larry --strip-components=1 --no-same-owner
+  /usr/local/sbin/upgrade-data set larry $larry_tar
   rm $rc_tar $larry_tar
   # the web installer isn't needed: the database and the config are prepared here
   rm -rf /var/www/webmail/installer /var/www/webmail/public_html/installer.php

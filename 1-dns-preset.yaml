@@ -160,6 +160,7 @@ Resources:
       - 'system/imds'
       - 'system/instance-log'
       - 'system/instance-shutdown-log'
+      - 'system/upgrade-data'
       - 'system/shutdown-log.service'
       - 'system/spotprices.py'
       - 'system/base.sh'

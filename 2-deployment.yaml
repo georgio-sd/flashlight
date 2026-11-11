@@ -397,6 +397,9 @@ Resources:
             mkdir -p /root/.aws
             printf '[default]\nretry_mode = standard\nmax_attempts = 6\n' > /root/.aws/config
             #
+            # OS of the image itself, before the update (recorded in /mnt/mailserver/versions)
+            export IMAGE_OS="$(. /etc/os-release && echo "$PRETTY_NAME")"
+            #
             # Updating the OS first, so everything below is installed and configured on the current
             # package versions (a new kernel starts with the reboot at the end)
             dnf upgrade -y >> /var/log/flashlight-install.log 2>&1

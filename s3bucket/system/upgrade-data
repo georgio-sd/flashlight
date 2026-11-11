@@ -1,0 +1,135 @@
+#!/bin/bash
+#
+# Flashlight data version on EFS and data upgrades between releases.
+#
+# /mnt/mailserver/versions (key=value) records what the data on EFS belong to:
+#   flashlight=   release the data were last brought to (changed only by migrations below)
+#   image=, os=   image and OS of the last installed instance (information only)
+#   roundcube=, larry=, postfixadmin=, phpmyadmin=   installed package of each web application
+#
+#   upgrade-data check      right after EFS is mounted, before anything changes: stop if the data belong to a
+#                           newer release (old code must not touch them); create the file if it is missing
+#   upgrade-data run        once MariaDB runs: if the data are older, back them up, run the migrations up to this
+#                           release in order (upgrade-X-Y.sh from the config bucket) and restore all on a failure
+#   upgrade-data set KEY VALUE
+#
+# Releasing a new version: set this_release, add it to releases, and ship upgrade-<previous>-<new>.sh only if the
+# data need a one-off change (configs that Flashlight owns are simply replaced, web applications are updated by
+# version). A user can skip releases: all steps from the data's release up to this one run in a row.
+#
+this_release=1.0
+releases="1.0"
+#
+# Testing: THIS_RELEASE, RELEASES and MIGRATIONS_DIR (local folder instead of the config bucket) replace the above
+this_release=${THIS_RELEASE:-$this_release}
+releases=${RELEASES:-$releases}
+export PATH=/usr/local/sbin:$PATH
+efs=/mnt/mailserver
+file=$efs/versions
+
+get() { sed -n "s/^$1=//p" $file; }
+set_value() {
+  local tmp=$file.tmp
+  { grep -v "^$1=" $file 2> /dev/null; echo "$1=$2"; } > $tmp && mv $tmp $file
+}
+# is version $1 newer than version $2?
+newer() { [ "$1" != "$2" ] && [ "$(printf '%s\n%s\n' "$1" "$2" | sort -V | tail -1)" = "$1" ]; }
+
+# Backup of everything a migration may change (mail itself is never changed by migrations)
+backup() {
+  local dir=$1 db dbs
+  mkdir -p $dir && chmod 700 $dir || return 1
+  cp -p $file $dir/versions || return 1
+  mariadb-dump -u root --system=users --insert-ignore > $dir/users.sql || return 1
+  dbs=$(mariadb -N -B -u root -e 'SHOW DATABASES') || return 1
+  for db in $(grep -vxE 'information_schema|performance_schema|mysql|sys' <<< "$dbs"); do
+    mariadb-dump -u root --single-transaction --routines --events --databases $db > $dir/db-$db.sql || return 1
+  done
+  # (GNU tar applies --exclude only to the paths after it)
+  tar czf $dir/files.tar.gz -C $efs \
+    --exclude=www/webmail/temp --exclude=www/webmail/logs --exclude=www/admin/phpmyadmin/tmp \
+    --exclude=www/admin/padmin/templates_c \
+    etc www root automation || return 1
+  tar tzf $dir/files.tar.gz > /dev/null
+}
+
+# Back to the state of the backup. The failed state is kept next to the backup for diagnosis.
+restore() {
+  local dir=$1 sql db
+  mkdir -p $dir/failed $dir/restored
+  tar xzf $dir/files.tar.gz -C $dir/restored
+  for d in etc www root automation; do
+    [ -e $efs/$d ] && mv $efs/$d $dir/failed/$d
+    mv $dir/restored/$d $efs/$d
+  done
+  # the folders that were not in the backup (temporary files, logs) go back where they were
+  for d in www/webmail/temp www/webmail/logs www/admin/phpmyadmin/tmp www/admin/padmin/templates_c; do
+    [ -e $dir/failed/$d ] && [ ! -e $efs/$d ] && mv $dir/failed/$d $efs/$d
+  done
+  for sql in $dir/db-*.sql; do
+    db=${sql##*/db-}; db=${db%.sql}
+    mariadb -u root -e "DROP DATABASE IF EXISTS \`$db\`"
+    mariadb -u root < $sql
+  done
+  mariadb -u root < $dir/users.sql
+  cp -p $dir/versions $file
+}
+
+case "$1" in
+  check)
+    if [ ! -f $file ]; then
+      if [ -f $efs/flag ]; then
+        # installed by v1.0 before this file existed (the only release without it)
+        printf '%s\n' flashlight=1.0 roundcube=roundcubemail-1.7.6-complete.tar.gz \
+          larry=roundcube-larry-03ccd35.tar.gz postfixadmin=postfixadmin-v4.0.6-php74.tar.gz \
+          phpmyadmin=phpMyAdmin-5.2.3-all-languages.tar.gz > $file
+      else
+        echo "flashlight=$this_release" > $file
+      fi
+    fi
+    data=$(get flashlight)
+    if newer "$data" "$this_release"; then
+      instance-log FAILED "the data on EFS belong to Flashlight $data, newer than this installer ($this_release): nothing changed"
+      exit 1
+    fi ;;
+  run)
+    data=$(get flashlight)
+    [ "$data" = "$this_release" ] && exit 0
+    # the steps from the data's release up to this one
+    steps="" found=""
+    for r in $releases; do
+      [ -n "$found" ] && steps="$steps $prev-$r"
+      [ "$r" = "$data" ] && found=1
+      prev=$r
+    done
+    if [ -z "$found" ]; then
+      instance-log FAILED "the data on EFS belong to Flashlight $data, which this installer can't upgrade from: nothing changed"
+      exit 1
+    fi
+    dir=$efs/backup/upgrade-$data-$this_release-$(date +%Y-%m-%d-%H-%M-%S)
+    instance-log UPGRADE "data $data -> $this_release, backup in ${dir#$efs/}"
+    if ! backup $dir; then
+      instance-log FAILED "upgrade backup failed, nothing changed"
+      exit 1
+    fi
+    for step in $steps; do
+      script=$dir/upgrade-$step.sh
+      if [ -n "$MIGRATIONS_DIR" ]; then cp $MIGRATIONS_DIR/upgrade-$step.sh $script
+      else aws s3 cp s3://$BUCKET_CONFIG/upgrade-$step.sh $script --quiet
+      fi && bash -e $script
+      if [ $? -ne 0 ]; then
+        restore $dir
+        instance-log FAILED "upgrade step $step failed, the data were restored from the backup (failed state kept in ${dir#$efs/}/failed)"
+        exit 1
+      fi
+      set_value flashlight ${step#*-}
+      instance-log UPGRADE "step $step done"
+    done
+    # upgrade backups are kept for 90 days, like the install logs
+    find $efs/backup -maxdepth 1 -name 'upgrade-*' -mtime +90 -exec rm -rf {} +
+    instance-log UPGRADE "data now at $this_release" ;;
+  set)
+    set_value "$2" "$3" ;;
+  *)
+    echo "usage: upgrade-data check | run | set KEY VALUE"; exit 2 ;;
+esac
