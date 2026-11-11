@@ -277,27 +277,8 @@ Resources:
             # services-shutdown: is the instance that took over the EFS terminated?
             - 'ec2:DescribeInstances'
             Resource: '*'
-          # DNS: TXT records only, in this stack's zones only. dnsupd.py writes DKIM, SPF and DMARC;
-          # certbot's Route 53 plugin adds and removes the Let's Encrypt _acme-challenge records
-          # (it also looks up the zone and waits until the change is on all Route 53 servers);
-          # dnsupd.py reads a domain's TXT records to keep the strings that aren't ours (read-only, DNS is public anyway)
-          - Effect: Allow
-            Action: [ 'route53:ListHostedZones', 'route53:GetChange', 'route53:ListResourceRecordSets' ]
-            Resource: '*'
-          - Effect: Allow
-            Action: 'route53:ChangeResourceRecordSets'
-            Resource: !Split
-            - ','
-            - !Sub
-              - 'arn:aws:route53:::hostedzone/${ZoneIds}'
-              - ZoneIds: !Join
-                - ',arn:aws:route53:::hostedzone/'
-                - !Split
-                  - ','
-                  - Fn::ImportValue: !Sub "${DnsPreset}-DomainZoneIDs"
-            Condition:
-              'ForAllValues:StringEquals':
-                'route53:ChangeResourceRecordSetsRecordTypes': 'TXT'
+          # No Route 53 rights here: maintenance mode has no instance, and importing the zone list from stage 1
+          # would block the stage 1 update this mode exists for (an export can't change while it is imported)
           - Effect: Allow
             Action: [ 'autoscaling:DescribeAutoScalingInstances', 'autoscaling:DescribeAutoScalingGroups' ]
             Resource: '*'
