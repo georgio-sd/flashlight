@@ -4,20 +4,53 @@
 # Every instance writes /mnt/mailserver/flag-ec2id-<its id> during install and removes the others' flags.
 # When another instance's flag appears, a newer instance has taken over the EFS: this one stops
 # everything that writes to it or could start yet another instance (cron jobs, the spot watcher),
-# database first, and stays idle until it is terminated.
+# database first, and waits.
+# Usually this instance is terminated soon after (spot replacement, rebuild, successful stack update).
+# But if the newer instance is terminated first (its install failed and the stack update rolled back),
+# this instance takes over again: EFS flag, services, cron, and the Elastic IP last (an SSH session to the
+# temporary public IP drops at that moment). It waits for "terminated": while the other instance is still
+# shutting down, its MariaDB may still have the database open.
 #
 # imds and instance-log live in /usr/local/sbin
 export PATH=/usr/local/sbin:$PATH
 # an empty ID would make our own flag look foreign, so wait until the metadata answers
-until me=flag-ec2id-$(imds instance-id) && [ "$me" != flag-ec2id- ]; do sleep 5; done
+until id=$(imds instance-id) && [ -n "$id" ]; do sleep 5; done
+region=$(imds placement/region)
+me=flag-ec2id-$id
+
+# the instance that owns the EFS now (the newest foreign flag), or nothing
+owner() {
+  find /mnt/mailserver -maxdepth 1 -type f -name 'flag-ec2id-*' ! -name "$me" -printf '%T@ %f\n' |
+    sort -n | tail -1 | sed 's/^[^ ]* flag-ec2id-//'
+}
+
+# "gone" only when EC2 says terminated or doesn't know the instance any more; API errors mean "wait"
+gone() {
+  local out
+  out=$(aws ec2 describe-instances --instance-ids "$1" --region "$region" \
+    --query 'Reservations[0].Instances[0].State.Name' --output text 2>&1)
+  [ "$out" = terminated ] || [[ "$out" == *InvalidInstanceID.NotFound* ]]
+}
+
 while true; do
-  for flag in $(find /mnt/mailserver -maxdepth 1 -type f -name 'flag-ec2id-*' -printf '%f\n'); do
-    if [ "$flag" != "$me" ]; then
-      systemctl stop mariadb
-      systemctl stop postfix dovecot httpd php-fpm opendkim crond autoshutdown
-      instance-log STOP "instance ${flag#flag-ec2id-} took over the EFS: services, cron and spot watcher stopped"
-      exit 0
-    fi
-  done
+  taker=$(owner)
+  if [ -n "$taker" ]; then
+    systemctl stop mariadb
+    systemctl stop postfix dovecot httpd php-fpm opendkim crond autoshutdown
+    instance-log STOP "instance $taker took over the EFS: services, cron and spot watcher stopped"
+    # wait until the owner is gone; a newer owner (another flag) is followed instead
+    while sleep 60; do
+      taker=$(owner)
+      [ -z "$taker" ] || gone "$taker" && break
+    done
+    rm -f /mnt/mailserver/flag-ec2id-*
+    printf "Do not delete this file" > /mnt/mailserver/$me
+    systemctl start mariadb
+    systemctl start postfix dovecot httpd php-fpm opendkim crond
+    systemctl is-enabled -q autoshutdown && systemctl start autoshutdown
+    aws ec2 associate-address --instance-id "$id" --allocation-id "$(cat /usr/local/etc/eip-allocation-id)" \
+      --allow-reassociation --region "$region" > /dev/null
+    instance-log RESUME "instance ${taker:-?} is gone (terminated): EFS, services and the Elastic IP are back on this instance"
+  fi
   sleep 15
 done

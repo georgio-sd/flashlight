@@ -274,6 +274,8 @@ Resources:
             Action:
             - 'ec2:AssociateAddress'
             - 'ec2:DescribeSpotPriceHistory'
+            # services-shutdown: is the instance that took over the EFS terminated?
+            - 'ec2:DescribeInstances'
             Resource: '*'
           # DNS: TXT records only, in this stack's zones only. dnsupd.py writes DKIM, SPF and DMARC;
           # certbot's Route 53 plugin adds and removes the Let's Encrypt _acme-challenge records

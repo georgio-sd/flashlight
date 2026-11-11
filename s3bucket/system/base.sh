@@ -26,6 +26,8 @@ efs_unit() {
 # Setting up ElasticIP
 instid=$(imds instance-id)
 aws ec2 associate-address --instance-id $instid --allocation-id $EIP_ID --region $AWS_REGION
+# kept for services-shutdown, which takes the address back if a newer instance fails and is terminated
+echo "$EIP_ID" > /usr/local/etc/eip-allocation-id
 #
 # Setting up system settings
 timedatectl set-timezone $TIMEZONE

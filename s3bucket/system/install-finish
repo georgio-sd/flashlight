@@ -65,7 +65,7 @@ failed() {
     *_IN_PROGRESS)
       signal FAILURE
       if [[ "$status" == UPDATE* ]]; then
-        event FAILED "stack update failed, no retry. The previous instance stopped its services when this one took over: start them again there (systemctl start $services) or update the stack again"
+        event FAILED "stack update failed, no retry. Once the rollback terminates this instance, the previous one takes the EFS, its services and the Elastic IP back by itself (RESUME line)"
       else
         event FAILED "stack $status failed, no retry"
       fi ;;
