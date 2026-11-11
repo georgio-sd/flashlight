@@ -351,19 +351,26 @@ ln -s /mnt/mailserver/spool/postfix /var/spool/postfix
 efs_unit postfix
 systemctl enable postfix
 #
-# Configuring dovecot
-if [ ! -f $flag ]; then
-  cd ~
-  rm -r /etc/dovecot/*
-  aws s3 cp s3://$BUCKET_CONFIG/dovecot.conf /etc/dovecot
-  aws s3 cp s3://$BUCKET_CONFIG/dovecot-mysql.conf /etc/dovecot
-  sed -i "s/{MainDomain}/$(echo "$DOMAIN_NAMES" | cut -d',' -f 1)/" /etc/dovecot/dovecot.conf
-  sed -i "s/{MailDomain}/$MAIL_DOMAIN/" /etc/dovecot/dovecot.conf
-  sed -i "s/{database_password}/$db_postfix_password/" /etc/dovecot/dovecot-mysql.conf
-  mv /etc/dovecot /mnt/mailserver/etc
-fi
+# Configuring dovecot. Our dovecot.conf and dovecot-mysql.conf come from the release at every boot (the package's
+# own config isn't used); the admin's own settings live on EFS in custom.conf, included at the end of ours.
+# (/etc/dovecot is the package's folder, or a link to EFS on a v1.0 install: replace it, don't write through it)
 rm -rf /etc/dovecot
-ln -s /mnt/mailserver/etc/dovecot /etc/dovecot
+mkdir /etc/dovecot
+aws s3 cp s3://$BUCKET_CONFIG/dovecot.conf /etc/dovecot
+aws s3 cp s3://$BUCKET_CONFIG/dovecot-mysql.conf /etc/dovecot
+sed -i "s/{MainDomain}/$(echo "$DOMAIN_NAMES" | cut -d',' -f 1)/; s/{MailDomain}/$MAIL_DOMAIN/" /etc/dovecot/dovecot.conf
+# (a separate assignment, so a missing secret stops the install instead of leaving an empty password)
+postfix_db_password=$(/usr/local/sbin/secrets get postfix_db_password)
+sed -i "s/{database_password}/$postfix_db_password/" /etc/dovecot/dovecot-mysql.conf
+# the lookup file holds the database password: root and Dovecot only
+chown root:dovecot /etc/dovecot/dovecot-mysql.conf
+chmod 640 /etc/dovecot/dovecot-mysql.conf
+# v1.0 kept our two files on EFS; they are rewritten on the instance now
+rm -f /mnt/mailserver/etc/dovecot/dovecot.conf /mnt/mailserver/etc/dovecot/dovecot-mysql.conf
+custom_file /mnt/mailserver/etc/dovecot/custom.conf \
+  "# Your Dovecot settings. Flashlight's /etc/dovecot/dovecot.conf includes this file at its end, so the values" \
+  "# set here win; Flashlight upgrades never change this file. Reload Dovecot after editing (systemctl reload" \
+  "# dovecot). Example:" "#   protocol imap {" "#     mail_max_userip_connections = 50" "#   }"
 efs_unit dovecot
 systemctl enable dovecot
 #
@@ -455,10 +462,9 @@ systemctl enable httpd
 # DKIM, SPF and DMARC. Run at every boot, so the server follows the stack's domain list:
 # keys of removed domains are deleted, new domains get a key, and the DNS records are brought up to date.
 dkim=/etc/postfix/dkim
-if [ ! -f $flag ]; then
-  mkdir $dkim
-  aws s3 cp s3://$BUCKET_CONFIG/opendkim.conf $dkim
-fi
+mkdir -p $dkim
+# our OpenDKIM config, rewritten at every boot from the release (it stays next to the keys)
+aws s3 cp s3://$BUCKET_CONFIG/opendkim.conf $dkim
 IFS=',' read -ra domains <<< "$DOMAIN_NAMES"
 # without a domain list every key would look unused: keep them all and stop
 [ ${#domains[@]} -gt 0 ] || { echo "base.sh: no mail domains, DKIM keys left as they are"; exit 1; }
