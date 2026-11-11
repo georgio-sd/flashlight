@@ -345,28 +345,47 @@ aws s3 cp s3://$BUCKET_CONFIG/services-shutdown /usr/bin
 chmod 700 /usr/bin/services-shutdown
 systemctl enable double-inst-prot
 #
-# Configuring postfix
-if [ ! -f $flag ]; then
-  cd ~
-  aws s3 cp s3://$BUCKET_CONFIG/main.cf /etc/postfix
-  aws s3 cp s3://$BUCKET_CONFIG/master.cf /etc/postfix
-  # lookups in the PostfixAdmin database
-  mkdir /etc/postfix/mysql
-  for map in virtual_mailbox_domains virtual_mailbox_maps virtual_alias_domain_mailbox_maps virtual_alias_maps \
-      virtual_alias_domain_maps virtual_alias_domain_catchall_maps relay_domains; do
-    aws s3 cp s3://$BUCKET_CONFIG/$map.cf /etc/postfix/mysql/
+# Configuring postfix. The package's own files stay in /etc/postfix on the instance (dynamicmaps.cf, for one,
+# registers the lmdb and mysql table types); our main.cf, master.cf and database lookups come from the release at
+# every boot. The admin's own main.cf settings live on EFS in main.local.cf and are applied over ours.
+# The mail queue and the DKIM keys stay on EFS.
+cd ~
+aws s3 cp s3://$BUCKET_CONFIG/main.cf /etc/postfix
+aws s3 cp s3://$BUCKET_CONFIG/master.cf /etc/postfix
+sed -i "s/{MainDomain}/$(echo "$DOMAIN_NAMES" | cut -d',' -f 1)/; s/{MailDomain}/$MAIL_DOMAIN/" /etc/postfix/main.cf
+# lookups in the PostfixAdmin database; the files hold its password: root and the postfix group only
+# (the password is read in a separate assignment, so a missing secret stops the install)
+postfix_db_password=$(/usr/local/sbin/secrets get postfix_db_password)
+mkdir -p /etc/postfix/mysql
+for map in virtual_mailbox_domains virtual_mailbox_maps virtual_alias_domain_mailbox_maps virtual_alias_maps \
+    virtual_alias_domain_maps virtual_alias_domain_catchall_maps relay_domains; do
+  aws s3 cp s3://$BUCKET_CONFIG/$map.cf /etc/postfix/mysql/
+done
+sed -i "s/{database_password}/$postfix_db_password/" /etc/postfix/mysql/*.cf
+chown root:postfix /etc/postfix/mysql/*.cf
+chmod 640 /etc/postfix/mysql/*.cf
+# the admin's own settings, applied over ours one by one (a continuation line, starting with a space, belongs
+# to the setting above it); a setting postconf rejects is reported and skipped
+custom_file /mnt/mailserver/etc/postfix/main.local.cf \
+  "# Your Postfix settings, in main.cf format. At every boot each setting here is applied over Flashlight's" \
+  "# /etc/postfix/main.cf with \"postconf -e\" (it replaces ours or is added), so the values set here win;" \
+  "# Flashlight upgrades never change this file. To apply a change now: rerun the same postconf -e line, then" \
+  "# \"systemctl reload postfix\". Example:" "#   message_size_limit = 31457280"
+awk '/^[[:space:]]*(#|$)/ {next} /^[[:space:]]/ {setting = setting " " $0; next}
+     {if (setting != "") print setting; setting = $0} END {if (setting != "") print setting}' \
+  /mnt/mailserver/etc/postfix/main.local.cf |
+  while IFS= read -r setting; do
+    postconf -e "$setting" || echo "main.local.cf: postconf rejected: $setting"
   done
-  sed -i "s/{database_password}/$db_postfix_password/" /etc/postfix/mysql/*.cf
-  # the files hold the database password: root and the postfix group only
-  chown root:postfix /etc/postfix/mysql/*.cf
-  chmod 640 /etc/postfix/mysql/*.cf
-  sed -i "s/{MainDomain}/$(echo "$DOMAIN_NAMES" | cut -d',' -f 1)/" /etc/postfix/main.cf
-  sed -i "s/{MailDomain}/$MAIL_DOMAIN/" /etc/postfix/main.cf
-  mv /etc/postfix /mnt/mailserver/etc
+# DKIM keys and OpenDKIM's config stay on EFS, linked into /etc/postfix (the paths OpenDKIM and dnsupd.py use)
+mkdir -p /mnt/mailserver/etc/postfix/dkim
+ln -sfn /mnt/mailserver/etc/postfix/dkim /etc/postfix/dkim
+# v1.0 kept all of /etc/postfix on EFS: only the DKIM folder and the admin's file stay there now
+find /mnt/mailserver/etc/postfix -mindepth 1 -maxdepth 1 ! -name dkim ! -name main.local.cf -exec rm -rf {} +
+# the mail queue lives on EFS
+if [ ! -f $flag ]; then
   mv /var/spool/postfix /mnt/mailserver/spool
 fi
-rm -rf /etc/postfix
-ln -s /mnt/mailserver/etc/postfix /etc/postfix
 rm -rf /var/spool/postfix
 ln -s /mnt/mailserver/spool/postfix /var/spool/postfix
 efs_unit postfix
@@ -489,7 +508,8 @@ systemctl enable httpd
 #
 # DKIM, SPF and DMARC. Run at every boot, so the server follows the stack's domain list:
 # keys of removed domains are deleted, new domains get a key, and the DNS records are brought up to date.
-dkim=/etc/postfix/dkim
+# (the real folder on EFS: find and chown don't follow the /etc/postfix/dkim link)
+dkim=/mnt/mailserver/etc/postfix/dkim
 mkdir -p $dkim
 # our OpenDKIM config, rewritten at every boot from the release (it stays next to the keys)
 aws s3 cp s3://$BUCKET_CONFIG/opendkim.conf $dkim

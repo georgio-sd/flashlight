@@ -1,4 +1,7 @@
 # Flashlight Postfix configuration (Postfix 3.8, AlmaLinux 10).
+# DON'T EDIT THIS FILE: base.sh rewrites it at every boot from the Flashlight release, so upgrades can change it.
+# Your own settings go to /mnt/mailserver/etc/postfix/main.local.cf (same format): at every boot each of its
+# settings is applied over this file with "postconf -e", so they win; upgrades never touch it.
 # Only settings that differ from Postfix's built-in defaults are listed; see postconf(5) for the rest
 # and "postconf -n" for the effective values. The mail host and main domain names are filled in by base.sh.
 
