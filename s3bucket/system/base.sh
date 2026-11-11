@@ -126,16 +126,26 @@ chmod 600 /mnt/mailserver/root/credentials
 # secrets our config files need, so any release can rebuild them (built once on installs made before the file existed)
 /usr/local/sbin/secrets init
 #
-# Starting MariaDB
+# Starting MariaDB. The data live on EFS; the package's config stays on the instance (/etc/my.cnf.d), with
+# our settings in flashlight.cnf (rewritten at every boot) and the admin's in custom.cnf on EFS, read last.
 if [ ! -f $flag ]; then
-  mv /etc/my.cnf.d /mnt/mailserver/etc
-  # all clients are local (unix socket), so don't listen on the network
-  sed -i 's/^#bind-address=.*/bind-address=127.0.0.1/' /mnt/mailserver/etc/my.cnf.d/mariadb-server.cnf
   mv /var/lib/mysql /mnt/mailserver
 fi
-rm -rf /var/lib/mysql /etc/my.cnf.d
-ln -s /mnt/mailserver/etc/my.cnf.d /etc/my.cnf.d
+rm -rf /var/lib/mysql
 ln -s /mnt/mailserver/mysql /var/lib/mysql
+# all clients are local (unix socket), so don't listen on the network
+printf '%s\n' "# Flashlight's MariaDB settings. DON'T EDIT: rewritten at every boot from the Flashlight release." \
+  "# Your own settings go to /mnt/mailserver/etc/mariadb/custom.cnf (zz-custom.cnf here, read last)." \
+  "[mysqld]" "bind-address = 127.0.0.1" > /etc/my.cnf.d/flashlight.cnf
+mkdir -p /mnt/mailserver/etc/mariadb
+custom=/mnt/mailserver/etc/mariadb/custom.cnf
+[ -f $custom ] || printf '%s\n' \
+  "# Your MariaDB settings. MariaDB reads this file last (as /etc/my.cnf.d/zz-custom.cnf), so the values set" \
+  "# here win; Flashlight upgrades never change this file. Restart MariaDB after editing it. Example:" \
+  "#   [mysqld]" "#   max_connections = 200" > $custom
+ln -sf $custom /etc/my.cnf.d/zz-custom.cnf
+# v1.0 kept the whole config folder on EFS; the package's own files are used now
+rm -rf /mnt/mailserver/etc/my.cnf.d
 efs_unit mariadb
 systemctl enable --now mariadb
 #
