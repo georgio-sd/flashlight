@@ -19,6 +19,7 @@ Metadata:
       - InstanceType
       - InstanceType2
       - InstanceLifecycle
+      - RebuildAfterDays
       - DiskVolumeSize
       - KeyName
     - Label:
@@ -50,7 +51,7 @@ Parameters:
   Fail2ban:
     Type: String
     Description: Fail2ban package
-    Default: ENABLED
+    Default: DISABLED
     AllowedValues: [ ENABLED, DISABLED ]
   VpcCidr:
     Type: String
@@ -85,11 +86,18 @@ Parameters:
     Description: EC2 instance payment model
     Default: Spot
     AllowedValues: [ On-Demand, Spot ]
+  RebuildAfterDays:
+    Type: Number
+    Description: >-
+      Rebuild the server from scratch on current packages once it is this many days old: it is replaced on
+      the first Saturday-to-Sunday night (03:15) after that age; mail is down for about 4 minutes. 0 turns it off
+    Default: 30
+    MinValue: 0
   DiskVolumeSize:
     Type: String
     Description: Disk volume size (GiB)
     Default: 6
-    AllowedValues: [ 4, 6, 8, 16, 32 ]
+    AllowedValues: [ 5, 6, 8, 16, 32 ]
   MailStorageThroughputMode:
     Type: String
     Description: >-
@@ -290,17 +298,21 @@ Resources:
               StringEquals:
                 'autoscaling:ResourceTag/Name': !Sub "${AWS::StackName}-Flashlight"
           - Effect: Allow
-            Action: 'cloudformation:SignalResource'
+            Action: [ 'cloudformation:SignalResource', 'cloudformation:DescribeStacks' ]
             Resource: !Ref 'AWS::StackId'
           - Effect: Allow
             Action:
             - 's3:*'
             Resource:
-              Fn::Join:
-              - ''
-              - - 'arn:aws:s3:::'
-                - Fn::ImportValue: !Sub "${DnsPreset}-S3Bucket"
-                - '/*'
+              - Fn::Join:
+                - ''
+                - - 'arn:aws:s3:::'
+                  - Fn::ImportValue: !Sub "${DnsPreset}-S3Bucket"
+              - Fn::Join:
+                - ''
+                - - 'arn:aws:s3:::'
+                  - Fn::ImportValue: !Sub "${DnsPreset}-S3Bucket"
+                  - '/*'
   InstanceProfile:
     Type: AWS::IAM::InstanceProfile
     Properties:
