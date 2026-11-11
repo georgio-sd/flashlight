@@ -200,6 +200,18 @@ ln -s /mnt/mailserver/etc/crontab /etc/crontab
 sed -i 's/^MAILTO=.*/MAILTO=""/' /etc/cron.d/0hourly /etc/anacrontab
 rm -rf /etc/letsencrypt
 ln -s /mnt/mailserver/etc/letsencrypt /etc/letsencrypt
+# CertificateMode can be switched from staging to production with a stack update: the next instance replaces
+# the test certificate on EFS with a trusted one (same names and key type; renewals then use production too).
+# If that fails (e.g. Let's Encrypt limits), the server keeps working on the test certificate.
+if [ "$CERT_MODE" = 'production' ] && \
+   openssl x509 -in /etc/letsencrypt/live/$MAIL_DOMAIN/cert.pem -noout -issuer | grep -q STAGING; then
+  if certbot certonly --dns-route53 --key-type rsa -d $MAIL_DOMAIN,$ADMIN_DOMAIN -m $ADMIN_EMAIL \
+       --cert-name $MAIL_DOMAIN --force-renewal --agree-tos --non-interactive; then
+    /usr/local/sbin/instance-log CERT "test certificate replaced with a trusted one (CertificateMode=production)"
+  else
+    /usr/local/sbin/instance-log CERT "trusted certificate NOT issued, keeping the test one (details in the install log)"
+  fi
+fi
 #
 # Spot instances: on the interruption notice and on the weekly price check the instance stops its
 # services and asks the ASG to replace it (replace-instance); events go to /mnt/mailserver/log/instance.log
