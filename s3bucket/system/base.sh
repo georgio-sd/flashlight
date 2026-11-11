@@ -66,6 +66,12 @@ done
 #
 # Installing the base set of packages (AlmaLinux AppStream/BaseOS + EPEL)
 dnf install -y epel-release
+# EPEL builds for the newest RHEL minor release, and AlmaLinux can be a minor release behind it: the newest
+# EPEL packages may then need libraries this OS doesn't have yet (certbot did on AlmaLinux 10.2 vs EPEL 10.3).
+# EPEL keeps a branch per minor release, so use the one of this OS. The version is read after the OS update
+# in UserData, so a newer AlmaLinux release gets its matching EPEL branch.
+os_minor=$(. /etc/os-release && echo "${VERSION_ID#*.}")
+sed -i "s/-\$releasever&/-\$releasever.$os_minor\&/" /etc/yum.repos.d/epel.repo
 dnf install -y php php-cli php-fpm php-mysqlnd php-mbstring php-intl php-xml php-gd php-pecl-zip php-opcache \
   httpd httpd-tools mod_ssl mariadb mariadb-server \
   postfix postfix-mysql dovecot dovecot-mysql dovecot-pigeonhole \
