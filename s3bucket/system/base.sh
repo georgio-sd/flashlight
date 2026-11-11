@@ -48,8 +48,8 @@ echo -e "$MAIL_STORAGE:/ /mnt/mailserver efs _netdev,tls 0 0" >> /etc/fstab
 mount -a
 #
 # Instance helpers: imds (IMDSv2 metadata), instance-log (event log on EFS), instance-shutdown-log,
-# upgrade-data (Flashlight data version on EFS and upgrades between releases)
-for tool in imds instance-log instance-shutdown-log upgrade-data; do
+# upgrade-data (Flashlight data version on EFS and upgrades between releases), secrets (generated secrets for our configs)
+for tool in imds instance-log instance-shutdown-log upgrade-data secrets; do
   aws s3 cp s3://$BUCKET_CONFIG/$tool /usr/local/sbin/
   chmod 755 /usr/local/sbin/$tool
 done
@@ -123,6 +123,8 @@ ln -s /mnt/mailserver/root/credentials /root/credentials
 # root-only folders and files stay root-only (checked at every boot)
 chmod 700 /mnt/mailserver/root /mnt/mailserver/backup
 chmod 600 /mnt/mailserver/root/credentials
+# secrets our config files need, so any release can rebuild them (built once on installs made before the file existed)
+/usr/local/sbin/secrets init
 #
 # Starting MariaDB
 if [ ! -f $flag ]; then
@@ -163,8 +165,10 @@ if [ ! -f $flag ]; then
   chown -R apache: /mnt/mailserver/www/admin/padmin/templates_c
   setuppassword="$(pwgen 16 1)"
   setuphash=$(php -r 'echo password_hash($argv[1], PASSWORD_DEFAULT);' "$setuppassword")
+  /usr/local/sbin/secrets set padmin_setup_hash "$setuphash"
   printf "PostfixAdmin setup password\n   password: $setuppassword\n\n" >> /root/credentials
   db_postfix_password="$(pwgen 16 1)"
+  /usr/local/sbin/secrets set postfix_db_password $db_postfix_password
   printf "MariaDB\n   login: postfix\n   password: $db_postfix_password\n\n" >> /root/credentials
   aws s3 cp s3://$BUCKET_CONFIG/config.local.php /mnt/mailserver/www/admin/padmin
   # '|' as the sed delimiter: the bcrypt setup hash can contain '/'
@@ -181,6 +185,9 @@ if [ ! -f $flag ]; then
   pmapassword="$(pwgen 16 1)"
   roundcubepassword="$(pwgen 16 1)"
   blowfishsecret="$(pwgen 32 1)"
+  /usr/local/sbin/secrets set pma_db_password $pmapassword
+  /usr/local/sbin/secrets set roundcube_db_password $roundcubepassword
+  /usr/local/sbin/secrets set pma_blowfish_secret $blowfishsecret
   aws s3 cp s3://$BUCKET_CONFIG/config.inc.php /mnt/mailserver/www/admin/phpmyadmin
   sed -i "s/{pmapassword}/$pmapassword/" /mnt/mailserver/www/admin/phpmyadmin/config.inc.php
   sed -i "s/{blowfish_secret}/$blowfishsecret/" /mnt/mailserver/www/admin/phpmyadmin/config.inc.php
@@ -359,7 +366,9 @@ if [ ! -f $flag ]; then
   rm -rf /var/www/webmail/installer /var/www/webmail/public_html/installer.php
   chown -R apache: /var/www/webmail/temp /var/www/webmail/logs
   aws s3 cp s3://$BUCKET_CONFIG/config.inc.php.rc /var/www/webmail/config/config.inc.php
-  sed -i "s|{des_key}|$(pwgen 32 1)|; s|{RoundcubePassword}|$roundcubepassword|" /var/www/webmail/config/config.inc.php
+  des_key="$(pwgen 32 1)"
+  /usr/local/sbin/secrets set roundcube_des_key $des_key
+  sed -i "s|{des_key}|$des_key|; s|{RoundcubePassword}|$roundcubepassword|" /var/www/webmail/config/config.inc.php
   # the config holds the database password: readable by the web server only
   chown root:apache /var/www/webmail/config/config.inc.php
   chmod 640 /var/www/webmail/config/config.inc.php

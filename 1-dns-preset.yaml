@@ -161,6 +161,7 @@ Resources:
       - 'system/instance-log'
       - 'system/instance-shutdown-log'
       - 'system/upgrade-data'
+      - 'system/secrets'
       - 'system/shutdown-log.service'
       - 'system/spotprices.py'
       - 'system/base.sh'
