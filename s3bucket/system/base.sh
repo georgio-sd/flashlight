@@ -26,10 +26,10 @@ efs_unit() {
 # Setting up ElasticIP
 instid=$(imds instance-id)
 # right after boot the instance's network interface may not be visible to the Elastic IP service yet
-# (InvalidNetworkInterfaceID.NotFound, which the AWS CLI doesn't retry): try for up to 2 minutes
-for try in $(seq 12); do
+# (InvalidNetworkInterfaceID.NotFound, which the AWS CLI doesn't retry): try every 10 seconds for up to 3 minutes
+for try in $(seq 18); do
   aws ec2 associate-address --instance-id $instid --allocation-id $EIP_ID --region $AWS_REGION && break
-  [ $try -lt 12 ] || exit 1
+  [ $try -lt 18 ] || exit 1
   sleep 10
 done
 # kept for services-shutdown, which takes the address back if a newer instance fails and is terminated
