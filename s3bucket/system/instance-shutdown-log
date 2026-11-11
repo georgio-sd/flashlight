@@ -10,8 +10,15 @@ if systemctl list-jobs --no-legend | grep -q 'reboot\.target'; then
   instance-log REBOOT "rebooting"
   exit 0
 fi
-state=$(aws ec2 describe-instances --instance-ids "$(imds instance-id)" --region "$(imds placement/region)" \
-  --query 'Reservations[0].Instances[0].State.Name' --output text 2> /dev/null)
+# EC2 may still say "running" for a few seconds after a terminate request (the shutdown starts right away),
+# so ask again for up to 10 seconds before deciding the OS itself was shut down
+id=$(imds instance-id) region=$(imds placement/region)
+for try in 1 2 3 4 5 6; do
+  state=$(aws ec2 describe-instances --instance-ids "$id" --region "$region" \
+    --query 'Reservations[0].Instances[0].State.Name' --output text 2> /dev/null)
+  [ "$state" = running ] && [ $try -lt 6 ] || break
+  sleep 2
+done
 case "$state" in
   shutting-down) why="the instance is being terminated" ;;
   stopping)      why="the instance is being stopped" ;;
