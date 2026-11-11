@@ -1,0 +1,128 @@
+#!/bin/bash
+#
+# Decides what happens after an install. Self-contained: it may run when base.sh failed before
+# installing its helpers or mounting EFS.
+#
+#   install-finish result BASE_RC [USER_RC]   from UserData, after base.sh and user-script.sh, before the reboot
+#   install-finish ready                      from cron after the reboot (scheduled only after a good install)
+#
+# Good install: the EFS flag is written; after the reboot the main services must be running, then READY goes
+#   to instance.log and SUCCESS to CloudFormation.
+# Failed install: FAILED goes to instance.log, and the install log is also kept in the config bucket
+#   (install-logs/), which survives even a rolled-back stack. Then:
+#   - stack being created or updated: FAILURE goes to CloudFormation at once (rollback in a minute instead of
+#     a 20-minute timeout); no retries, the person updating the stack takes over
+#   - instance replaced by the ASG (spot, price check, scheduled rebuild, health check): up to 3 installs in
+#     a row are tried on new instances, 5 minutes apart; after that the instance stays up for diagnosis
+# A failed user-script.sh is only reported (USER line): it's an optional addition and doesn't fail the install.
+#
+# Needs STACK, AWS_REGION and BUCKET_CONFIG (exported by UserData; saved for the after-reboot run).
+# Testing: DRY_RUN=1 only prints the AWS actions; STACK_STATUS=... pretends a stack status; RETRY_PAUSE=seconds;
+# SERVICES=... replaces the list of services checked after the reboot
+#
+efs=/mnt/mailserver
+log=/var/log/flashlight-install.log
+env_file=/usr/local/etc/install-finish.env
+max_attempts=3
+services=${SERVICES:-"mariadb postfix dovecot httpd php-fpm opendkim"}
+[ -f $env_file ] && . $env_file
+
+imds() {
+  local token
+  token=$(curl -s -X PUT http://169.254.169.254/latest/api/token -H "X-aws-ec2-metadata-token-ttl-seconds: 60")
+  curl -s -f -H "X-aws-ec2-metadata-token: $token" http://169.254.169.254/latest/meta-data/$1
+}
+id=$(imds instance-id)
+pool="$(imds instance-type)/$(imds placement/availability-zone)"
+
+# the same line format as /usr/local/sbin/instance-log, written directly (that helper may not exist yet)
+event() {
+  local line
+  line=$(printf '%s %s %-22s %-7s %s' "$(date '+%F %T')" "$id" "$pool" "$1" "$2")
+  echo "$line"
+  mountpoint -q $efs && { mkdir -p $efs/log; echo "$line" >> $efs/log/instance.log; }
+}
+
+aws_do() {
+  if [ "$DRY_RUN" = 1 ]; then echo "DRY RUN: aws $*"; else aws "$@"; fi
+}
+
+signal() {
+  aws_do cloudformation signal-resource --stack-name "$STACK" --logical-resource-id AutoScalingGroup \
+    --unique-id "$id" --status "$1" --region "$AWS_REGION" 2> /dev/null
+}
+
+failed() {
+  local reason=$1 status kind where attempts
+  status=${STACK_STATUS:-$(aws cloudformation describe-stacks --stack-name "$STACK" --region "$AWS_REGION" \
+    --query 'Stacks[0].StackStatus' --output text 2> /dev/null)}
+  # the log name says who started this instance: a stack operation, or an ASG replacement (only these are retried)
+  case "$status" in *_IN_PROGRESS) kind=stack ;; *_COMPLETE) kind=replace ;; *) kind=unknown ;; esac
+  where="s3://$BUCKET_CONFIG/install-logs/$kind-$(date +%Y-%m-%d-%H-%M-%S)-$id.log"
+  aws s3 cp $log "$where" --quiet || where="(upload failed) $log on the instance"
+  event FAILED "$reason; install log: $where"
+  case "$status" in
+    *_IN_PROGRESS)
+      signal FAILURE
+      if [[ "$status" == UPDATE* ]]; then
+        event FAILED "stack update failed, no retry. The previous instance stopped its services when this one took over: start them again there (systemctl start $services) or update the stack again"
+      else
+        event FAILED "stack $status failed, no retry"
+      fi ;;
+    *_COMPLETE)
+      # replacement installs that failed in a row: their logs of the last 3 hours in the config bucket
+      # (works without EFS too)
+      attempts=$(aws s3api list-objects-v2 --bucket "$BUCKET_CONFIG" --prefix install-logs/replace- \
+        --query "length(Contents[?LastModified>='$(date -u -d '-3 hours' +%Y-%m-%dT%H:%M:%S)'])" --output text 2> /dev/null)
+      [[ "$attempts" =~ ^[0-9]+$ ]] || attempts=$max_attempts
+      if [ "$attempts" -lt $max_attempts ]; then
+        event REPLACE "install failed ($attempts of $max_attempts attempts), trying a new instance in $(( ${RETRY_PAUSE:-300} / 60 )) minutes"
+        sleep ${RETRY_PAUSE:-300}
+        aws_do autoscaling terminate-instance-in-auto-scaling-group --instance-id "$id" \
+          --no-should-decrement-desired-capacity --region "$AWS_REGION" > /dev/null
+      else
+        event FAILED "giving up after $attempts failed installs in 3 hours; this instance stays up for diagnosis"
+      fi ;;
+    *)
+      event FAILED "stack status unknown ('$status'), no retry" ;;
+  esac
+}
+
+case "$1" in
+  result)
+    base_rc=$2 user_rc=$3
+    # this instance's install log stays on EFS (root only: a first install's trace contains passwords)
+    if mountpoint -q $efs; then
+      install -d -m 700 $efs/log/install
+      install -m 600 $log $efs/log/install/$(date +%Y-%m-%d-%H-%M-%S)-$id.log
+      find $efs/log/install -name '*.log' -mtime +90 -delete
+    fi
+    [ -n "$user_rc" ] && [ "$user_rc" != 0 ] && event USER "user-script.sh failed with code $user_rc (details in the install log)"
+    if [ "$base_rc" = 0 ]; then
+      # the flag tells the next instances that the first install is done
+      printf "Flashlight Mail Server v1.0 (re)deployed at $(date)\nDo not delete this file" > $efs/flag
+      # after the reboot: check the services, then READY (cron-boot-runner runs /etc/cron.once once)
+      printf 'STACK=%q\nAWS_REGION=%q\nBUCKET_CONFIG=%q\n' "$STACK" "$AWS_REGION" "$BUCKET_CONFIG" > $env_file
+      mkdir -p /etc/cron.once
+      printf '#!/bin/bash\n/usr/local/sbin/install-finish ready\n' > /etc/cron.once/install-ready
+      chmod 700 /etc/cron.once/install-ready
+    else
+      # only the command's name: its arguments may hold generated passwords
+      failed "base.sh exit $base_rc at command '$(grep '^+ ' $log | tail -1 | awk '{print $2}')'"
+    fi ;;
+  ready)
+    # services may still be starting: wait up to 2 minutes
+    for i in $(seq 24); do
+      down=$(for s in $services; do systemctl is-active -q $s || echo -n "$s "; done); down=${down% }
+      [ -z "$down" ] && break
+      sleep 5
+    done
+    if [ -z "$down" ]; then
+      event READY "installed and rebooted, services up"
+      signal SUCCESS
+    else
+      failed "services not running after the reboot: $down"
+    fi ;;
+  *)
+    echo "usage: install-finish result BASE_RC [USER_RC] | install-finish ready"; exit 2 ;;
+esac

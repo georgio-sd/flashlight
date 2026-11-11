@@ -60,6 +60,13 @@ Resources:
               - !Split
                 - "/"
                 - !Ref "AWS::StackId"
+      # logs of failed installs (install-finish) are kept 90 days, like the install logs on EFS
+      LifecycleConfiguration:
+        Rules:
+        - Id: install-logs
+          Status: Enabled
+          Prefix: install-logs/
+          ExpirationInDays: 90
   IPAddressMS:
     Type: AWS::EC2::EIP
     Properties:
@@ -149,6 +156,7 @@ Resources:
       - 'system/replace-instance'
       - 'system/rebuild-check'
       - 'system/mailbox-cleanup'
+      - 'system/install-finish'
       - 'system/imds'
       - 'system/instance-log'
       - 'system/spotprices.py'

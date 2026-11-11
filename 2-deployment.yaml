@@ -315,7 +315,7 @@ Resources:
               StringEquals:
                 'autoscaling:ResourceTag/Name': !Sub "${AWS::StackName}-Flashlight"
           - Effect: Allow
-            Action: 'cloudformation:SignalResource'
+            Action: [ 'cloudformation:SignalResource', 'cloudformation:DescribeStacks' ]
             Resource: !Ref 'AWS::StackId'
           - Effect: Allow
             Action:
@@ -404,6 +404,10 @@ Resources:
             cd ~
             dnf install -y awscli2
             #
+            # install-finish decides what happens after the install (READY, or FAILED with retries/rollback)
+            aws s3 cp s3://${bucketconfig}/install-finish /usr/local/sbin/
+            chmod 700 /usr/local/sbin/install-finish
+            #
             # Deploying base software
             aws s3 cp s3://${bucketconfig}/base.sh /root
             chmod 744 /root/base.sh
@@ -412,34 +416,25 @@ Resources:
             echo "base.sh finished with code $base_rc (details: /var/log/flashlight-install.log)"
             rm /root/base.sh
             #
-            # Deploying user script if presented
+            # Deploying user script if presented (optional: its failure is reported but doesn't fail the install)
+            user_rc=""
             aws s3 ls s3://${bucketconfig}/user-script.sh
             if [ $? -eq 0 ]; then
               echo "user-script.sh is presented (applying user configuration)..."
               aws s3 cp s3://${bucketconfig}/user-script.sh /root
               chmod 744 /root/user-script.sh
               /root/user-script.sh >> /var/log/flashlight-install.log 2>&1
-              echo "user-script.sh finished with code $? (details: /var/log/flashlight-install.log)"
+              user_rc=$?
+              echo "user-script.sh finished with code $user_rc (details: /var/log/flashlight-install.log)"
               rm /root/user-script.sh
             else
               echo "user-script.sh is not presented (no additional user configuration)"
             fi
             #
-            # The flag on EFS tells the next instances that the first install is done. It is written only
-            # after a successful base.sh: a failed first install must not mark the storage as installed
-            if [ $base_rc -eq 0 ]; then
-              printf "Flashlight Mail Server v1.0 (re)deployed at $(date)\nDo not delete this file" > /mnt/mailserver/flag
-            fi
-            #
-            # Keeping this instance's install log on EFS (root only: the first install's trace contains passwords)
-            # and removing install logs older than 90 days
-            if mountpoint -q /mnt/mailserver; then
-              TOKEN=$(curl -s -X PUT http://169.254.169.254/latest/api/token -H "X-aws-ec2-metadata-token-ttl-seconds: 60")
-              INSTANCE_ID=$(curl -s -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/instance-id)
-              install -d -m 700 /mnt/mailserver/log/install
-              install -m 600 /var/log/flashlight-install.log /mnt/mailserver/log/install/$(date +%Y-%m-%d-%H-%M-%S)-$INSTANCE_ID.log
-              find /mnt/mailserver/log/install -name '*.log' -mtime +90 -delete
-            fi
+            # Install result: keeps the install log, writes the EFS flag after a good install (READY follows the
+            # reboot), or reports FAILED and then fails the stack operation or retries on a new instance
+            [ -x /usr/local/sbin/install-finish ] && \
+              /usr/local/sbin/install-finish result $base_rc $user_rc >> /var/log/flashlight-install.log 2>&1
             reboot
           - eipid:
               Fn::ImportValue: !Sub "${DnsPreset}-EipID"

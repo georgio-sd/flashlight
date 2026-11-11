@@ -84,16 +84,13 @@ dnf install -y php php-cli php-fpm php-mysqlnd php-mbstring php-intl php-xml php
   postfix postfix-mysql dovecot dovecot-mysql dovecot-pigeonhole \
   opendkim opendkim-tools certbot python3-certbot-dns-route53 pwgen python3-boto3 bind-utils mc
 #
-# Signaling CloudFormation after the final reboot (the same API call cfn-signal makes, through the AWS CLI)
+# One-time jobs after the final reboot: /etc/cron.once runs once from @reboot. install-finish puts the
+# READY check there (services up -> READY and the CloudFormation signal), only after a good install.
 cd ~
-mkdir /etc/cron.once
-# (outside stack create/update, e.g. after an ASG replacement, CloudFormation just rejects the signal)
-printf '#!/bin/bash'"\n#\n/usr/local/sbin/instance-log READY 'installed and rebooted, services up'\n\
-/usr/bin/aws cloudformation signal-resource --stack-name $STACK --logical-resource-id AutoScalingGroup \
-  --unique-id $instid --status SUCCESS --region $AWS_REGION\n" > /etc/cron.once/cfn_signal.sh
+mkdir -p /etc/cron.once
 printf '#!/bin/bash\n#\nfor script in `find /etc/cron.once -type f`; do $script; rm $script; done\n' \
   > /usr/bin/cron-boot-runner
-chmod 744 /etc/cron.once/cfn_signal.sh /usr/bin/cron-boot-runner
+chmod 744 /usr/bin/cron-boot-runner
 #
 # Credentials file creating (the install trace with passwords goes to the root-only flashlight-install.log)
 if [ ! -f $flag ]; then
