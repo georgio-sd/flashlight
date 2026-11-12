@@ -3,8 +3,8 @@
 # Double instance protection.
 # Every instance writes /mnt/mailserver/flag-ec2id-<its id> during install and removes the others' flags.
 # When another instance's flag appears, a newer instance has taken over the EFS: this one stops
-# everything that writes to it or could start yet another instance (cron jobs, the spot watcher),
-# database first, and waits.
+# everything that writes to it or could start yet another instance (cron jobs, the log rotation and
+# certificate renewal timers, the spot watcher), database first, and waits.
 # Usually this instance is terminated soon after (spot replacement, rebuild, successful stack update).
 # But if the newer instance is terminated first (its install failed and the stack update rolled back),
 # this instance takes over again: EFS flag, services, cron, and the Elastic IP last (an SSH session to the
@@ -42,6 +42,8 @@ while true; do
   if [ -n "$taker" ]; then
     systemctl stop mariadb
     systemctl stop postfix dovecot httpd php-fpm opendkim crond autoshutdown
+    # timers that would change files on the EFS: log rotation and certificate renewal
+    systemctl stop logrotate.timer certbot-renew.timer
     instance-log STOP "instance $taker took over the EFS: services, cron and spot watcher stopped"
     # wait until the owner is gone (a newer owner, another flag, is followed instead) and the data are at a
     # release this instance can run
@@ -61,6 +63,7 @@ while true; do
     systemctl start mariadb
     systemctl start postfix dovecot httpd php-fpm opendkim crond
     systemctl is-enabled -q autoshutdown && systemctl start autoshutdown
+    systemctl start logrotate.timer certbot-renew.timer
     aws ec2 associate-address --instance-id "$id" --allocation-id "$(cat /usr/local/etc/eip-allocation-id)" \
       --allow-reassociation --region "$region" > /dev/null
     instance-log RESUME "instance ${taker:-?} is gone (terminated): EFS, services and the Elastic IP are back on this instance"

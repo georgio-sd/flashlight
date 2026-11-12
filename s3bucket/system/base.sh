@@ -455,6 +455,22 @@ custom_file /mnt/mailserver/etc/roundcube/custom.inc.php "<?php" \
 # the config holds the database password (and so may the admin's file): readable by the web server only
 chown root:apache $rc_conf /mnt/mailserver/etc/roundcube/custom.inc.php
 chmod 640 $rc_conf /mnt/mailserver/etc/roundcube/custom.inc.php
+# Roundcube's logs on EFS (errors.log, sendmail.log ...) are rotated weekly by the system's logrotate and kept
+# 13 weeks, like the other logs. Roundcube opens the file for every line, so it needs no reload; fail2ban follows
+# the rotated errors.log by itself.
+cat > /etc/logrotate.d/roundcube <<'EOF'
+# Flashlight: Roundcube logs on EFS. DON'T EDIT: rewritten at every boot from the Flashlight release.
+/mnt/mailserver/www/webmail/logs/*.log {
+    su apache apache
+    weekly
+    rotate 13
+    compress
+    delaycompress
+    missingok
+    notifempty
+    create 640 apache apache
+}
+EOF
 #
 # PHP settings, rewritten at every boot (the package's php.ini stays untouched):
 # time zone, and attachments up to the 20 MB message limit of Postfix
