@@ -20,6 +20,9 @@ records, recovery after failures and upgrades.
 - Trusted TLS certificates from Let's Encrypt, renewed automatically
 - SPF, DKIM and DMARC records created and kept up to date automatically, so your mail is accepted by other
   servers and your domains are protected against forged senders
+- Spam filtering (Rspamd): sender authenticity, blocklists of senders and links (Spamhaus with your free key,
+  and others), content checks and a filter that learns from your mail. Spam goes to the Junk folder, obvious
+  spam is refused before it arrives
 - Protection against password guessing (fail2ban)
 - Daily database backups, and optional backups of all data with AWS Backup
 
@@ -87,6 +90,9 @@ need to buy capacity in advance "for growth":
 
 - **Spot instances.** The server can run on Spot capacity, at a fraction of the regular price. Once a week it
   compares Spot prices and moves to a cheaper option when that saves enough. On-Demand is one setting away.
+- **Reserved pricing for On-Demand.** A 1- or 3-year Reserved Instance or Savings Plan, bought in the AWS
+  console, lowers the On-Demand price to about the Spot level (a 3-year t3a.small reservation comes to about $5
+  a month), with no Spot interruptions. Nothing changes in the stacks.
 - **The server size is a setting.** When the company grows, choose a larger instance type in a stack update:
   the server is replaced by a bigger one with the same data, without reinstalling anything. If the load drops,
   go back to a smaller one the same way.
@@ -124,15 +130,19 @@ All components are well-known open-source programs:
 | Mailbox administration | PostfixAdmin |
 | Database administration | phpMyAdmin |
 | Certificates | Certbot (Let's Encrypt) |
+| Spam filtering | Rspamd, with Valkey (its learned data) and Unbound (its DNS resolver) |
 | Protection against password guessing | fail2ban |
 
-Spam and virus filtering is in development.
+Virus scanning is in development.
 
 ## What you need
 
 - An AWS account, and your mail domains as hosted zones in Amazon Route 53.
 - Outgoing mail allowed from the account. AWS blocks port 25 on new accounts by default; the block is lifted on
   request to AWS Support.
+- Recommended: a free key of Spamhaus Blocklists via DNS Query for the spam filter
+  ([sign up](https://www.spamhaus.com/data-access/free-data-query-service/)). Spamhaus answers queries from AWS
+  only with a key; without it the filter works without Spamhaus.
 - Working knowledge of the AWS console and CloudFormation, of DNS, and of basic Linux administration over SSH,
   for installation and for the rare case when something needs a closer look.
 - Someone responsible for the server: watching that it runs, applying Flashlight upgrades, and keeping the

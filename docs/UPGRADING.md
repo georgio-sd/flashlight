@@ -32,8 +32,10 @@ file once with an explanation and an example and never changes it afterwards:
 | Roundcube | `/mnt/mailserver/etc/roundcube/custom.inc.php` |
 | PostfixAdmin | `/mnt/mailserver/etc/postfixadmin/custom.php` |
 | phpMyAdmin | `/mnt/mailserver/etc/phpmyadmin/custom.php` |
+| Rspamd (spam filter) | files in `/mnt/mailserver/etc/rspamd/override.d/` (see the README there) |
 
-OpenDKIM has no settings file of its own.
+OpenDKIM has no settings file of its own. In Rspamd, a file of yours replaces the whole section of that name,
+Flashlight's settings included, so start from a copy of ours in `/etc/rspamd/local.d/`.
 
 Some releases also need a one-off change to the data, for example a new database column. The new instance
 does this itself during the upgrade (see [What happens on the server](#what-happens-on-the-server)).
