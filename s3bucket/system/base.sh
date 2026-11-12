@@ -609,6 +609,10 @@ dkim=/mnt/mailserver/etc/postfix/dkim
 mkdir -p $dkim
 # our OpenDKIM config, rewritten at every boot from the release (it stays next to the keys)
 aws s3 cp s3://$BUCKET_CONFIG/opendkim.conf $dkim
+# sign and verify; sign only when Rspamd verifies incoming mail (see opendkim.conf)
+dkim_mode=sv
+[ "$ANTISPAM" = 'ENABLED' ] && dkim_mode=s
+sed -i "s/{Mode}/$dkim_mode/" $dkim/opendkim.conf
 IFS=',' read -ra domains <<< "$DOMAIN_NAMES"
 # without a domain list every key would look unused: keep them all and stop
 [ ${#domains[@]} -gt 0 ] || { echo "base.sh: no mail domains, DKIM keys left as they are"; exit 1; }
