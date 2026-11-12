@@ -3,7 +3,7 @@
 # The stack's variables come from UserData. Without them some steps would act on empty values (an empty
 # domain list, for example, would delete every DKIM key), so stop before touching anything.
 for var in EIP_ID EIP AWS_REGION STACK MAIL_STORAGE BUCKET_CONFIG TIMEZONE ADMIN_EMAIL CERT_MODE INSTANCE_LIFECYCLE \
-    DOMAIN_NAMES DOMAIN_ZONE_IDS ADMIN_DOMAIN MAIL_DOMAIN REBUILD_AFTER_DAYS ANTISPAM; do
+    DOMAIN_NAMES DOMAIN_ZONE_IDS ADMIN_DOMAIN MAIL_DOMAIN REBUILD_AFTER_DAYS ANTISPAM SWAP; do
   [ -n "${!var}" ] || { echo "base.sh: $var is not set, nothing done"; exit 1; }
 done
 #
@@ -165,6 +165,33 @@ printf '%s\n' "# Flashlight: no NFS in the boot image (root is on EBS; EFS is mo
   'omit_dracutmodules+=" nfs "' > /etc/dracut.conf.d/flashlight-no-nfs.conf
 dracut -f --kver "$(grubby --default-kernel | sed 's|^/boot/vmlinuz-||')"
 #
+# Swap (stack parameter Swap): a cushion for short memory peaks, so the kernel doesn't stop a service when memory
+# runs out for a moment; the server slows down instead (if that happens often, it needs a bigger instance type).
+# Half the memory, at most 4 GB: 2 GB of memory -> 1 GB of swap, 4 -> 2, 8 and more -> 4. Besides it the disk keeps
+# 1.5 GB free; the template's rules ask for a big enough disk, and if the swap still doesn't fit, it is made
+# smaller (or none) with a WARN line in instance.log. The disk is encrypted, so whatever goes to swap is too.
+if [ "$SWAP" = 'ENABLED' ]; then
+  mem_mb=$(awk '/^MemTotal/ {print int($2 / 1024)}' /proc/meminfo)
+  # (memory rounded to whole GB, as the instance types are sold, then halved)
+  swap_mb=$(( (mem_mb + 512) / 1024 * 512 ))
+  if [ $swap_mb -gt 4096 ]; then swap_mb=4096; fi
+  fit_mb=$(( $(df -m --output=avail / | tail -1) - 1536 ))
+  if [ $fit_mb -lt $swap_mb ]; then
+    /usr/local/sbin/instance-log WARN "swap: only $(( fit_mb > 0 ? fit_mb : 0 )) of $swap_mb MB fit on the disk, choose a bigger DiskVolumeSize"
+    swap_mb=$(( fit_mb > 0 ? fit_mb / 256 * 256 : 0 ))
+  fi
+  if [ $swap_mb -ge 256 ]; then
+    dd if=/dev/zero of=/swapfile bs=1M count=$swap_mb status=none
+    chmod 600 /swapfile
+    mkswap /swapfile
+    swapon /swapfile
+    echo '/swapfile none swap defaults 0 0' >> /etc/fstab
+  fi
+  # swap only under real memory pressure
+  echo 'vm.swappiness = 10' > /etc/sysctl.d/90-flashlight-swap.conf
+  sysctl -p /etc/sysctl.d/90-flashlight-swap.conf
+fi
+#
 # One-time jobs after the final reboot: /etc/cron.once runs once from @reboot. install-finish puts the
 # READY check there (services up -> READY and the CloudFormation signal), only after a good install.
 cd ~
@@ -207,6 +234,10 @@ rm -rf /mnt/mailserver/etc/my.cnf.d
 efs_unit mariadb
 # (variables the package's unit uses without setting them; reported at every start)
 unit_env mariadb "MYSQLD_OPTS= _WSREP_NEW_CLUSTER="
+# if memory runs out anyway, the kernel stops other processes first (Rspamd and the PHP workers come back by
+# themselves; without the database, logins and mail lookups fail)
+printf '[Service]\nOOMScoreAdjust=-500\n' > /etc/systemd/system/mariadb.service.d/oom.conf
+systemctl daemon-reload
 systemctl enable --now mariadb
 #
 # Data from an older Flashlight release: back up, run the migrations up to this release, restore all on a failure

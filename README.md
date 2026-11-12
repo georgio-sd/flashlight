@@ -76,7 +76,10 @@ for adding domains.
   takes over the data and the IP address, and is in service within about ten minutes. Mail that other servers
   couldn't deliver in the meantime is retried by them and arrives; nothing is lost.
 - **Nothing critical is on the server's own disk.** It holds only the operating system and programs, which
-  are rebuilt on every replacement.
+  are rebuilt on every replacement. The disk is encrypted too.
+- **Memory peaks don't stop services.** A swap file, sized automatically, absorbs short peaks: the server slows
+  down for a moment instead of losing a service. If that happens often, a larger instance type is one setting
+  away.
 - **Only one server at a time.** A safeguard makes sure that two servers never write to the same data.
 - **Fresh servers.** The server is rebuilt on schedule (every 30 days by default) with the current operating
   system updates.
@@ -91,8 +94,9 @@ need to buy capacity in advance "for growth":
 - **Spot instances.** The server can run on Spot capacity, at a fraction of the regular price. Once a week it
   compares Spot prices and moves to a cheaper option when that saves enough. On-Demand is one setting away.
 - **Reserved pricing for On-Demand.** A 1- or 3-year Reserved Instance or Savings Plan, bought in the AWS
-  console, lowers the On-Demand price to about the Spot level (a 3-year t3a.small reservation comes to about $5
-  a month), with no Spot interruptions. Nothing changes in the stacks.
+  console, lowers the On-Demand price to about the Spot level (a 3-year t3.small reservation comes to about $6
+  a month), with no Spot interruptions. Nothing changes in the stacks. With a reservation, set the second
+  instance type (InstanceType2) to None, so the server always runs on the reserved type.
 - **The server size is a setting.** When the company grows, choose a larger instance type in a stack update:
   the server is replaced by a bigger one with the same data, without reinstalling anything. If the load drops,
   go back to a smaller one the same way.

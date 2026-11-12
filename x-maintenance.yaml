@@ -21,6 +21,7 @@ Metadata:
       - InstanceLifecycle
       - RebuildAfterDays
       - DiskVolumeSize
+      - Swap
       - KeyName
     - Label:
         default: "Spam Filtering"
@@ -96,13 +97,13 @@ Parameters:
   InstanceType:
     Type: String
     Description: EC2 instance type
-    Default: t3a.small
-    AllowedValues: [ t3a.small, t3a.medium, t3a.large, t3a.xlarge ]
+    Default: t3.small
+    AllowedValues: [ t3.small, t3.medium, t3.large, t3.xlarge ]
   InstanceType2:
     Type: String
     Description: EC2 additional instance type
-    Default: t3.small
-    AllowedValues: [ None, t3.small, t3.medium, t3.large, t3.xlarge ]
+    Default: t3a.small
+    AllowedValues: [ None, t3a.small, t3a.medium, t3a.large, t3a.xlarge ]
   InstanceLifecycle:
     Type: String
     Description: EC2 instance payment model
@@ -117,9 +118,19 @@ Parameters:
     MinValue: 0
   DiskVolumeSize:
     Type: String
-    Description: Disk volume size (GiB)
-    Default: 6
-    AllowedValues: [ 5, 6, 8, 16, 32 ]
+    Description: >-
+      Server disk size (GiB). The server needs 8; with Swap at least 10 for small and medium instance types
+      (2-4 GB of memory), at least 12 for large and xlarge (8-16 GB)
+    Default: 10
+    AllowedValues: [ 8, 10, 12, 14, 16, 20, 24 ]
+  Swap:
+    Type: String
+    Description: >-
+      Swap file on the server disk: a cushion for short memory peaks, so the server slows down for a moment
+      instead of a service being stopped. Its size is chosen automatically (half the memory, at most 4 GB) and
+      needs a bigger disk, see DiskVolumeSize
+    Default: ENABLED
+    AllowedValues: [ ENABLED, DISABLED ]
   MailStorageThroughputMode:
     Type: String
     Description: >-
@@ -144,6 +155,22 @@ Parameters:
     Description: Key Name
     ConstraintDescription: must be the name of an existing EC2 KeyPair.
 Rules:
+  SwapNeedsDisk:
+    RuleCondition: !Equals [ !Ref Swap, 'ENABLED' ]
+    Assertions:
+    - Assert: !Not [ !Equals [ !Ref DiskVolumeSize, '8' ] ]
+      AssertDescription: Swap needs a disk (DiskVolumeSize) of at least 10 GiB. Choose a bigger disk or Swap = DISABLED
+  SwapOnLargeInstanceNeedsDisk:
+    RuleCondition: !And
+    - !Equals [ !Ref Swap, 'ENABLED' ]
+    - !Or
+      - !Contains [ [ 't3.large', 't3.xlarge' ], !Ref InstanceType ]
+      - !Contains [ [ 't3a.large', 't3a.xlarge' ], !Ref InstanceType2 ]
+    Assertions:
+    - Assert: !Not [ !Contains [ [ '8', '10' ], !Ref DiskVolumeSize ] ]
+      AssertDescription: >-
+        With Swap, the large and xlarge instance types (8 GB of memory or more) need a disk (DiskVolumeSize) of at
+        least 12 GiB. Choose a bigger disk or Swap = DISABLED
   SpamhausKeyNeedsAntispam:
     RuleCondition: !Equals [ !Ref Antispam, 'DISABLED' ]
     Assertions:
