@@ -130,7 +130,7 @@ Resources:
             Action: [ 'logs:CreateLogStream', 'logs:PutLogEvents' ]
             Resource: !GetAtt DnsPresetLogGroup.Arn
           - Effect: Allow
-            Action: [ 'route53:GetHostedZone', 'route53:ChangeResourceRecordSets' ]
+            Action: [ 'route53:GetHostedZone', 'route53:ListResourceRecordSets', 'route53:ChangeResourceRecordSets' ]
             Resource: !Sub "arn:${AWS::Partition}:route53:::hostedzone/*"
           - Effect: Allow
             Action: [ 'ec2:DescribeImages', 'ec2:CopyImage', 'ec2:DescribeAddressesAttribute' ]
@@ -295,6 +295,8 @@ Resources:
           # and creates the base DNS records: A for admin/mail subdomains, MX for every mail domain,
           # plus reverse DNS (PTR) of the Elastic IP pointing to the mail subdomain.
           # DKIM, SPF and DMARC records are created later by the server itself (dnsupd.py).
+          # When the stack is deleted, or a domain is removed from it, Flashlight's records of that domain are
+          # removed too: only Flashlight's values, any other values of the same records stay.
           import json
           import time
           import urllib.request
@@ -401,6 +403,83 @@ Resources:
                     'on the Elastic IP, delete the stack again in a few minutes')
 
 
+          def zone_ids_of(props):
+              # the main zone first, no repeats
+              return list(dict.fromkeys([props['MainZoneID']] + [z for z in props['ZoneIDs'].split(',') if z]))
+
+
+          def equals(ours):
+              return lambda value: value.lower() == ours.lower()
+
+
+          def starts(prefix):
+              return lambda value: value.startswith(prefix)
+
+
+          def our_records(props):
+              # every record Flashlight makes for these stack settings, as {(zone ID, name, type): test of a value being
+              # ours}: A and MX are made here, DKIM, SPF and DMARC by the server (dnsupd.py; same values there).
+              # Zones that no longer exist are skipped.
+              spf = '"v=spf1 ip4:' + props['ElasticIP'] + ' -all"'
+              records = {}
+              mail = None
+              for i, zone_id in enumerate(zone_ids_of(props)):
+                  try:
+                      domain = route53.get_hosted_zone(Id=zone_id)['HostedZone']['Name'].rstrip('.').lower()
+                  except route53.exceptions.NoSuchHostedZone:
+                      print('Zone ' + zone_id + ' no longer exists, skipped')
+                      continue
+                  if i == 0:
+                      admin = (props['AdminSubDomain'] + '.' + domain).lower()
+                      mail = (props['MailSubDomain'] + '.' + domain).lower()
+                      records[(zone_id, admin + '.', 'A')] = equals(props['ElasticIP'])
+                      records[(zone_id, mail + '.', 'A')] = equals(props['ElasticIP'])
+                      records[(zone_id, mail + '.', 'TXT')] = equals(spf)
+                  if mail:
+                      records[(zone_id, domain + '.', 'MX')] = equals('10 ' + mail + '.')
+                  records[(zone_id, domain + '.', 'TXT')] = equals(spf)
+                  records[(zone_id, 'mail._domainkey.' + domain + '.', 'TXT')] = starts('"v=DKIM1')
+                  records[(zone_id, '_dmarc.' + domain + '.', 'TXT')] = starts('"v=DMARC1')
+              return records
+
+
+          def remove(records):
+              # removes our values from these records; a record left with no values is deleted
+              by_zone = {}
+              for (zone_id, name, rtype), ours in records.items():
+                  by_zone.setdefault(zone_id, []).append((name, rtype, ours))
+              for zone_id, items in by_zone.items():
+                  changes = []
+                  for name, rtype, ours in items:
+                      found = route53.list_resource_record_sets(HostedZoneId=zone_id, StartRecordName=name,
+                                                                StartRecordType=rtype, MaxItems='1')['ResourceRecordSets']
+                      time.sleep(0.25)  # Route 53 API allows 5 requests per second
+                      if not found or found[0]['Name'].lower() != name or found[0]['Type'] != rtype \
+                              or 'ResourceRecords' not in found[0]:
+                          continue
+                      record = found[0]
+                      kept = [r for r in record['ResourceRecords'] if not ours(r['Value'])]
+                      if len(kept) == len(record['ResourceRecords']):
+                          continue
+                      if kept:
+                          changes.append({'Action': 'UPSERT', 'ResourceRecordSet': dict(record, ResourceRecords=kept)})
+                      else:
+                          changes.append({'Action': 'DELETE', 'ResourceRecordSet': record})
+                  if changes:
+                      route53.change_resource_record_sets(HostedZoneId=zone_id, ChangeBatch={'Changes': changes})
+                      print('Zone ' + zone_id + ' cleaned: ' + ', '.join(c['ResourceRecordSet']['Type'] + ' ' +
+                            c['ResourceRecordSet']['Name'] + (' (other values kept)' if c['Action'] == 'UPSERT' else '')
+                            for c in changes))
+
+
+          def clean_up(records):
+              # a leftover record must not fail the stack: it is only reported
+              try:
+                  remove(records)
+              except Exception as e:
+                  print('DNS cleanup failed, remove the records by hand: ' + repr(e))
+
+
           def lambda_handler(event, context):
               print('RequestType: ' + event['RequestType'])
               try:
@@ -408,7 +487,7 @@ Resources:
                   if event['RequestType'] in ('Create', 'Update'):
                       props = event['ResourceProperties']
                       main_zone = props['MainZoneID']
-                      zone_ids = list(dict.fromkeys([main_zone] + [z for z in props['ZoneIDs'].split(',') if z]))
+                      zone_ids = zone_ids_of(props)
                       domains = [route53.get_hosted_zone(Id=z)['HostedZone']['Name'].rstrip('.') for z in zone_ids]
                       admin = props['AdminSubDomain'] + '.' + domains[0]
                       mail = props['MailSubDomain'] + '.' + domains[0]
@@ -422,10 +501,16 @@ Resources:
                           if i == 0:
                               main_change_id = change_id
                       reverse_dns = set_reverse_dns(props['EipAllocationId'], mail, main_change_id)
+                      if event['RequestType'] == 'Update':
+                          # records of the domains (or host names) removed from the stack
+                          new = our_records(props)
+                          clean_up({key: ours for key, ours in our_records(event['OldResourceProperties']).items()
+                                    if key not in new})
                       data = {'DomainNames': ','.join(domains), 'DomainZoneIDs': ','.join(zone_ids),
                               'DNSRecAdmin': admin, 'DNSRecMail': mail,
                               'ImageId': image_id, 'ReverseDNS': reverse_dns}
                   elif event['RequestType'] == 'Delete':
+                      clean_up(our_records(event['ResourceProperties']))
                       remove_reverse_dns(event['ResourceProperties']['EipAllocationId'])
                   send(event, context, 'SUCCESS', data)
               except Exception as e:
