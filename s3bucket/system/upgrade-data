@@ -10,7 +10,8 @@
 #   upgrade-data check      right after EFS is mounted, before anything changes: stop if the data belong to a
 #                           newer release (old code must not touch them); create the file if it is missing
 #   upgrade-data run        once MariaDB runs: if the data are older, back them up, run the migrations up to this
-#                           release in order (upgrade-X-Y.sh from the config bucket) and restore all on a failure
+#                           release in order (upgrade-X-Y.sh from the config bucket; s3bucket/migrations/ in the
+#                           repository) and restore all on a failure
 #   upgrade-data set KEY VALUE
 #
 # Releasing a new version: set this_release, add it to releases, and ship upgrade-<previous>-<new>.sh only if the
