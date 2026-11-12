@@ -13,6 +13,8 @@
 #                           release in order (upgrade-X-Y.sh from the config bucket; s3bucket/migrations/ in the
 #                           repository) and restore all on a failure
 #   upgrade-data set KEY VALUE
+#   upgrade-data newer-data succeeds if the data belong to a newer release than this one, and prints both
+#                           (services-shutdown: an older instance must not resume service on such data)
 #
 # Releasing a new version: set this_release, add it to releases, and ship upgrade-<previous>-<new>.sh only if the
 # data need a one-off change (configs that Flashlight owns are simply replaced, web applications are updated by
@@ -131,6 +133,10 @@ case "$1" in
     instance-log UPGRADE "data now at $this_release" ;;
   set)
     set_value "$2" "$3" ;;
+  newer-data)
+    data=$(get flashlight)
+    echo "Flashlight $data (this instance: $this_release)"
+    newer "$data" "$this_release" ;;
   *)
-    echo "usage: upgrade-data check | run | set KEY VALUE"; exit 2 ;;
+    echo "usage: upgrade-data check | run | set KEY VALUE | newer-data"; exit 2 ;;
 esac

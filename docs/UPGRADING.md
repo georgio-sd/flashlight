@@ -130,9 +130,12 @@ Then either:
 
 ## Things to avoid
 
-- **Updating stage 2 straight to the new release without maintenance mode.** The old instance keeps running
-  while the new one installs. If the new one migrates the data and then fails, the stack update rolls back and
-  the old instance resumes service on data that now belong to the new release.
+- **Updating stage 2 straight to the new release without maintenance mode.** The old instance stops its
+  services while the new one installs. If the new one upgrades the data and then fails, the stack update rolls
+  back, but the old instance can't run data of a newer release: it keeps its services stopped and writes a
+  `STOP ... upgraded the data` line to the event log. The server stays down until you either run the update to
+  the new release again, or restore the upgrade backup by hand; in the second case the old instance resumes by
+  itself within a minute.
 - **Editing Flashlight's own config files.** Use the settings files listed above.
 - **Deleting `/mnt/mailserver/versions` or `/mnt/mailserver/root/secrets`.** The first tells the installer
   which release your data belong to; the second holds the generated passwords and keys that Flashlight's

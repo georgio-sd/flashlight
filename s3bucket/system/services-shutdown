@@ -10,6 +10,10 @@
 # this instance takes over again: EFS flag, services, cron, and the Elastic IP last (an SSH session to the
 # temporary public IP drops at that moment). It waits for "terminated": while the other instance is still
 # shutting down, its MariaDB may still have the database open.
+# It doesn't take over while the data belong to a newer release: the other instance upgraded them before it
+# failed (a stack update straight to a newer release, without maintenance mode), and this release can't run
+# them. It then waits until the data are back at its release (the upgrade backup restored by hand), or until a
+# new install of the newer release replaces it.
 #
 # imds and instance-log live in /usr/local/sbin
 export PATH=/usr/local/sbin:$PATH
@@ -24,12 +28,13 @@ owner() {
     sort -n | tail -1 | sed 's/^[^ ]* flag-ec2id-//'
 }
 
-# "gone" only when EC2 says terminated or doesn't know the instance any more; API errors mean "wait"
+# "gone" only when EC2 says terminated or doesn't know the instance any more (NotFound, or an empty answer for an
+# instance terminated long ago); API errors mean "wait"
 gone() {
   local out
   out=$(aws ec2 describe-instances --instance-ids "$1" --region "$region" \
     --query 'Reservations[0].Instances[0].State.Name' --output text 2>&1)
-  [ "$out" = terminated ] || [[ "$out" == *InvalidInstanceID.NotFound* ]]
+  [ "$out" = terminated ] || [ "$out" = None ] || [[ "$out" == *InvalidInstanceID.NotFound* ]]
 }
 
 while true; do
@@ -38,10 +43,18 @@ while true; do
     systemctl stop mariadb
     systemctl stop postfix dovecot httpd php-fpm opendkim crond autoshutdown
     instance-log STOP "instance $taker took over the EFS: services, cron and spot watcher stopped"
-    # wait until the owner is gone; a newer owner (another flag) is followed instead
+    # wait until the owner is gone (a newer owner, another flag, is followed instead) and the data are at a
+    # release this instance can run
+    warned=""
     while sleep 60; do
       taker=$(owner)
-      [ -z "$taker" ] || gone "$taker" && break
+      [ -n "$taker" ] && ! gone "$taker" && continue
+      if data=$(upgrade-data newer-data); then
+        [ -n "$warned" ] || instance-log STOP "instance ${taker:-?} upgraded the data to $data and is gone: services stay stopped. Update stage 2 to the new release again, or restore the upgrade backup (docs/UPGRADING.md)"
+        warned=1
+        continue
+      fi
+      break
     done
     rm -f /mnt/mailserver/flag-ec2id-*
     printf "Do not delete this file" > /mnt/mailserver/$me
