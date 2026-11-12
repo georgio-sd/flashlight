@@ -44,6 +44,8 @@ while true; do
     systemctl stop postfix dovecot httpd php-fpm opendkim crond autoshutdown
     # timers that would change files on the EFS: log rotation and certificate renewal
     systemctl stop logrotate.timer certbot-renew.timer
+    # spam filter (stack parameter Antispam): Valkey keeps its data on the EFS
+    systemctl stop rspamd valkey 2> /dev/null
     instance-log STOP "instance $taker took over the EFS: services, cron and spot watcher stopped"
     # wait until the owner is gone (a newer owner, another flag, is followed instead) and the data are at a
     # release this instance can run
@@ -64,6 +66,9 @@ while true; do
     systemctl start postfix dovecot httpd php-fpm opendkim crond
     systemctl is-enabled -q autoshutdown && systemctl start autoshutdown
     systemctl start logrotate.timer certbot-renew.timer
+    for unit in valkey rspamd; do
+      systemctl is-enabled -q $unit 2> /dev/null && systemctl start $unit
+    done
     aws ec2 associate-address --instance-id "$id" --allocation-id "$(cat /usr/local/etc/eip-allocation-id)" \
       --allow-reassociation --region "$region" > /dev/null
     instance-log RESUME "instance ${taker:-?} is gone (terminated): EFS, services and the Elastic IP are back on this instance"

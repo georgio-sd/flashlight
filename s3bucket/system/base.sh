@@ -3,7 +3,7 @@
 # The stack's variables come from UserData. Without them some steps would act on empty values (an empty
 # domain list, for example, would delete every DKIM key), so stop before touching anything.
 for var in EIP_ID EIP AWS_REGION STACK MAIL_STORAGE BUCKET_CONFIG TIMEZONE ADMIN_EMAIL CERT_MODE INSTANCE_LIFECYCLE \
-    DOMAIN_NAMES DOMAIN_ZONE_IDS ADMIN_DOMAIN MAIL_DOMAIN REBUILD_AFTER_DAYS; do
+    DOMAIN_NAMES DOMAIN_ZONE_IDS ADMIN_DOMAIN MAIL_DOMAIN REBUILD_AFTER_DAYS ANTISPAM; do
   [ -n "${!var}" ] || { echo "base.sh: $var is not set, nothing done"; exit 1; }
 done
 #
@@ -361,7 +361,11 @@ systemctl enable double-inst-prot
 cd ~
 aws s3 cp s3://$BUCKET_CONFIG/main.cf /etc/postfix
 aws s3 cp s3://$BUCKET_CONFIG/master.cf /etc/postfix
-sed -i "s/{MainDomain}/$(echo "$DOMAIN_NAMES" | cut -d',' -f 1)/; s/{MailDomain}/$MAIL_DOMAIN/" /etc/postfix/main.cf
+# milters: the Rspamd spam check first (stack parameter Antispam), then the OpenDKIM signature
+milters="inet:127.0.0.1:8891"
+[ "$ANTISPAM" = 'ENABLED' ] && milters="inet:127.0.0.1:11332, $milters"
+sed -i "s/{MainDomain}/$(echo "$DOMAIN_NAMES" | cut -d',' -f 1)/; s/{MailDomain}/$MAIL_DOMAIN/; \
+  s/{SmtpdMilters}/$milters/" /etc/postfix/main.cf
 # lookups in the PostfixAdmin database; the files hold its password: root and the postfix group only
 # (the password is read in a separate assignment, so a missing secret stops the install)
 postfix_db_password=$(/usr/local/sbin/secrets get postfix_db_password)
@@ -405,6 +409,18 @@ systemctl enable postfix
 rm -rf /etc/dovecot
 mkdir /etc/dovecot
 aws s3 cp s3://$BUCKET_CONFIG/dovecot.conf /etc/dovecot
+# Mail that Rspamd marked as spam goes to the Junk folder; "stop" also keeps the user's own filters (vacation
+# replies, for one) away from it. Without Antispam no message is marked, and the script does nothing.
+mkdir /etc/dovecot/sieve
+cat > /etc/dovecot/sieve/spam-to-junk.sieve <<'EOF'
+require ["fileinto", "mailbox"];
+if header :is "X-Spam" "Yes" {
+  fileinto :create "Junk";
+  stop;
+}
+EOF
+# compiled now: Dovecot delivers as vmail, which can't write the compiled script next to it
+sievec /etc/dovecot/sieve/spam-to-junk.sieve
 aws s3 cp s3://$BUCKET_CONFIG/dovecot-mysql.conf /etc/dovecot
 sed -i "s/{MainDomain}/$(echo "$DOMAIN_NAMES" | cut -d',' -f 1)/; s/{MailDomain}/$MAIL_DOMAIN/" /etc/dovecot/dovecot.conf
 # (a separate assignment, so a missing secret stops the install instead of leaving an empty password)
@@ -563,6 +579,82 @@ chmod 700 /usr/local/sbin/dnsupd.py
 echo "OPTIONS=\"-x $dkim/opendkim.conf\"" > /etc/sysconfig/opendkim
 efs_unit opendkim
 systemctl enable opendkim
+#
+# Spam filtering (stack parameter Antispam): Rspamd checks incoming mail as the first Postfix milter (main.cf);
+# spam gets an "X-Spam: Yes" header and goes to Junk (Dovecot's sieve_before), obvious spam is rejected. Valkey
+# (Redis) keeps what Rspamd learns, on EFS; Unbound is Rspamd's own DNS resolver (blocklists refuse queries that
+# come through the big shared resolvers, AWS's included). Our settings in /etc/rspamd/local.d are rewritten at
+# every boot; the admin's own live on EFS in /mnt/mailserver/etc/rspamd/override.d.
+if [ "$ANTISPAM" = 'ENABLED' ]; then
+  # Rspamd's own repository (it isn't in AlmaLinux or EPEL), major version 4 only: a new major version comes
+  # with a Flashlight release, after testing
+  os_major=$(. /etc/os-release && echo "${VERSION_ID%%.*}")
+  cat > /etc/yum.repos.d/rspamd.repo <<EOF
+[rspamd]
+name=Rspamd stable repository
+baseurl=https://rspamd.com/rpm-stable/centos-$os_major/\$basearch
+enabled=1
+gpgcheck=1
+repo_gpgcheck=1
+gpgkey=https://rspamd.com/rpm/rspamd.asc
+includepkgs=rspamd-4.*
+EOF
+  dnf install -y rspamd valkey unbound
+  #
+  # Valkey: data on EFS, so learned spam survives instance replacements. The valkey user's ID may differ on each
+  # new instance, hence the chown at every boot.
+  install -d -m 750 /mnt/mailserver/valkey
+  chown -R valkey:valkey /mnt/mailserver/valkey
+  sed -i 's|^dir .*|dir /mnt/mailserver/valkey|' /etc/valkey/valkey.conf
+  printf '%s\n' "# Flashlight: memory cap; Rspamd's learned data expire by themselves" "maxmemory 256mb" \
+    "maxmemory-policy volatile-ttl" >> /etc/valkey/valkey.conf
+  #
+  # Our Rspamd settings (local.d is merged into Rspamd's defaults)
+  rspamd_conf() {
+    local file=/etc/rspamd/local.d/$1
+    shift
+    printf '%s\n' "# Flashlight's Rspamd settings. DON'T EDIT: rewritten at every boot from the Flashlight release." \
+      "# Your own settings go to /mnt/mailserver/etc/rspamd/override.d (see the README there)." "$@" > $file
+  }
+  rspamd_conf options.inc 'dns { nameserver = ["127.0.0.1:53"]; }'
+  rspamd_conf redis.conf 'servers = "127.0.0.1:6379";'
+  # no greylisting: it delays legitimate mail by minutes or hours (the sender retries later)
+  rspamd_conf actions.conf "reject = 15;" "add_header = 6;" "greylist = null;"
+  rspamd_conf greylist.conf "enabled = false;"
+  # the Bayes filter also learns by itself from mail that scores very high or very low
+  rspamd_conf classifier-bayes.conf "autolearn = true;"
+  rspamd_conf milter_headers.conf 'use = ["authentication-results", "x-spamd-bar"];'
+  # OpenDKIM signs our mail
+  rspamd_conf dkim_signing.conf "enabled = false;"
+  rspamd_conf arc.conf "enabled = false;"
+  # Spamhaus through DQS with the stack's key (Spamhaus refuses queries from AWS without one)
+  rm -f /etc/rspamd/local.d/rbl.conf /etc/rspamd/local.d/rbl_group.conf
+  if [ -n "$DQS_KEY" ]; then
+    dqs_key=$(printf '%s' "$DQS_KEY" | sed 's/[&|\\]/\\&/g')
+    for f in rbl rbl_group; do
+      aws s3 cp s3://$BUCKET_CONFIG/spamhaus-dqs-$f.conf /etc/rspamd/local.d/$f.conf
+      sed -i "s|your_DQS_key|$dqs_key|g" /etc/rspamd/local.d/$f.conf
+    done
+    # the key: readable by Rspamd only
+    chown root:_rspamd /etc/rspamd/local.d/rbl.conf /etc/rspamd/local.d/rbl_group.conf
+    chmod 640 /etc/rspamd/local.d/rbl.conf /etc/rspamd/local.d/rbl_group.conf
+  fi
+  #
+  # The admin's own settings, on EFS
+  mkdir -p /mnt/mailserver/etc/rspamd/override.d
+  custom_file /mnt/mailserver/etc/rspamd/override.d/README \
+    "Your Rspamd settings. Put a file here with the name Rspamd uses for the settings it holds, e.g." \
+    "actions.conf, rbl.conf or multimap.conf (see https://docs.rspamd.com/configuration/). A file here REPLACES" \
+    "the whole section of that name, Flashlight's settings in /etc/rspamd/local.d included, so copy ours into it" \
+    "and change what you need. Flashlight upgrades never change this folder. Apply a change now with" \
+    "\"rspamadm configtest && systemctl reload rspamd\"."
+  rm -rf /etc/rspamd/override.d
+  ln -s /mnt/mailserver/etc/rspamd/override.d /etc/rspamd/override.d
+  rspamadm configtest
+  efs_unit valkey
+  efs_unit rspamd
+  systemctl enable unbound valkey rspamd
+fi
 #
 # fail2ban (stack parameter Fail2ban): bans IP addresses after repeated failed logins (nftables).
 # Our jails (jail.local) come from the release at every boot; the admin's own settings live on EFS in custom.local,

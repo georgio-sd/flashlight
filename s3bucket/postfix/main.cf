@@ -123,8 +123,10 @@ smtp_tls_note_starttls_offer = yes
 smtp_tls_session_cache_database = lmdb:$data_directory/smtp_tls_session_cache
 
 #
-# DKIM signing through the OpenDKIM milter; if OpenDKIM is down, mail still flows (unsigned)
+# Milters: the Rspamd spam check (stack parameter Antispam; base.sh fills in the list) and OpenDKIM's signature.
+# If one of them is down, mail still flows (unchecked or unsigned). Mail made on the server itself (cron,
+# PostfixAdmin) is only signed.
 #
-smtpd_milters = inet:127.0.0.1:8891
-non_smtpd_milters = $smtpd_milters
+smtpd_milters = {SmtpdMilters}
+non_smtpd_milters = inet:127.0.0.1:8891
 milter_default_action = accept

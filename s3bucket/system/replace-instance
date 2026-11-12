@@ -13,6 +13,8 @@ if [ "$DRY_RUN" = 1 ]; then
   exit 0
 fi
 systemctl stop postfix dovecot httpd php-fpm opendkim
+# spam filter (stack parameter Antispam), if installed: Valkey writes its data to the EFS when it stops
+systemctl stop rspamd valkey 2> /dev/null
 systemctl stop mariadb
 instance-log STOP "services stopped, asking the ASG to replace this instance"
 if ! aws autoscaling terminate-instance-in-auto-scaling-group --instance-id "$(imds instance-id)" \

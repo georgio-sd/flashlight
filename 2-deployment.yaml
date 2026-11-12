@@ -23,6 +23,11 @@ Metadata:
       - DiskVolumeSize
       - KeyName
     - Label:
+        default: "Spam Filtering"
+      Parameters:
+      - Antispam
+      - SpamhausDQSKey
+    - Label:
         default: "Storage Configuration"
       Parameters:
       - MailStorageThroughputMode
@@ -50,9 +55,26 @@ Parameters:
     AllowedValues: [ production, staging ]
   Fail2ban:
     Type: String
-    Description: Fail2ban package
-    Default: DISABLED
+    Description: Fail2ban bans IP addresses after repeated failed logins (SSH, mail, webmail)
+    Default: ENABLED
     AllowedValues: [ ENABLED, DISABLED ]
+  Antispam:
+    Type: String
+    Description: >-
+      Spam filtering of incoming mail with Rspamd (about 300 MB of memory, fits t3a.small). Spam goes to the
+      Junk folder, obvious spam is rejected
+    Default: ENABLED
+    AllowedValues: [ ENABLED, DISABLED ]
+  SpamhausDQSKey:
+    Type: String
+    NoEcho: true
+    Description: >-
+      Optional: your key of Spamhaus Blocklists via DNS Query, free for small businesses
+      (https://www.spamhaus.com/data-access/free-data-query-service/). Spamhaus noticeably improves filtering;
+      without the key Rspamd works without it. Needs Antispam = ENABLED
+    Default: ''
+    AllowedPattern: '^\S*$'
+    ConstraintDescription: must not contain spaces
   VpcCidr:
     Type: String
     Default: 10.0.0.0/16
@@ -121,6 +143,12 @@ Parameters:
     Type: AWS::EC2::KeyPair::KeyName
     Description: Key Name
     ConstraintDescription: must be the name of an existing EC2 KeyPair.
+Rules:
+  SpamhausKeyNeedsAntispam:
+    RuleCondition: !Equals [ !Ref Antispam, 'DISABLED' ]
+    Assertions:
+    - Assert: !Equals [ !Ref SpamhausDQSKey, '' ]
+      AssertDescription: The Spamhaus DQS key works only with Antispam = ENABLED. Enable Antispam or clear the key
 Conditions:
   ThreeAZoneConf: !Equals [ !Ref TwoAZoneConf, 'DISABLED' ]
   SpotInstance: !Equals [ !Ref InstanceLifecycle, 'Spot' ]
@@ -394,6 +422,8 @@ Resources:
             export TIMEZONE=${TimeZone}
             export ADMIN_EMAIL=${AdminEmail}
             export FAIL2BAN=${Fail2ban}
+            export ANTISPAM=${Antispam}
+            export DQS_KEY=${SpamhausDQSKey}
             export CERT_MODE=${CertificateMode}
             #
             export DOMAIN_ZONE_IDS=${domainzoneids}
