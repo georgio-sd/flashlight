@@ -103,6 +103,15 @@ aws s3 cp s3://$BUCKET_CONFIG/shutdown-log.service /etc/systemd/system
 systemctl daemon-reload
 systemctl enable --now shutdown-log
 #
+# upload/ in the config bucket: the admin's place for files from the server to keep (aws s3 cp FILE
+# s3://$BUCKET_CONFIG/upload/). Besides install-logs/, it is the only place in the bucket the server can write to.
+# An empty file there reminds the admin of it. (Files in the bucket also stop the stage 1 stack deletion until
+# the bucket is emptied by hand, so nothing there is lost by accident.)
+marker=upload/the-mail-server-can-write-to-this-folder
+aws s3api head-object --bucket $BUCKET_CONFIG --key $marker > /dev/null 2>&1 ||
+  aws s3api put-object --bucket $BUCKET_CONFIG --key $marker > /dev/null ||
+  echo "base.sh: could not create s3://$BUCKET_CONFIG/$marker"
+#
 # Installing the base set of packages (AlmaLinux AppStream/BaseOS + EPEL)
 dnf install -y epel-release
 # EPEL builds for the newest RHEL minor release, and AlmaLinux can be a minor release behind it: the newest

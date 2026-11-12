@@ -300,19 +300,37 @@ Resources:
           - Effect: Allow
             Action: [ 'cloudformation:SignalResource', 'cloudformation:DescribeStacks' ]
             Resource: !Ref 'AWS::StackId'
+          # Config bucket: read everything, list it (checks for a missing file, the count of failed installs), write
+          # only the logs of failed installs and the admin's upload/ folder. Installer files can't be changed or
+          # deleted, so a compromised server can't plant a modified installer for the next instances.
           - Effect: Allow
-            Action:
-            - 's3:*'
+            Action: 's3:ListBucket'
             Resource:
               - Fn::Join:
                 - ''
                 - - 'arn:aws:s3:::'
                   - Fn::ImportValue: !Sub "${DnsPreset}-S3Bucket"
+          - Effect: Allow
+            Action: 's3:GetObject'
+            Resource:
               - Fn::Join:
                 - ''
                 - - 'arn:aws:s3:::'
                   - Fn::ImportValue: !Sub "${DnsPreset}-S3Bucket"
                   - '/*'
+          - Effect: Allow
+            Action: 's3:PutObject'
+            Resource:
+              - Fn::Join:
+                - ''
+                - - 'arn:aws:s3:::'
+                  - Fn::ImportValue: !Sub "${DnsPreset}-S3Bucket"
+                  - '/install-logs/*'
+              - Fn::Join:
+                - ''
+                - - 'arn:aws:s3:::'
+                  - Fn::ImportValue: !Sub "${DnsPreset}-S3Bucket"
+                  - '/upload/*'
   InstanceProfile:
     Type: AWS::IAM::InstanceProfile
     Properties:
