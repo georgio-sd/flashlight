@@ -419,8 +419,9 @@ if header :is "X-Spam" "Yes" {
   stop;
 }
 EOF
-# compiled now: Dovecot delivers as vmail, which can't write the compiled script next to it
-sievec /etc/dovecot/sieve/spam-to-junk.sieve
+# compiled now: Dovecot delivers as vmail, which can't write the compiled script next to it. An empty config:
+# compiling needs no users or mail folders (with ours, sievec looks up root in the not yet configured userdb)
+sievec -c /dev/null /etc/dovecot/sieve/spam-to-junk.sieve
 aws s3 cp s3://$BUCKET_CONFIG/dovecot-mysql.conf /etc/dovecot
 sed -i "s/{MainDomain}/$(echo "$DOMAIN_NAMES" | cut -d',' -f 1)/; s/{MailDomain}/$MAIL_DOMAIN/" /etc/dovecot/dovecot.conf
 # (a separate assignment, so a missing secret stops the install instead of leaving an empty password)
