@@ -384,10 +384,21 @@ Resources:
 
           def remove_reverse_dns(allocation_id):
               # an Elastic IP with a reverse DNS record is locked to the account and can't be released,
-              # so remove the record before CloudFormation deletes the address
-              if ec2.describe_addresses_attribute(AllocationIds=[allocation_id], Attribute='domain-name')['Addresses']:
-                  ec2.reset_address_attribute(AllocationId=allocation_id, Attribute='domain-name')
-                  print('Reverse DNS removed from ' + allocation_id)
+              # so remove the record before CloudFormation deletes the address. The removal is applied
+              # within a few minutes (PtrRecordUpdate PENDING): wait for it, or the release fails
+              def ptr():
+                  return ec2.describe_addresses_attribute(AllocationIds=[allocation_id],
+                                                          Attribute='domain-name')['Addresses']
+              if not ptr():
+                  return
+              ec2.reset_address_attribute(AllocationId=allocation_id, Attribute='domain-name')
+              for _ in range(24):
+                  if not ptr():
+                      print('Reverse DNS removed from ' + allocation_id)
+                      return
+                  time.sleep(10)
+              print('Reverse DNS of ' + allocation_id + ' still being removed; if the stack deletion fails '
+                    'on the Elastic IP, delete the stack again in a few minutes')
 
 
           def lambda_handler(event, context):
