@@ -12,7 +12,8 @@
 #   $BUCKET_CONFIG, $TIMEZONE ...); /mnt/mailserver (EFS) is mounted.
 # - Its output goes to the install log: /mnt/mailserver/log/install/<date>-<instance id>.log
 # - With -e above, the script stops at the first failing command; the server install itself is not affected.
-# - In the config bucket the server can read everything but write only to upload/ (and its own install-logs/);
+# - In the config bucket the server can read everything; it has full access to upload/ (your folder) and writes
+#   its own install-logs/;
 #   anything else in AWS needs a policy of your own on the instance role.
 #
 # Your commands:
