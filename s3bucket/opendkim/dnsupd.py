@@ -7,7 +7,7 @@ usage: dnsupd.py DOMAINS ZONE_IDS EIP MAIL_HOST
   MAIL_HOST the mail server's host name, in the zone of the first domain
 
 The records belong to the server and are always brought to these values:
-  mail._domainkey.<domain>  DKIM public key of /etc/postfix/dkim/<domain>/mail.private
+  mail._domainkey.<domain>  DKIM public key of /mnt/mailserver/etc/postfix/dkim/<domain>/mail.private
   <domain>                  SPF "v=spf1 ip4:<EIP> -all"; other TXT strings of the domain (site
                             verifications and the like) are kept, only the v=spf1 string is replaced
   _dmarc.<domain>           "v=DMARC1; p=reject; sp=reject; adkim=r; aspf=r"
@@ -30,7 +30,7 @@ def txt(*strings):
 
 def dkim_value(domain):
     # public key straight from the private key (base64 of the DER SubjectPublicKeyInfo)
-    der = subprocess.run(['openssl', 'pkey', '-in', '/etc/postfix/dkim/%s/mail.private' % domain,
+    der = subprocess.run(['openssl', 'pkey', '-in', '/mnt/mailserver/etc/postfix/dkim/%s/mail.private' % domain,
                           '-pubout', '-outform', 'DER'], check=True, capture_output=True).stdout
     record = 'v=DKIM1; k=rsa; p=' + base64.b64encode(der).decode()
     return txt(*[record[i:i + 255] for i in range(0, len(record), 255)])

@@ -377,9 +377,8 @@ awk '/^[[:space:]]*(#|$)/ {next} /^[[:space:]]/ {setting = setting " " $0; next}
   while IFS= read -r setting; do
     postconf -e "$setting" || echo "main.local.cf: postconf rejected: $setting"
   done
-# DKIM keys and OpenDKIM's config stay on EFS, linked into /etc/postfix (the paths OpenDKIM and dnsupd.py use)
-mkdir -p /mnt/mailserver/etc/postfix/dkim
-ln -sfn /mnt/mailserver/etc/postfix/dkim /etc/postfix/dkim
+# DKIM keys and OpenDKIM's config stay on EFS in /mnt/mailserver/etc/postfix/dkim (see the DKIM part below),
+# used by that path everywhere: a link to it in /etc/postfix makes Postfix warn about the link's permissions
 # v1.0 kept all of /etc/postfix on EFS: only the DKIM folder and the admin's file stay there now
 find /mnt/mailserver/etc/postfix -mindepth 1 -maxdepth 1 ! -name dkim ! -name main.local.cf -exec rm -rf {} +
 # the mail queue lives on EFS
@@ -508,7 +507,6 @@ systemctl enable httpd
 #
 # DKIM, SPF and DMARC. Run at every boot, so the server follows the stack's domain list:
 # keys of removed domains are deleted, new domains get a key, and the DNS records are brought up to date.
-# (the real folder on EFS: find and chown don't follow the /etc/postfix/dkim link)
 dkim=/mnt/mailserver/etc/postfix/dkim
 mkdir -p $dkim
 # our OpenDKIM config, rewritten at every boot from the release (it stays next to the keys)
