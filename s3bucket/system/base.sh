@@ -23,6 +23,25 @@ efs_unit() {
   systemctl daemon-reload
 }
 #
+# Start order: a service that uses another one starts after it is ready. Wants, not Requires: restarting or
+# stopping the other one later doesn't stop this one too.
+# usage: start_after UNIT OTHER.service ...
+start_after() {
+  local unit=$1
+  shift
+  mkdir -p /etc/systemd/system/$unit.service.d
+  printf '[Unit]\nWants=%s\nAfter=%s\n' "$*" "$*" > /etc/systemd/system/$unit.service.d/order.conf
+  systemctl daemon-reload
+}
+#
+# Environment of a service, in a systemd drop-in (env.conf)
+# usage: unit_env UNIT "NAME=value ..."
+unit_env() {
+  mkdir -p /etc/systemd/system/$1.service.d
+  printf '[Service]\nEnvironment=%s\n' "$2" > /etc/systemd/system/$1.service.d/env.conf
+  systemctl daemon-reload
+}
+#
 # The admin's own settings file of a program, on EFS: created once with an explanation, then never changed
 # (our files are rewritten at every boot; settings that must survive upgrades go to these files)
 # usage: custom_file PATH "comment line" ...
@@ -125,6 +144,27 @@ dnf install -y php php-cli php-fpm php-mysqlnd php-mbstring php-intl php-xml php
   postfix postfix-mysql dovecot dovecot-mysql dovecot-pigeonhole \
   opendkim opendkim-tools certbot python3-certbot-dns-route53 pwgen python3-boto3 bind-utils mc
 #
+# Quiet logs: each step below removes a warning that would otherwise appear at every boot
+# - chrony: IPv4 only (IPv6 is off, and its command socket on ::1 fails)
+if [ -f /etc/sysconfig/chronyd ]; then sed -i 's/^OPTIONS="\(.*\)"$/OPTIONS="\1 -4"/' /etc/sysconfig/chronyd; fi
+# - rpcbind and rpc.statd serve NFSv3 only (EFS is mounted with NFSv4); they also fail on IPv6 sockets
+systemctl mask rpcbind.service rpcbind.socket rpc-statd.service rpc-statd-notify.service
+# - NFSv4 ID mapping domain (EFS maps users by number; without it the default is reported at every mount)
+sed -i 's/^#Domain = .*/Domain = localdomain/' /etc/idmapd.conf
+# - the logrotate rule of sssd-common (sssd itself isn't installed) rotates as user sssd, which can't read the
+#   root-owned log folder
+if id sssd > /dev/null 2>&1 && [ -d /var/log/sssd ]; then chown sssd:sssd /var/log/sssd; fi
+# - the tmpfiles rules of httpd and mariadb create folders where we keep links to EFS (/var/www, /var/lib/mysql):
+#   the same rules without those lines (a file in /etc/tmpfiles.d replaces the package's one of the same name)
+grep -vE '^d /var/www( |/)' /usr/lib/tmpfiles.d/httpd.conf > /etc/tmpfiles.d/httpd.conf
+grep -vE '^d /var/lib/mysql ' /usr/lib/tmpfiles.d/mariadb.conf > /etc/tmpfiles.d/mariadb.conf
+# - the boot image (initramfs) of the AlmaLinux cloud image has NFS support, which starts rpcbind, rpc.statd and
+#   rpc.idmapd early in the boot with their own warnings. The root file system is on EBS and EFS is mounted after
+#   the boot, so it is left out; the image of the kernel this instance boots next is rebuilt (about 45 seconds)
+printf '%s\n' "# Flashlight: no NFS in the boot image (root is on EBS; EFS is mounted after the boot)" \
+  'omit_dracutmodules+=" nfs "' > /etc/dracut.conf.d/flashlight-no-nfs.conf
+dracut -f --kver "$(grubby --default-kernel | sed 's|^/boot/vmlinuz-||')"
+#
 # One-time jobs after the final reboot: /etc/cron.once runs once from @reboot. install-finish puts the
 # READY check there (services up -> READY and the CloudFormation signal), only after a good install.
 cd ~
@@ -165,6 +205,8 @@ ln -sf /mnt/mailserver/etc/mariadb/custom.cnf /etc/my.cnf.d/zz-custom.cnf
 # v1.0 kept the whole config folder on EFS; the package's own files are used now
 rm -rf /mnt/mailserver/etc/my.cnf.d
 efs_unit mariadb
+# (variables the package's unit uses without setting them; reported at every start)
+unit_env mariadb "MYSQLD_OPTS= _WSREP_NEW_CLUSTER="
 systemctl enable --now mariadb
 #
 # Data from an older Flashlight release: back up, run the migrations up to this release, restore all on a failure
@@ -401,6 +443,8 @@ fi
 rm -rf /var/spool/postfix
 ln -s /mnt/mailserver/spool/postfix /var/spool/postfix
 efs_unit postfix
+# its lookups go to the PostfixAdmin database
+start_after postfix mariadb.service
 systemctl enable postfix
 #
 # Configuring dovecot. Our dovecot.conf and dovecot-mysql.conf come from the release at every boot (the package's
@@ -437,6 +481,8 @@ custom_file /mnt/mailserver/etc/dovecot/custom.conf \
   "# set here win; Flashlight upgrades never change this file. Reload Dovecot after editing (systemctl reload" \
   "# dovecot). Example:" "#   protocol imap {" "#     mail_max_userip_connections = 50" "#   }"
 efs_unit dovecot
+# logins are checked against the PostfixAdmin database
+start_after dovecot mariadb.service
 systemctl enable dovecot
 #
 # Installing Roundcube (webmail) with the optional Larry skin (users pick it in their settings)
@@ -516,6 +562,12 @@ rm -f /etc/httpd/conf.d/sites.conf
 aws s3 cp s3://$BUCKET_CONFIG/sites.conf /etc/httpd/conf.d/sites.conf
 sed -i "s/{AdminEmail}/$ADMIN_EMAIL/g; s/{AdminDomain}/$ADMIN_DOMAIN/g; s/{MailDomain}/$MAIL_DOMAIN/g" \
   /etc/httpd/conf.d/sites.conf
+# a self-signed certificate for "localhost", for the catch-all HTTPS site of sites.conf that refuses requests to
+# other names (with our real certificate, Apache warns that it doesn't match "localhost")
+openssl req -x509 -newkey rsa:2048 -nodes -days 3650 -subj /CN=localhost -addext subjectAltName=DNS:localhost \
+  -addext basicConstraints=critical,CA:FALSE \
+  -keyout /etc/pki/tls/private/flashlight-localhost.key -out /etc/pki/tls/certs/flashlight-localhost.crt
+chmod 600 /etc/pki/tls/private/flashlight-localhost.key
 custom_file /mnt/mailserver/etc/httpd/custom.conf \
   "# Your Apache settings: global ones, or your own sites. Apache reads this file after Flashlight's" \
   "# /etc/httpd/conf.d/sites.conf (as zz-custom.conf); Flashlight upgrades never change this file." \
@@ -545,6 +597,10 @@ php_children=$(awk '/^MemTotal/ {n = int($2 / 1024 / 200); print (n < 5 ? 5 : n)
 sed -i "s/^pm = .*/pm = ondemand/; s/^pm.max_children = .*/pm.max_children = $php_children/" /etc/php-fpm.d/www.conf
 efs_unit httpd
 efs_unit php-fpm
+unit_env httpd "OPTIONS="
+# the web applications use the database; Apache passes their requests to PHP-FPM
+start_after php-fpm mariadb.service
+start_after httpd php-fpm.service
 systemctl enable httpd
 #
 # DKIM, SPF and DMARC. Run at every boot, so the server follows the stack's domain list:
@@ -654,6 +710,9 @@ EOF
   rspamadm configtest
   efs_unit valkey
   efs_unit rspamd
+  # Rspamd uses Valkey and Unbound; its workers listen on 127.0.0.1 ("localhost" gave each socket twice here)
+  start_after rspamd valkey.service unbound.service
+  unit_env rspamd "RSPAMD_LOCAL_ADDR=127.0.0.1"
   systemctl enable unbound valkey rspamd
 fi
 #
