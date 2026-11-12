@@ -25,9 +25,9 @@ log=/var/log/flashlight-install.log
 env_file=/usr/local/etc/install-finish.env
 max_attempts=3
 services=${SERVICES:-"mariadb postfix dovecot httpd php-fpm opendkim"}
-# the spam filter's services, when it is installed (stack parameter Antispam)
+# the services of the optional parts, when installed: the spam filter (stack parameter Antispam) and fail2ban
 if [ -z "$SERVICES" ]; then
-  for unit in unbound valkey rspamd; do
+  for unit in unbound valkey rspamd fail2ban; do
     systemctl is-enabled -q $unit 2> /dev/null && services="$services $unit"
   done
 fi

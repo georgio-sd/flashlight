@@ -748,5 +748,8 @@ if [ "$FAIL2BAN" = 'ENABLED' ]; then
   # the webmail jail needs its log file to exist before Roundcube's first error
   [ -f /var/www/webmail/logs/errors.log ] || install -o apache -g apache -m 640 /dev/null /var/www/webmail/logs/errors.log
   efs_unit fail2ban
+  # it reads the logs of these services and stops if a log file is missing: Apache's error_log appears only when
+  # Apache first starts (on the first boot of an instance)
+  start_after fail2ban httpd.service postfix.service dovecot.service
   systemctl enable fail2ban
 fi
