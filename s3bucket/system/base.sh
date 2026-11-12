@@ -683,6 +683,11 @@ EOF
   rspamd_conf milter_headers.conf 'use = ["authentication-results", "x-spamd-bar"];'
   # OpenDKIM signs our mail
   rspamd_conf dkim_signing.conf "enabled = false;"
+  # its workers take messages only as data over the network (Postfix sends them so), not as paths to files or
+  # shared memory, which Rspamd warns is unsafe on a TCP listener
+  for worker in proxy normal controller; do
+    rspamd_conf worker-$worker.inc "allow_file_and_shm_inputs = false;"
+  done
   rspamd_conf arc.conf "enabled = false;"
   # Spamhaus through DQS with the stack's key (Spamhaus refuses queries from AWS without one)
   rm -f /etc/rspamd/local.d/rbl.conf /etc/rspamd/local.d/rbl_group.conf
@@ -710,8 +715,10 @@ EOF
   rspamadm configtest
   efs_unit valkey
   efs_unit rspamd
-  # Rspamd uses Valkey and Unbound; its workers listen on 127.0.0.1 ("localhost" gave each socket twice here)
-  start_after rspamd valkey.service unbound.service
+  # Unbound and Rspamd need the network up (Rspamd loads its lists from the internet when it starts); Rspamd also
+  # uses Valkey and Unbound. Its workers listen on 127.0.0.1 ("localhost" gave each socket twice here).
+  start_after unbound network-online.target
+  start_after rspamd valkey.service unbound.service network-online.target
   unit_env rspamd "RSPAMD_LOCAL_ADDR=127.0.0.1"
   systemctl enable unbound valkey rspamd
 fi
