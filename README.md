@@ -24,6 +24,9 @@ records, recovery after failures and upgrades.
   and others), content checks and a filter that learns from your mail. Spam goes to the Junk folder, obvious
   spam is refused before it arrives. Optionally, attachments of risky file types (programs, scripts, disk
   images) are refused, as Gmail does. Office documents with suspicious macros go to the Junk folder (oletools)
+- The spam filter learns from your users: moving a message into Junk, or the "Spam" button in webmail, teaches
+  it what spam is; moving it out teaches it what isn't. A web interface for the admin shows why each message got
+  its verdict, and keeps a whitelist of partner domains
 - Optional virus scanning of incoming mail (ClamAV) on medium or larger servers
 - Protection against password guessing (fail2ban)
 - Daily database backups, and optional backups of all data with AWS Backup

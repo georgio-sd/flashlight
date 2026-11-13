@@ -17,6 +17,7 @@ and stays:
 | Certificates, DKIM keys, passwords (`/mnt/mailserver/root`) | The instance itself: OS, packages, scripts |
 | Your own settings files (see below) | |
 | Your own crontab lines outside our block | |
+| The spam filter's learning, its web interface settings, statistics and the whitelist of partner domains (`/mnt/mailserver/valkey`, `/mnt/mailserver/rspamd`) | |
 
 Flashlight's config files are rebuilt at every boot, so any change made directly in them is lost at the next
 instance replacement, whether or not you upgrade. Your own settings go to the files below. Flashlight creates each

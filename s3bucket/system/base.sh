@@ -498,7 +498,10 @@ EOF
 # compiling needs no users or mail folders (with ours, sievec looks up root in the not yet configured userdb)
 sievec -c /dev/null /etc/dovecot/sieve/spam-to-junk.sieve
 aws s3 cp s3://$BUCKET_CONFIG/dovecot-mysql.conf /etc/dovecot
-sed -i "s/{MainDomain}/$(echo "$DOMAIN_NAMES" | cut -d',' -f 1)/; s/{MailDomain}/$MAIL_DOMAIN/" /etc/dovecot/dovecot.conf
+imap_sieve=""
+[ "$ANTISPAM" = 'ENABLED' ] && imap_sieve=" imap_sieve"
+sed -i "s/{MainDomain}/$(echo "$DOMAIN_NAMES" | cut -d',' -f 1)/; s/{MailDomain}/$MAIL_DOMAIN/; s/{ImapSievePlugin}/$imap_sieve/" \
+  /etc/dovecot/dovecot.conf
 # (a separate assignment, so a missing secret stops the install instead of leaving an empty password)
 postfix_db_password=$(/usr/local/sbin/secrets get postfix_db_password)
 sed -i "s/{database_password}/$postfix_db_password/" /etc/dovecot/dovecot-mysql.conf
@@ -542,7 +545,9 @@ rc_conf=/var/www/webmail/config/config.inc.php
 rc_db_password=$(/usr/local/sbin/secrets get roundcube_db_password)
 rc_des_key=$(/usr/local/sbin/secrets get roundcube_des_key)
 aws s3 cp s3://$BUCKET_CONFIG/config.inc.php.rc $rc_conf
-sed -i "s|{des_key}|$rc_des_key|; s|{RoundcubePassword}|$rc_db_password|" $rc_conf
+rc_antispam=""
+[ "$ANTISPAM" = 'ENABLED' ] && rc_antispam=", 'markasjunk'"
+sed -i "s|{des_key}|$rc_des_key|; s|{RoundcubePassword}|$rc_db_password|; s|{AntispamPlugins}|$rc_antispam|" $rc_conf
 custom_file /mnt/mailserver/etc/roundcube/custom.inc.php "<?php" \
   "// Your Roundcube settings. Flashlight's config/config.inc.php includes this file at its end, so the values set" \
   "// here win; Flashlight upgrades never change this file. Example:" "//   \$config['product_name'] = 'My Mail';"
@@ -712,7 +717,8 @@ EOF
   chown -R valkey:valkey /mnt/mailserver/valkey
   sed -i 's|^dir .*|dir /mnt/mailserver/valkey|' /etc/valkey/valkey.conf
   printf '%s\n' "# Flashlight: memory cap; Rspamd's learned data expire by themselves" "maxmemory 256mb" \
-    "maxmemory-policy volatile-ttl" >> /etc/valkey/valkey.conf
+    "maxmemory-policy volatile-ttl" "# written to disk at most 5 minutes after a change, and when it stops" \
+    "save 300 1 60 10000" >> /etc/valkey/valkey.conf
   #
   # Our Rspamd settings (local.d is merged into Rspamd's defaults)
   rspamd_conf() {
@@ -722,8 +728,11 @@ EOF
       "# Your own settings go to /mnt/mailserver/etc/rspamd/override.d (see the README there)." "$@" > $file
   }
   # (task_timeout: the most one message's checks may take, so a slow answer, of a virus scanner on a big attachment
-  # say, isn't cut off; a usual message takes milliseconds)
-  rspamd_conf options.inc 'dns { nameserver = ["127.0.0.1:53"]; }' "task_timeout = 30s;"
+  # say, isn't cut off; a usual message takes milliseconds. The settings changed in the web interface, the
+  # statistics and the graphs live on EFS, so they survive instance replacements.)
+  rspamd_conf options.inc 'dns { nameserver = ["127.0.0.1:53"]; }' "task_timeout = 60s;" \
+    'dynamic_conf = "/mnt/mailserver/rspamd/rspamd_dynamic";' 'rrd = "/mnt/mailserver/rspamd/rspamd.rrd";' \
+    'stats_file = "/mnt/mailserver/rspamd/stats.ucl";'
   rspamd_conf redis.conf 'servers = "127.0.0.1:6379";'
   # no greylisting: it delays legitimate mail by minutes or hours (the sender retries later)
   rspamd_conf actions.conf "reject = 15;" "add_header = 6;" "greylist = null;"
@@ -735,9 +744,10 @@ EOF
   rspamd_conf dkim_signing.conf "enabled = false;"
   # its workers take messages only as data over the network (Postfix sends them so), not as paths to files or
   # shared memory, which Rspamd warns is unsafe on a TCP listener
-  for worker in proxy normal controller; do
-    rspamd_conf worker-$worker.inc "allow_file_and_shm_inputs = false;"
-  done
+  # (the controller, with the web interface's password, is set up further down)
+  rspamd_conf worker-normal.inc "allow_file_and_shm_inputs = false;"
+  # (the proxy waits for a message's checks longer than task_timeout)
+  rspamd_conf worker-proxy.inc "allow_file_and_shm_inputs = false;" "timeout = 120s;"
   rspamd_conf arc.conf "enabled = false;"
   # Attachments of risky file types (stack parameter AttachmentPolicy). Score: Rspamd's own rules only add points
   # (mime_types). Gmail: mail with an attachment of a type Gmail blocks is rejected, also when the file is inside an
@@ -858,6 +868,94 @@ EOF
     chown root:_rspamd /etc/rspamd/local.d/rbl.conf /etc/rspamd/local.d/rbl_group.conf
     chmod 640 /etc/rspamd/local.d/rbl.conf /etc/rspamd/local.d/rbl_group.conf
   fi
+  #
+  # Rspamd's own data on EFS: the settings changed in its web interface, its statistics and graphs, and the
+  # whitelist of partner domains the admin keeps there (the _rspamd user's ID may differ on each new instance)
+  install -d -m 755 /mnt/mailserver/rspamd
+  if [ ! -f /mnt/mailserver/rspamd/whitelist-domains.map ]; then
+    printf '%s\n' "# Partner domains whose mail is never sent to Junk by its spam score. Mail with a virus or a blocked" \
+      "# attachment is still rejected. The mail must really come from the domain: its SPF lets the sending server" \
+      "# send for it, or it carries the domain's DKIM signature. One domain per line; edit it in the Rspamd web" \
+      "# interface (Configuration, Lists) or here. Flashlight upgrades never change this file." \
+      > /mnt/mailserver/rspamd/whitelist-domains.map
+  fi
+  chown -R _rspamd:_rspamd /mnt/mailserver/rspamd
+  rspamd_conf whitelist.conf "rules {" "  FLASHLIGHT_WHITELIST_SPF {" "    valid_spf = true;" \
+    '    domains = ["/mnt/mailserver/rspamd/whitelist-domains.map"];' "    score = -6.0;" \
+    '    description = "Sender domain on the whitelist, confirmed by SPF";' "  }" "  FLASHLIGHT_WHITELIST_DKIM {" \
+    "    valid_dkim = true;" '    domains = ["/mnt/mailserver/rspamd/whitelist-domains.map"];' "    score = -6.0;" \
+    '    description = "Sender domain on the whitelist, confirmed by DKIM";' "  }" "}"
+  #
+  # The web interface: https://<admin domain>/rspamd/, behind the admin site's password and Rspamd's own (in the
+  # secrets file and /root/credentials). Apache passes the browser's address on (its own copy: a browser can't
+  # forge it), so Rspamd asks for the password; only requests from the server itself (Dovecot's learning) don't.
+  if ! rspamd_password=$(/usr/local/sbin/secrets get rspamd_password 2> /dev/null); then
+    rspamd_password=$(pwgen 16 1)
+    /usr/local/sbin/secrets set rspamd_password "$rspamd_password"
+    printf "Rspamd web interface (spam filter)\n   Link: https://$ADMIN_DOMAIN/rspamd/\n   password: $rspamd_password\n\n" \
+      >> /root/credentials
+  fi
+  rspamd_hash=$(rspamadm pw -p "$rspamd_password")
+  rspamd_conf worker-controller.inc "allow_file_and_shm_inputs = false;" "password = \"$rspamd_hash\";" \
+    "enable_password = \"$rspamd_hash\";"
+  chown root:_rspamd /etc/rspamd/local.d/worker-controller.inc
+  chmod 640 /etc/rspamd/local.d/worker-controller.inc
+  cat > /etc/httpd/flashlight-rspamd.conf <<'EOF'
+# Flashlight: the Rspamd web interface in the admin site (included by sites.conf). DON'T EDIT: rewritten at every
+# boot from the Flashlight release.
+<Location "/rspamd/">
+    AuthType Basic
+    AuthName "Restricted Content"
+    AuthUserFile /var/www/admin/.htpasswd
+    Require valid-user
+    # the browser's own address headers are dropped; Apache adds the real one
+    RequestHeader unset X-Forwarded-For
+    RequestHeader unset X-Real-IP
+    ProxyPass "http://127.0.0.1:11334/"
+    ProxyPassReverse "http://127.0.0.1:11334/"
+</Location>
+EOF
+  #
+  # Learning from the users: moving a message into Junk teaches Rspamd it is spam, moving it out of Junk (not to
+  # Trash) that it isn't, from any mail program (Dovecot's imapsieve; dovecot.conf includes the file below)
+  cat > /etc/dovecot/flashlight-antispam.conf <<'EOF'
+# Flashlight: learning of the spam filter (included by dovecot.conf). DON'T EDIT: rewritten at every boot.
+plugin {
+  sieve_plugins = sieve_imapsieve sieve_extprograms
+  sieve_global_extensions = +vnd.dovecot.pipe +vnd.dovecot.environment
+  sieve_pipe_bin_dir = /etc/dovecot/sieve/bin
+  # into Junk: spam
+  imapsieve_mailbox1_name = Junk
+  imapsieve_mailbox1_causes = COPY APPEND
+  imapsieve_mailbox1_before = file:/etc/dovecot/sieve/learn-spam.sieve
+  # out of Junk: not spam (the script skips Trash)
+  imapsieve_mailbox2_name = *
+  imapsieve_mailbox2_from = Junk
+  imapsieve_mailbox2_causes = COPY
+  imapsieve_mailbox2_before = file:/etc/dovecot/sieve/learn-ham.sieve
+}
+EOF
+  mkdir -p /etc/dovecot/sieve/bin
+  cat > /etc/dovecot/sieve/learn-spam.sieve <<'EOF'
+require ["vnd.dovecot.pipe", "copy", "imapsieve"];
+pipe :copy "rspamd-learn" ["spam"];
+EOF
+  cat > /etc/dovecot/sieve/learn-ham.sieve <<'EOF'
+require ["vnd.dovecot.pipe", "copy", "imapsieve", "environment", "variables"];
+if environment :matches "imap.mailbox" "*" { set "mailbox" "${1}"; }
+if string :is "${mailbox}" ["Trash", "Deleted Messages", "Junk"] { stop; }
+pipe :copy "rspamd-learn" ["ham"];
+EOF
+  printf '%s\n' '#!/bin/sh' '# Flashlight: passes a message moved into or out of Junk to Rspamd ($1: spam or ham)' \
+    'exec /usr/bin/rspamc -h 127.0.0.1:11334 "learn_$1"' > /etc/dovecot/sieve/bin/rspamd-learn
+  chmod 755 /etc/dovecot/sieve/bin/rspamd-learn
+  # compiled now, with just the plugins the scripts need (Dovecot can't write next to them)
+  printf '%s\n' 'plugin {' '  sieve_plugins = sieve_imapsieve sieve_extprograms' \
+    '  sieve_global_extensions = +vnd.dovecot.pipe +vnd.dovecot.environment' '}' > /root/sievec.conf
+  for script in learn-spam learn-ham; do
+    sievec -c /root/sievec.conf /etc/dovecot/sieve/$script.sieve
+  done
+  rm /root/sievec.conf
   #
   # The admin's own settings, on EFS
   mkdir -p /mnt/mailserver/etc/rspamd/override.d

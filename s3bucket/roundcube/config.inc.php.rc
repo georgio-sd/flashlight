@@ -29,7 +29,8 @@ $config['username_domain'] = '%t';
 $config['des_key'] = '{des_key}';
 $config['cipher_method'] = 'AES-256-CBC';
 
-$config['plugins'] = ['acl', 'managesieve', 'userinfo'];
+// (markasjunk, the "Spam" and "Not spam" buttons, with the spam filter: base.sh fills it in)
+$config['plugins'] = ['acl', 'managesieve', 'userinfo'{AntispamPlugins}];
 
 // Filters and vacation replies (Dovecot ManageSieve on localhost:4190)
 $config['managesieve_vacation'] = 1;
