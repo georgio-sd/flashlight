@@ -162,7 +162,7 @@ All components are well-known open-source programs:
 
 ## Documentation
 
+- [Installing Flashlight](docs/INSTALL.md): installation, first steps and everyday tasks
+- [How the server works](docs/ARCHITECTURE.md): a detailed description of the server
 - [Upgrading to a new release](docs/UPGRADING.md)
 - [Releasing Flashlight](docs/RELEASING.md) (for developers)
-
-An installation guide and a detailed description of the server are in preparation.
