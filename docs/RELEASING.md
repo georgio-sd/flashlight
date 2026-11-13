@@ -109,16 +109,20 @@ stay in the list for good: a server several releases behind needs every step in 
 6. **Attachment lists.** Compare `s3bucket/rspamd/attachments-gmail.map` with Google's list of blocked file types
    (https://support.google.com/mail/answer/6590) and `attachments-strict.map` with Microsoft's list of attachments
    Outlook blocks; update them and the date in their headers.
-7. **Test a fresh install** on a test stand with `CertificateMode=staging`: install READY, mail between the
+7. **Rspamd package.** The release carries a copy of the Rspamd package, used when rspamd.com can't be reached.
+   On an AlmaLinux instance with the Rspamd repository, `dnf download rspamd` the newest 4.x, check it with
+   `rpm -K` (key `rspamd/rspamd.asc`), upload it to `packages/`, and update its name in `base.sh` (`rspamd_rpm`)
+   and in the stage 1 `Files` list.
+8. **Test a fresh install** on a test stand with `CertificateMode=staging`: install READY, mail between the
    stand's own domains, webmail, admin pages, DKIM, DNS records.
-8. **Test the upgrade** on a stand installed from the previous release, following UPGRADING.md step by step:
+9. **Test the upgrade** on a stand installed from the previous release, following UPGRADING.md step by step:
    `UPGRADE` lines in the event log, `flashlight=X.Y` in `versions`, the admin's settings files unchanged, mail
    still there. If the release has a migration, also test a release skip (from two releases back) if one exists,
    and a failing migration. A failing migration is tested on the instance with `MIGRATIONS_DIR`, `RELEASES` and
    `THIS_RELEASE`, which `upgrade-data` reads instead of its built-in values.
-9. **Publish the files.** Upload `s3bucket/` to `s3://mail-server-bundles/vX.Y/` keeping the layout, and check
+10. **Publish the files.** Upload `s3bucket/` to `s3://mail-server-bundles/vX.Y/` keeping the layout, and check
    that every path of the `Files` list is there.
-10. **Publish the code.** Merge into `main`, tag `vX.Y`, and write the release notes: what changed, whether the
+11. **Publish the code.** Merge into `main`, tag `vX.Y`, and write the release notes: what changed, whether the
    release changes the data, and any action the user must take.
 
 ## Testing tips

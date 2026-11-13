@@ -195,6 +195,8 @@ Resources:
       - 'packages/phpMyAdmin-5.2.3-all-languages.tar.gz'
       - 'packages/roundcubemail-1.7.6-complete.tar.gz'
       - 'packages/roundcube-larry-03ccd35.tar.gz'
+      - 'packages/rspamd-4.2.3-1.el10.x86_64.rpm'
+      - 'rspamd/rspamd.asc'
   DownloadBundlesLambdaFunction:
     Type: 'AWS::Lambda::Function'
     Properties:

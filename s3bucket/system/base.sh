@@ -678,8 +678,13 @@ systemctl enable opendkim
 # come through the big shared resolvers, AWS's included). Our settings in /etc/rspamd/local.d are rewritten at
 # every boot; the admin's own live on EFS in /mnt/mailserver/etc/rspamd/override.d.
 if [ "$ANTISPAM" = 'ENABLED' ]; then
-  # Rspamd's own repository (it isn't in AlmaLinux or EPEL), major version 4 only: a new major version comes
-  # with a Flashlight release, after testing
+  # Rspamd comes from its own repository (it isn't in AlmaLinux or EPEL), major version 4 only: a new major version
+  # comes with a Flashlight release, after testing. Its packages are checked with the Rspamd signing key that comes
+  # with the release. The repository is a single server: if it can't be reached, dnf skips it (also for later
+  # updates), and the Rspamd package that came with this release is installed instead, after its signature check.
+  rspamd_rpm=rspamd-4.2.3-1.el10.x86_64.rpm
+  aws s3 cp s3://$BUCKET_CONFIG/rspamd.asc /etc/pki/rpm-gpg/RPM-GPG-KEY-rspamd
+  rpm --import /etc/pki/rpm-gpg/RPM-GPG-KEY-rspamd
   os_major=$(. /etc/os-release && echo "${VERSION_ID%%.*}")
   cat > /etc/yum.repos.d/rspamd.repo <<EOF
 [rspamd]
@@ -688,10 +693,18 @@ baseurl=https://rspamd.com/rpm-stable/centos-$os_major/\$basearch
 enabled=1
 gpgcheck=1
 repo_gpgcheck=1
-gpgkey=https://rspamd.com/rpm/rspamd.asc
+gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-rspamd
 includepkgs=rspamd-4.*
+skip_if_unavailable=1
 EOF
-  dnf install -y rspamd valkey unbound
+  dnf install -y valkey unbound
+  if ! dnf install -y rspamd; then
+    /usr/local/sbin/instance-log WARN "Rspamd repository unreachable: installing the release's copy ($rspamd_rpm)"
+    aws s3 cp s3://$BUCKET_CONFIG/$rspamd_rpm /root/
+    rpm -K /root/$rspamd_rpm | grep -q 'digests signatures OK'
+    dnf install -y /root/$rspamd_rpm
+    rm /root/$rspamd_rpm
+  fi
   #
   # Valkey: data on EFS, so learned spam survives instance replacements. The valkey user's ID may differ on each
   # new instance, hence the chown at every boot.
@@ -708,7 +721,9 @@ EOF
     printf '%s\n' "# Flashlight's Rspamd settings. DON'T EDIT: rewritten at every boot from the Flashlight release." \
       "# Your own settings go to /mnt/mailserver/etc/rspamd/override.d (see the README there)." "$@" > $file
   }
-  rspamd_conf options.inc 'dns { nameserver = ["127.0.0.1:53"]; }'
+  # (task_timeout: the most one message's checks may take, so a slow answer, of a virus scanner on a big attachment
+  # say, isn't cut off; a usual message takes milliseconds)
+  rspamd_conf options.inc 'dns { nameserver = ["127.0.0.1:53"]; }' "task_timeout = 30s;"
   rspamd_conf redis.conf 'servers = "127.0.0.1:6379";'
   # no greylisting: it delays legitimate mail by minutes or hours (the sender retries later)
   rspamd_conf actions.conf "reject = 15;" "add_header = 6;" "greylist = null;"
