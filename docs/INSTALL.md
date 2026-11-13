@@ -9,7 +9,9 @@ The whole installation takes about half an hour, most of it waiting for AWS.
 ## Before you start
 
 1. **An AWS account and a region.** Any region with at least two Availability Zones works; three are
-   recommended. All resources are created in the region you pick in the console.
+   recommended. Create both stacks in the same region: stage 2 reads the outputs of stage 1, and CloudFormation
+   shares them only within a region. Route 53 is global, so your hosted zones work with any region; Flashlight
+   copies its server image into the region you pick.
 2. **Your mail domains in Route 53.** Each domain must be a public hosted zone in the same AWS account, and
    the domain's registrar must point to the Route 53 name servers. One of them is the **main domain**: the
    server's own names are made from it (`mail.<main domain>` and `admin.<main domain>` by default).
@@ -88,7 +90,7 @@ Don't change the network settings after the install.
 | Parameter | Default | What it does |
 |---|---|---|
 | InstanceType | t3.small | Main instance type. t3.small (2 GB) is enough for a small company with the spam filter; t3.medium (4 GB) or larger for the antivirus or for many users |
-| InstanceType2 | t3a.small | A second, interchangeable type: with Spot it gives the Auto Scaling group more capacity pools to choose from. `None` uses only InstanceType (use it with a Reserved Instance) |
+| InstanceType2 | t3a.small | A second, interchangeable type. With Spot it gives the Auto Scaling group more capacity pools to choose from. With On-Demand the server runs on InstanceType, and on this one only when AWS has no capacity of the first. `None`: only InstanceType. Use it with a Reserved Instance (which applies to On-Demand only), so the server never runs on a type the reservation doesn't cover |
 | InstanceLifecycle | Spot | `Spot` costs much less; AWS may take the instance back, and a new one takes over within about ten minutes. `On-Demand` is never taken back |
 | RebuildAfterDays | 30 | The server is rebuilt from scratch on current packages once it is this old, on the next Saturday-to-Sunday night at 03:15 (about 4 minutes without mail). 0 turns it off |
 | DiskVolumeSize | 10 | The server's disk in GiB. 8 is enough without swap; with swap at least 10 for small and medium types, 12 for large and xlarge |
