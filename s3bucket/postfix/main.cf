@@ -63,6 +63,9 @@ smtpd_client_message_rate_limit = 30
 smtpd_client_event_limit_exceptions = 127.0.0.0/8
 smtpd_error_sleep_time = 20
 smtpd_hard_error_limit = 15
+# recipients per message for logged-in users (ports 587 and 465, master.cf); the spam filter also limits how many
+# messages each user sends (Rspamd ratelimit). Change it in main.local.cf.
+flashlight_submission_recipient_limit = 20
 
 #
 # SMTP protocol hygiene and restrictions
@@ -77,7 +80,10 @@ smtpd_helo_restrictions = permit_mynetworks,
  permit_sasl_authenticated,
  reject_non_fqdn_helo_hostname,
  reject_invalid_helo_hostname
-smtpd_sender_restrictions = permit_mynetworks,
+# a logged-in user sends only as their own address or an alias of it (first: webmail logs in from the server itself)
+smtpd_sender_login_maps = proxy:mysql:/etc/postfix/mysql/sender_login_maps.cf
+smtpd_sender_restrictions = reject_authenticated_sender_login_mismatch,
+ permit_mynetworks,
  permit_sasl_authenticated,
  reject_non_fqdn_sender,
  reject_unknown_sender_domain

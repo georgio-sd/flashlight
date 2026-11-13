@@ -385,7 +385,7 @@ fi
 #
 # Spot instances: on the interruption notice and on the weekly price check the instance stops its
 # services and asks the ASG to replace it (replace-instance); events go to /mnt/mailserver/log/instance.log
-for tool in replace-instance rebuild-check mailbox-cleanup db-backup; do
+for tool in replace-instance rebuild-check mailbox-cleanup db-backup outbound-alert; do
   aws s3 cp s3://$BUCKET_CONFIG/$tool /mnt/mailserver/automation/
   chmod 700 /mnt/mailserver/automation/$tool
 done
@@ -417,6 +417,8 @@ crontab=/mnt/mailserver/etc/crontab
   [ "$INSTANCE_LIFECYCLE" = 'Spot' ] && echo '15   1  *  *  0 root /mnt/mailserver/automation/spotprices.py'
   # scheduled rebuild (stack parameter RebuildAfterDays, 0 = off), two hours after the price check
   [ "$REBUILD_AFTER_DAYS" -gt 0 ] && echo "15   3  *  *  0 root /mnt/mailserver/automation/rebuild-check $REBUILD_AFTER_DAYS"
+  # spam filter: warns the admin about mailboxes that may have been taken over (sending limits, outgoing spam)
+  [ "$ANTISPAM" = 'ENABLED' ] && echo "*/10 *  *  *  * root /mnt/mailserver/automation/outbound-alert $ADMIN_EMAIL $(echo "$DOMAIN_NAMES" | cut -d',' -f 1)"
   echo '# Flashlight end'
 } > $crontab.new
 mv $crontab.new $crontab
@@ -444,7 +446,7 @@ sed -i "s/{MainDomain}/$(echo "$DOMAIN_NAMES" | cut -d',' -f 1)/; s/{MailDomain}
 postfix_db_password=$(/usr/local/sbin/secrets get postfix_db_password)
 mkdir -p /etc/postfix/mysql
 for map in virtual_mailbox_domains virtual_mailbox_maps virtual_alias_domain_mailbox_maps virtual_alias_maps \
-    virtual_alias_domain_maps virtual_alias_domain_catchall_maps relay_domains; do
+    virtual_alias_domain_maps virtual_alias_domain_catchall_maps relay_domains sender_login_maps; do
   aws s3 cp s3://$BUCKET_CONFIG/$map.cf /etc/postfix/mysql/
 done
 sed -i "s/{database_password}/$postfix_db_password/" /etc/postfix/mysql/*.cf
@@ -737,6 +739,14 @@ EOF
   # no greylisting: it delays legitimate mail by minutes or hours (the sender retries later)
   rspamd_conf actions.conf "reject = 15;" "add_header = 6;" "greylist = null;"
   rspamd_conf greylist.conf "enabled = false;"
+  # Mail sent by logged-in users: at most 30 messages an hour and 300 a day per user (a spam bot on a stolen mailbox
+  # hits this within minutes; outbound-alert tells the admin); over it, a temporary refusal. skip_recipients: count
+  # messages, not recipients (those are limited per message in Postfix). The admin can change the numbers in
+  # override.d/ratelimit.conf. Their mail gets no spam header: it is sent as it is, or refused from 15 points.
+  rspamd_conf ratelimit.conf "rates {" "  user_hour {" '    selector = "user.lower";' \
+    '    bucket = { burst = 30; rate = "30 / 1h"; skip_recipients = true; }' "  }" "  user_day {" \
+    '    selector = "user.lower";' '    bucket = { burst = 300; rate = "300 / 1d"; skip_recipients = true; }' "  }" "}"
+  rspamd_conf settings.conf "outbound {" "  authenticated = true;" '  apply { actions { "add header" = null; } }' "}"
   # the Bayes filter also learns by itself from mail that scores very high or very low
   rspamd_conf classifier-bayes.conf "autolearn = true;"
   rspamd_conf milter_headers.conf 'use = ["authentication-results", "x-spamd-bar"];'

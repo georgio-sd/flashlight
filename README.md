@@ -27,6 +27,9 @@ records, recovery after failures and upgrades.
 - The spam filter learns from your users: moving a message into Junk, or the "Spam" button in webmail, teaches
   it what spam is; moving it out teaches it what isn't. A web interface for the admin shows why each message got
   its verdict, and keeps a whitelist of partner domains
+- Outgoing mail is guarded against stolen passwords: users send only as their own addresses, at most 30 messages
+  an hour, 300 a day and 20 recipients per message, and the admin gets an e-mail when a mailbox runs into these
+  limits or sends spam
 - Optional virus scanning of incoming mail (ClamAV) on medium or larger servers
 - Protection against password guessing (fail2ban)
 - Daily database backups, and optional backups of all data with AWS Backup
