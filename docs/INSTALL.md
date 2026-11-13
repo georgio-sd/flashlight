@@ -17,6 +17,9 @@ The whole installation takes about half an hour, most of it waiting for AWS.
    server's own names are made from it (`mail.<main domain>` and `admin.<main domain>` by default).
    Flashlight creates the MX, SPF, DKIM and DMARC records itself. If the domain already receives mail
    elsewhere, its MX record moves to Flashlight when you install, and SPF is replaced by Flashlight's.
+   If you have just created the hosted zone or changed the domain's name servers at the registrar, wait until
+   the change is visible before installing (`dig NS <domain>` shows the Route 53 servers); it can take up to
+   48 hours. Until then Let's Encrypt can't validate the domain and the certificate isn't issued.
 3. **Outgoing mail allowed.** AWS blocks port 25 on new accounts. Ask AWS Support to lift it ("Request to
    remove email sending limitations") and wait for the answer: without it the server receives mail but can't
    send any to other servers. Reverse DNS of the server's address is set up by Flashlight.
