@@ -15,9 +15,9 @@ fi
 # The services that write to the EFS (base.sh lists them), all but crond and autoshutdown: this script runs from
 # them (the price check and the scheduled rebuild from cron, the spot notice from autoshutdown), and stopping them
 # would stop this script; the shutdown that follows stops them. systemd orders the stops by the dependencies.
-efs="mariadb postfix dovecot httpd php-fpm opendkim"
+services_efs="mariadb postfix dovecot httpd php-fpm opendkim"
 [ -f /usr/local/etc/flashlight-services ] && . /usr/local/etc/flashlight-services
-systemctl stop $(printf '%s\n' $efs | grep -vxE 'crond|autoshutdown')
+systemctl stop $(printf '%s\n' $services_efs | grep -vxE 'crond|autoshutdown')
 instance-log STOP "services stopped, asking the ASG to replace this instance"
 if ! aws autoscaling terminate-instance-in-auto-scaling-group --instance-id "$(imds instance-id)" \
      --no-should-decrement-desired-capacity --region "$(imds placement/region)"; then

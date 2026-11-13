@@ -23,7 +23,7 @@ region=$(imds placement/region)
 me=flag-ec2id-$id
 # the services that write to the EFS: base.sh lists them (they depend on the stack's parameters, and include the
 # log rotation and certificate renewal timers, cron and the spot watcher); systemd orders the stops and starts
-efs="mariadb postfix dovecot httpd php-fpm opendkim crond logrotate.timer certbot-renew.timer"
+services_efs="mariadb postfix dovecot httpd php-fpm opendkim crond logrotate.timer certbot-renew.timer"
 [ -f /usr/local/etc/flashlight-services ] && . /usr/local/etc/flashlight-services
 
 # the instance that owns the EFS now (the newest foreign flag), or nothing
@@ -44,7 +44,7 @@ gone() {
 while true; do
   taker=$(owner)
   if [ -n "$taker" ]; then
-    systemctl stop $efs
+    systemctl stop $services_efs
     instance-log STOP "instance $taker took over the EFS: services, cron and spot watcher stopped"
     # wait until the owner is gone (a newer owner, another flag, is followed instead) and the data are at a
     # release this instance can run
@@ -61,7 +61,7 @@ while true; do
     done
     rm -f /mnt/mailserver/flag-ec2id-*
     printf "Do not delete this file" > /mnt/mailserver/$me
-    systemctl start $efs
+    systemctl start $services_efs
     aws ec2 associate-address --instance-id "$id" --allocation-id "$(cat /usr/local/etc/eip-allocation-id)" \
       --allow-reassociation --region "$region" > /dev/null
     instance-log RESUME "instance ${taker:-?} is gone (terminated): EFS, services and the Elastic IP are back on this instance"

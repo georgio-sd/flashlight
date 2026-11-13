@@ -28,7 +28,7 @@ max_attempts=3
 services=${SERVICES:-"mariadb postfix dovecot httpd php-fpm opendkim"}
 if [ -z "$SERVICES" ] && [ -f /usr/local/etc/flashlight-services ]; then
   . /usr/local/etc/flashlight-services
-  services=$running
+  services=$services_running
 fi
 [ -f $env_file ] && . $env_file
 
