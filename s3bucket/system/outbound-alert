@@ -23,8 +23,8 @@ exec 9> /run/outbound-alert.lock
 flock -n 9 || exit 0
 
 now=$(date +%s)
-# first run: start from now
-[ -f $state ] || echo "last=$now" > $state
+# first run: from one cron interval ago (mail refused right after an install isn't missed)
+[ -f $state ] || echo "last=$((now - 600))" > $state
 last=$(sed -n 's/^last=//p' $state)
 since=$(date -d "@${last:-$now}" '+%Y-%m-%d %H:%M:%S')
 
