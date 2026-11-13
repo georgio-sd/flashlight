@@ -95,7 +95,7 @@ Don't change the network settings after the install.
 | InstanceType | t3.small | Main instance type. t3.small (2 GB) is enough for a small company with the spam filter; t3.medium (4 GB) or larger for the antivirus or for many users |
 | InstanceType2 | t3a.small | A second, interchangeable type. With Spot it gives the Auto Scaling group more capacity pools to choose from. With On-Demand the server runs on InstanceType, and on this one only when AWS has no capacity of the first. `None`: only InstanceType. Use it with a Reserved Instance (which applies to On-Demand only), so the server never runs on a type the reservation doesn't cover |
 | InstanceLifecycle | Spot | `Spot` costs much less; AWS may take the instance back, and a new one takes over within about ten minutes. `On-Demand` is never taken back |
-| RebuildAfterDays | 30 | The server is rebuilt from scratch on current packages once it is this old, on the next Saturday-to-Sunday night at 03:15 (about 4 minutes without mail). 0 turns it off |
+| RebuildAfterDays | 30 | The server is rebuilt from scratch on current packages once it is this old, on the next Saturday-to-Sunday night at 03:15 (about 4 minutes without mail). This is how it gets security fixes and updates: the operating system, and the programs installed from its repositories (Postfix, Dovecot, Rspamd, ClamAV and others). The web applications (Roundcube, PostfixAdmin, phpMyAdmin) come with the Flashlight release and are updated by [upgrades](UPGRADING.md). 0 turns it off |
 | DiskVolumeSize | 10 | The server's disk in GiB. 8 is enough without swap; with swap at least 10 for small and medium types, 12 for large and xlarge |
 | Swap | ENABLED | A swap file for short memory peaks, sized automatically (half the memory, at most 4 GB) |
 
