@@ -23,7 +23,8 @@ records, recovery after failures and upgrades.
 - Spam filtering (Rspamd): sender authenticity, blocklists of senders and links (Spamhaus with your free key,
   and others), content checks and a filter that learns from your mail. Spam goes to the Junk folder, obvious
   spam is refused before it arrives. Optionally, attachments of risky file types (programs, scripts, disk
-  images) are refused, as Gmail does
+  images) are refused, as Gmail does. Office documents with suspicious macros go to the Junk folder (oletools)
+- Optional virus scanning of incoming mail (ClamAV) on medium or larger servers
 - Protection against password guessing (fail2ban)
 - Daily database backups, and optional backups of all data with AWS Backup
 
@@ -136,9 +137,9 @@ All components are well-known open-source programs:
 | Database administration | phpMyAdmin |
 | Certificates | Certbot (Let's Encrypt) |
 | Spam filtering | Rspamd, with Valkey (its learned data) and Unbound (its DNS resolver) |
+| Macros in Office documents | oletools (through olefy) |
+| Virus scanning (optional) | ClamAV |
 | Protection against password guessing | fail2ban |
-
-Virus scanning is in development.
 
 ## What you need
 

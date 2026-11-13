@@ -3,7 +3,7 @@
 # The stack's variables come from UserData. Without them some steps would act on empty values (an empty
 # domain list, for example, would delete every DKIM key), so stop before touching anything.
 for var in EIP_ID EIP AWS_REGION STACK MAIL_STORAGE BUCKET_CONFIG TIMEZONE ADMIN_EMAIL CERT_MODE INSTANCE_LIFECYCLE \
-    DOMAIN_NAMES DOMAIN_ZONE_IDS ADMIN_DOMAIN MAIL_DOMAIN REBUILD_AFTER_DAYS ANTISPAM SWAP ATTACHMENT_POLICY; do
+    DOMAIN_NAMES DOMAIN_ZONE_IDS ADMIN_DOMAIN MAIL_DOMAIN REBUILD_AFTER_DAYS ANTISPAM SWAP ATTACHMENT_POLICY ANTIVIRUS; do
   [ -n "${!var}" ] || { echo "base.sh: $var is not set, nothing done"; exit 1; }
 done
 #
@@ -763,6 +763,89 @@ EOF
       "  }" "  RISKY_ARCHIVE_JUNK {" '    action = "add header";' \
       '    expression = "MIME_ENCRYPTED_ARCHIVE | MIME_ARCHIVE_IN_ARCHIVE";' "    least = true;" "  }" "}"
   fi
+  #
+  # Macros in Office documents: oletools (not a virus scanner: it looks at what a document's macros do) through the
+  # olefy service (Heinlein Support; olefy.py comes with the release). A macro that runs by itself when the document
+  # is opened and does suspicious things (starts programs, writes files, Excel 4.0 macros) adds 7 points: the mail
+  # goes to Junk. oletools isn't packaged for AlmaLinux: pip installs exactly the versions and files (hashes) of
+  # olefy-requirements.txt into its own environment. If that fails, the server works without the macro check.
+  rm -f /etc/rspamd/local.d/external_services.conf /etc/rspamd/local.d/groups.conf
+  rspamd_after=""
+  aws s3 cp s3://$BUCKET_CONFIG/olefy-requirements.txt /root/olefy-requirements.txt
+  if python3 -m venv /opt/olefy && /opt/olefy/bin/pip install --quiet --disable-pip-version-check --require-hashes \
+       --only-binary=:all: -r /root/olefy-requirements.txt; then
+    aws s3 cp s3://$BUCKET_CONFIG/olefy.py /opt/olefy/olefy.py
+    id olefy > /dev/null 2>&1 || useradd -r -M -d /nonexistent -s /sbin/nologin olefy
+    printf '%s\n' "# Flashlight's olefy settings (written at every install)" "OLEFY_BINDADDRESS=127.0.0.1" \
+      "OLEFY_BINDPORT=10050" "OLEFY_TMPDIR=/tmp" "OLEFY_PYTHON_PATH=/opt/olefy/bin/python" \
+      "OLEFY_OLEVBA_PATH=/opt/olefy/bin/olevba" "OLEFY_LOGLVL=30" "OLEFY_MINLENGTH=500" "OLEFY_DEL_TMP=1" \
+      "OLEFY_DEL_TMP_FAILED=1" > /etc/olefy.conf
+    cat > /etc/systemd/system/olefy.service <<'EOF'
+[Unit]
+Description=olefy: macros in Office documents (oletools) for Rspamd
+After=network.target
+
+[Service]
+Type=simple
+User=olefy
+Group=olefy
+EnvironmentFile=/etc/olefy.conf
+# (-W: a regular expression in olefy.py makes Python 3.12 warn at every start)
+ExecStart=/opt/olefy/bin/python -W ignore::SyntaxWarning /opt/olefy/olefy.py
+Restart=always
+RestartSec=3
+RuntimeMaxSec=4h
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target
+EOF
+    systemctl daemon-reload
+    systemctl enable olefy
+    rspamd_conf external_services.conf "oletools {" '  type = "oletools";' '  servers = "127.0.0.1:10050";' \
+      "  extended = false;" "  timeout = 20.0;" "  max_size = 20971520;" "}"
+    rspamd_conf groups.conf 'group "flashlight" {' "  symbols {" \
+      '    "OLETOOLS" { weight = 7.0; description = "Office document with a macro that runs by itself and does suspicious things"; }' \
+      "  }" "}"
+    rspamd_after=" olefy.service"
+  else
+    /usr/local/sbin/instance-log WARN "oletools could not be installed (pip): mail is checked without the macro check"
+  fi
+  rm -f /root/olefy-requirements.txt
+  #
+  # Virus scanner (stack parameter Antivirus): ClamAV (EPEL) through Rspamd; a message with a virus is rejected.
+  # It needs about 1 GB of memory, twice that for some seconds while it loads new signatures (a few times a day), so
+  # the template allows it on medium instance types and larger. The signature database lives on EFS: a new instance
+  # finds it there and only updates it, instead of downloading 100+ MB again. clamd reloads it by itself after an
+  # update (SelfCheck).
+  rm -f /etc/rspamd/local.d/antivirus.conf
+  if [ "$ANTIVIRUS" = 'ENABLED' ]; then
+    dnf install -y clamav clamd
+    # (the clamupdate user's ID may differ on each new instance)
+    install -d -m 755 /mnt/mailserver/clamav
+    chown -R clamupdate:clamupdate /mnt/mailserver/clamav
+    sed -i 's|^#\?DatabaseDirectory .*|DatabaseDirectory /mnt/mailserver/clamav|' /etc/freshclam.conf
+    sed -i 's|^#\?DatabaseDirectory .*|DatabaseDirectory /mnt/mailserver/clamav|; s|^#\?TCPSocket .*|TCPSocket 3310|;
+      s|^#\?TCPAddr .*|TCPAddr 127.0.0.1|' /etc/clamd.d/scan.conf
+    # the database must be in place before clamd starts: up to 3 tries (freshclam exits 1 when it is up to date)
+    for try in 1 2 3; do
+      rc=0
+      freshclam --quiet || rc=$?
+      if [ $rc -le 1 ]; then break; fi
+      if [ $try -eq 3 ]; then echo "base.sh: freshclam failed (exit $rc)"; exit 1; fi
+      sleep 30
+    done
+    rspamd_conf antivirus.conf "clamav {" '  type = "clamav";' '  servers = "127.0.0.1:3310";' \
+      "  scan_mime_parts = true;" '  symbol = "CLAM_VIRUS";' '  action = "reject";' \
+      "  message = '\${SCANNER}: virus found: \"\${VIRUS}\"';" "  timeout = 20.0;" "  max_size = 20971520;" "}"
+    efs_unit clamd@scan
+    efs_unit clamav-freshclam
+    systemctl enable clamd@scan clamav-freshclam
+  fi
+  #
   # Spamhaus through DQS with the stack's key (Spamhaus refuses queries from AWS without one)
   rm -f /etc/rspamd/local.d/rbl.conf /etc/rspamd/local.d/rbl_group.conf
   if [ -n "$DQS_KEY" ]; then
@@ -792,7 +875,7 @@ EOF
   # Unbound and Rspamd need the network up (Rspamd loads its lists from the internet when it starts); Rspamd also
   # uses Valkey and Unbound. Its workers listen on 127.0.0.1 ("localhost" gave each socket twice here).
   start_after unbound network-online.target
-  start_after rspamd valkey.service unbound.service network-online.target
+  start_after rspamd valkey.service unbound.service network-online.target$rspamd_after
   unit_env rspamd "RSPAMD_LOCAL_ADDR=127.0.0.1"
   systemctl enable unbound valkey rspamd
 fi

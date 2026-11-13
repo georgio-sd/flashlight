@@ -29,6 +29,7 @@ Metadata:
       - Antispam
       - SpamhausDQSKey
       - AttachmentPolicy
+      - Antivirus
     - Label:
         default: "Storage Configuration"
       Parameters:
@@ -86,6 +87,14 @@ Parameters:
       from Outlook's blocked list (reg, url, inf, vhdx, PowerShell files...)
     Default: Score
     AllowedValues: [ Score, Gmail, Strict ]
+  Antivirus:
+    Type: String
+    Description: >-
+      Virus scanner ClamAV for incoming mail (with Antispam = ENABLED): a message with a virus is rejected. It
+      needs about 1 GB of memory, 2 GB for a few seconds while it loads new signatures, so it needs a medium or
+      larger instance type
+    Default: DISABLED
+    AllowedValues: [ ENABLED, DISABLED ]
   VpcCidr:
     Type: String
     Default: 10.0.0.0/16
@@ -165,6 +174,17 @@ Parameters:
     Description: Key Name
     ConstraintDescription: must be the name of an existing EC2 KeyPair.
 Rules:
+  AntivirusNeedsAntispamAndMemory:
+    RuleCondition: !Equals [ !Ref Antivirus, 'ENABLED' ]
+    Assertions:
+    - Assert: !Equals [ !Ref Antispam, 'ENABLED' ]
+      AssertDescription: The virus scanner works inside the spam filter. Antivirus = ENABLED needs Antispam = ENABLED
+    - Assert: !And
+      - !Not [ !Equals [ !Ref InstanceType, 't3.small' ] ]
+      - !Not [ !Equals [ !Ref InstanceType2, 't3a.small' ] ]
+      AssertDescription: >-
+        The virus scanner (ClamAV) needs about 1 GB of memory, 2 GB while it loads new signatures. Choose medium or
+        larger instance types (InstanceType and InstanceType2) or Antivirus = DISABLED
   SwapNeedsDisk:
     RuleCondition: !Equals [ !Ref Swap, 'ENABLED' ]
     Assertions:

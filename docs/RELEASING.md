@@ -113,6 +113,10 @@ stay in the list for good: a server several releases behind needs every step in 
    On an AlmaLinux instance with the Rspamd repository, `dnf download rspamd` the newest 4.x, check it with
    `rpm -K` (key `rspamd/rspamd.asc`), upload it to `packages/`, and update its name in `base.sh` (`rspamd_rpm`)
    and in the stage 1 `Files` list.
+   The macro check: compare `s3bucket/rspamd/olefy.py` with the newest olefy
+   (https://github.com/HeinleinSupport/olefy), and regenerate `olefy-requirements.txt` from the newest oletools:
+   in a Python 3.12 environment, `pip download --only-binary=:all: oletools colorclass python-magic`, then one line
+   `name==version --hash=sha256:...` per downloaded file.
 8. **Test a fresh install** on a test stand with `CertificateMode=staging`: install READY, mail between the
    stand's own domains, webmail, admin pages, DKIM, DNS records.
 9. **Test the upgrade** on a stand installed from the previous release, following UPGRADING.md step by step:
