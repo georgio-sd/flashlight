@@ -28,6 +28,7 @@ Metadata:
       Parameters:
       - Antispam
       - SpamhausDQSKey
+      - AttachmentPolicy
     - Label:
         default: "Storage Configuration"
       Parameters:
@@ -76,6 +77,15 @@ Parameters:
     Default: ''
     AllowedPattern: '^\S*$'
     ConstraintDescription: must not contain spaces
+  AttachmentPolicy:
+    Type: String
+    Description: >-
+      Attachments of risky file types (with Antispam = ENABLED). Score: they only add points to the spam score
+      (Rspamd's default). Gmail: mail with an attachment of a type Gmail blocks (exe, js, bat, iso, lnk...), also
+      inside archives, is rejected, and encrypted archives go to Junk. Strict: Gmail plus more Windows code types
+      from Outlook's blocked list (reg, url, inf, vhdx, PowerShell files...)
+    Default: Score
+    AllowedValues: [ Score, Gmail, Strict ]
   VpcCidr:
     Type: String
     Default: 10.0.0.0/16
@@ -454,6 +464,7 @@ Resources:
             export SWAP=${Swap}
             export ANTISPAM=${Antispam}
             export DQS_KEY=${SpamhausDQSKey}
+            export ATTACHMENT_POLICY=${AttachmentPolicy}
             export CERT_MODE=${CertificateMode}
             #
             export DOMAIN_ZONE_IDS=${domainzoneids}

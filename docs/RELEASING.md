@@ -106,16 +106,19 @@ stay in the list for good: a server several releases behind needs every step in 
    python build/make-maintenance.py 2-deployment.yaml x-maintenance.yaml
    ```
 
-6. **Test a fresh install** on a test stand with `CertificateMode=staging`: install READY, mail between the
+6. **Attachment lists.** Compare `s3bucket/rspamd/attachments-gmail.map` with Google's list of blocked file types
+   (https://support.google.com/mail/answer/6590) and `attachments-strict.map` with Microsoft's list of attachments
+   Outlook blocks; update them and the date in their headers.
+7. **Test a fresh install** on a test stand with `CertificateMode=staging`: install READY, mail between the
    stand's own domains, webmail, admin pages, DKIM, DNS records.
-7. **Test the upgrade** on a stand installed from the previous release, following UPGRADING.md step by step:
+8. **Test the upgrade** on a stand installed from the previous release, following UPGRADING.md step by step:
    `UPGRADE` lines in the event log, `flashlight=X.Y` in `versions`, the admin's settings files unchanged, mail
    still there. If the release has a migration, also test a release skip (from two releases back) if one exists,
    and a failing migration. A failing migration is tested on the instance with `MIGRATIONS_DIR`, `RELEASES` and
    `THIS_RELEASE`, which `upgrade-data` reads instead of its built-in values.
-8. **Publish the files.** Upload `s3bucket/` to `s3://mail-server-bundles/vX.Y/` keeping the layout, and check
+9. **Publish the files.** Upload `s3bucket/` to `s3://mail-server-bundles/vX.Y/` keeping the layout, and check
    that every path of the `Files` list is there.
-9. **Publish the code.** Merge into `main`, tag `vX.Y`, and write the release notes: what changed, whether the
+10. **Publish the code.** Merge into `main`, tag `vX.Y`, and write the release notes: what changed, whether the
    release changes the data, and any action the user must take.
 
 ## Testing tips

@@ -22,7 +22,8 @@ records, recovery after failures and upgrades.
   servers and your domains are protected against forged senders
 - Spam filtering (Rspamd): sender authenticity, blocklists of senders and links (Spamhaus with your free key,
   and others), content checks and a filter that learns from your mail. Spam goes to the Junk folder, obvious
-  spam is refused before it arrives
+  spam is refused before it arrives. Optionally, attachments of risky file types (programs, scripts, disk
+  images) are refused, as Gmail does
 - Protection against password guessing (fail2ban)
 - Daily database backups, and optional backups of all data with AWS Backup
 

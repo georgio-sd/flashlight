@@ -3,7 +3,7 @@
 # The stack's variables come from UserData. Without them some steps would act on empty values (an empty
 # domain list, for example, would delete every DKIM key), so stop before touching anything.
 for var in EIP_ID EIP AWS_REGION STACK MAIL_STORAGE BUCKET_CONFIG TIMEZONE ADMIN_EMAIL CERT_MODE INSTANCE_LIFECYCLE \
-    DOMAIN_NAMES DOMAIN_ZONE_IDS ADMIN_DOMAIN MAIL_DOMAIN REBUILD_AFTER_DAYS ANTISPAM SWAP; do
+    DOMAIN_NAMES DOMAIN_ZONE_IDS ADMIN_DOMAIN MAIL_DOMAIN REBUILD_AFTER_DAYS ANTISPAM SWAP ATTACHMENT_POLICY; do
   [ -n "${!var}" ] || { echo "base.sh: $var is not set, nothing done"; exit 1; }
 done
 #
@@ -724,6 +724,30 @@ EOF
     rspamd_conf worker-$worker.inc "allow_file_and_shm_inputs = false;"
   done
   rspamd_conf arc.conf "enabled = false;"
+  # Attachments of risky file types (stack parameter AttachmentPolicy). Score: Rspamd's own rules only add points
+  # (mime_types). Gmail: mail with an attachment of a type Gmail blocks is rejected, also when the file is inside an
+  # archive (multimap finds it, force_actions rejects with a message to the sender), and encrypted archives or
+  # archives inside archives go at least to Junk. Strict: Gmail plus more Windows code types from Outlook's list.
+  # The lists come with the release (attachments-*.map, sources in their headers).
+  rm -f /etc/rspamd/local.d/multimap.conf /etc/rspamd/local.d/force_actions.conf /etc/rspamd/local.d/maps.d/attachments-*.map
+  if [ "$ATTACHMENT_POLICY" != 'Score' ]; then
+    mkdir -p /etc/rspamd/local.d/maps.d
+    lists="gmail"
+    [ "$ATTACHMENT_POLICY" = 'Strict' ] && lists="gmail strict"
+    maps=""
+    for list in $lists; do
+      aws s3 cp s3://$BUCKET_CONFIG/attachments-$list.map /etc/rspamd/local.d/maps.d/
+      maps="$maps${maps:+, }\"/etc/rspamd/local.d/maps.d/attachments-$list.map\""
+    done
+    rspamd_conf multimap.conf "BLOCKED_ATTACHMENT {" '  type = "filename";' '  filter = "extension";' \
+      "  map = [$maps];" "  skip_archives = false;" "  score = 10.0;" \
+      '  description = "Attachment of a blocked file type (stack parameter AttachmentPolicy)";' "}"
+    rspamd_conf force_actions.conf "rules {" "  BLOCKED_ATTACHMENT_REJECT {" '    action = "reject";' \
+      '    expression = "BLOCKED_ATTACHMENT";' \
+      '    message = "Attachments of this file type are not accepted here; share the file as a link instead";' \
+      "  }" "  RISKY_ARCHIVE_JUNK {" '    action = "add header";' \
+      '    expression = "MIME_ENCRYPTED_ARCHIVE | MIME_ARCHIVE_IN_ARCHIVE";' "    least = true;" "  }" "}"
+  fi
   # Spamhaus through DQS with the stack's key (Spamhaus refuses queries from AWS without one)
   rm -f /etc/rspamd/local.d/rbl.conf /etc/rspamd/local.d/rbl_group.conf
   if [ -n "$DQS_KEY" ]; then
