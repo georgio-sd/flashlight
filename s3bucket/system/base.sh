@@ -906,3 +906,20 @@ if [ "$FAIL2BAN" = 'ENABLED' ]; then
   start_after fail2ban httpd.service postfix.service dovecot.service
   systemctl enable fail2ban
 fi
+#
+# The services this instance runs, in one place for the helpers (they depend on the stack's parameters, and on
+# what really got installed: olefy only if pip worked). running: must be up after the install (install-finish).
+# efs: they write to the EFS, so they are stopped together when another instance takes over (services-shutdown)
+# or this one is replaced (replace-instance); systemd orders the stops by the services' dependencies.
+running="mariadb postfix dovecot httpd php-fpm opendkim crond"
+efs="mariadb postfix dovecot httpd php-fpm opendkim crond logrotate.timer certbot-renew.timer"
+for unit in unbound valkey rspamd olefy clamd@scan clamav-freshclam fail2ban; do
+  if systemctl is-enabled -q $unit 2> /dev/null; then running="$running $unit"; fi
+done
+for unit in valkey rspamd clamav-freshclam autoshutdown; do
+  if systemctl is-enabled -q $unit 2> /dev/null; then efs="$efs $unit"; fi
+done
+printf '%s\n' "# Written by base.sh at the install: the services of this instance (they depend on the stack's parameters)" \
+  "# running: must be up after the install (install-finish)" "running=\"$running\"" \
+  "# efs: write to the EFS; stopped together when another instance takes over (services-shutdown) or this one" \
+  "# is replaced (replace-instance)" "efs=\"$efs\"" > /usr/local/etc/flashlight-services

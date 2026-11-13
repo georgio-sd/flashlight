@@ -21,6 +21,10 @@ export PATH=/usr/local/sbin:$PATH
 until id=$(imds instance-id) && [ -n "$id" ]; do sleep 5; done
 region=$(imds placement/region)
 me=flag-ec2id-$id
+# the services that write to the EFS: base.sh lists them (they depend on the stack's parameters, and include the
+# log rotation and certificate renewal timers, cron and the spot watcher); systemd orders the stops and starts
+efs="mariadb postfix dovecot httpd php-fpm opendkim crond logrotate.timer certbot-renew.timer"
+[ -f /usr/local/etc/flashlight-services ] && . /usr/local/etc/flashlight-services
 
 # the instance that owns the EFS now (the newest foreign flag), or nothing
 owner() {
@@ -40,12 +44,7 @@ gone() {
 while true; do
   taker=$(owner)
   if [ -n "$taker" ]; then
-    systemctl stop mariadb
-    systemctl stop postfix dovecot httpd php-fpm opendkim crond autoshutdown
-    # timers that would change files on the EFS: log rotation and certificate renewal
-    systemctl stop logrotate.timer certbot-renew.timer
-    # spam filter (stack parameter Antispam): Valkey keeps its data on the EFS; so does the virus scanner's updater
-    systemctl stop rspamd valkey clamav-freshclam 2> /dev/null
+    systemctl stop $efs
     instance-log STOP "instance $taker took over the EFS: services, cron and spot watcher stopped"
     # wait until the owner is gone (a newer owner, another flag, is followed instead) and the data are at a
     # release this instance can run
@@ -62,13 +61,7 @@ while true; do
     done
     rm -f /mnt/mailserver/flag-ec2id-*
     printf "Do not delete this file" > /mnt/mailserver/$me
-    systemctl start mariadb
-    systemctl start postfix dovecot httpd php-fpm opendkim crond
-    systemctl is-enabled -q autoshutdown && systemctl start autoshutdown
-    systemctl start logrotate.timer certbot-renew.timer
-    for unit in valkey rspamd clamav-freshclam; do
-      systemctl is-enabled -q $unit 2> /dev/null && systemctl start $unit
-    done
+    systemctl start $efs
     aws ec2 associate-address --instance-id "$id" --allocation-id "$(cat /usr/local/etc/eip-allocation-id)" \
       --allow-reassociation --region "$region" > /dev/null
     instance-log RESUME "instance ${taker:-?} is gone (terminated): EFS, services and the Elastic IP are back on this instance"
