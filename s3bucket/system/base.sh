@@ -383,6 +383,8 @@ rm -rf /etc/letsencrypt
 ln -s /mnt/mailserver/etc/letsencrypt /etc/letsencrypt
 # only when a new certificate was actually issued: services reload it, connections stay up (written at every boot)
 printf '#!/bin/bash\nsystemctl try-reload-or-restart postfix dovecot httpd\n' > /etc/letsencrypt/renewal-hooks/deploy/srv-reload
+# (a variable the package's renewal unit uses, but its /etc/sysconfig/certbot doesn't set; reported at every run)
+unit_env certbot-renew "RENEW_HOOK="
 chmod 744 /etc/letsencrypt/renewal-hooks/deploy/srv-reload
 # CertificateMode can be switched from staging to production with a stack update: the next instance replaces
 # the test certificate on EFS with a trusted one (same names and key type; renewals then use production too).
@@ -500,6 +502,8 @@ systemctl enable postfix
 rm -rf /etc/dovecot
 mkdir /etc/dovecot
 aws s3 cp s3://$BUCKET_CONFIG/dovecot.conf /etc/dovecot
+# DH parameters for ssl_dh: the standard ffdhe2048 group (written out at once, nothing is computed)
+openssl genpkey -genparam -algorithm DH -pkeyopt group:ffdhe2048 -out /etc/dovecot/dh.pem
 # Mail that Rspamd marked as spam goes to the Junk folder; "stop" also keeps the user's own filters (vacation
 # replies, for one) away from it. Without Antispam no message is marked, and the script does nothing.
 mkdir /etc/dovecot/sieve
