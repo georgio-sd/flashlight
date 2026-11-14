@@ -255,7 +255,9 @@ flowchart LR
    and ARC and written the Authentication-Results header. Without the spam filter OpenDKIM verifies too.
 4. **Dovecot** delivers through LMTP. A global Sieve script (`sieve_before`) puts mail with `X-Spam: Yes` into
    Junk and stops there, so the user's own filters and vacation replies never answer spam. Other mail goes
-   through the user's filters. Mailbox quotas from PostfixAdmin apply.
+   through the user's filters. Mailbox quotas from PostfixAdmin apply: Postfix asks Dovecot
+   (its `quota-status` service) before it accepts a message, and refuses mail for a full mailbox during the SMTP
+   session, so no bounce goes out later to a forged sender address.
 
 If a milter is down, mail still flows, unchecked or unsigned (`milter_default_action = accept`).
 
@@ -271,7 +273,7 @@ If a milter is down, mail still flows, unchecked or unsigned (`milter_default_ac
 4. OpenDKIM signs it with the domain's key. Postfix delivers it, with TLS when the receiving server offers it.
 
 Webmail sends the same way, logging in to Postfix on the server itself. Mail generated on the server (cron,
-PostfixAdmin, the alerts) is only signed. Undeliverable mail is retried for a day, then bounced.
+PostfixAdmin, the alerts) is only signed. Undeliverable mail is retried for five days, then returned to the sender.
 
 ## Spam filter
 

@@ -49,8 +49,7 @@ virtual_transport = lmtp:unix:private/dovecot-lmtp
 #
 # Queue and message size
 #
-maximal_queue_lifetime = 1d
-bounce_queue_lifetime = 1d
+# (mail that can't be delivered is retried for 5 days before it is returned to the sender, Postfix's default)
 message_size_limit = 20971520
 
 #
@@ -92,12 +91,14 @@ smtpd_sender_restrictions = permit_mynetworks,
  permit_sasl_authenticated,
  reject_non_fqdn_sender,
  reject_unknown_sender_domain
+# (last: a full mailbox is refused here instead of being bounced later; Dovecot's quota-status service, dovecot.conf)
 smtpd_recipient_restrictions = permit_mynetworks,
  permit_sasl_authenticated,
  reject_non_fqdn_recipient,
  reject_unknown_recipient_domain,
  reject_multi_recipient_bounce,
- reject_unauth_destination
+ reject_unauth_destination,
+ check_policy_service unix:private/quota-status
 smtpd_data_restrictions = permit_mynetworks,
  permit_sasl_authenticated,
  reject_unauth_pipelining,

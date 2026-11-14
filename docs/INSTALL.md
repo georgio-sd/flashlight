@@ -192,14 +192,22 @@ The new server adds the domain to PostfixAdmin, creates its DKIM key and its MX,
 A removed domain loses Flashlight's DNS records and its DKIM key, but stays in PostfixAdmin with its mailboxes:
 delete it there if you no longer need them.
 
+### What can't be changed after the install
+
+- **The main domain** (MainZoneID). The server's names, its certificate and its reverse DNS are made from it. Other
+  mail domains can be added and removed at any time (above), the main one stays.
+- **The names of the server** (MailSubDomain, AdminSubDomain). The certificate is issued once for these names, and
+  mail programs and DNS records point to them.
+- **The network settings** of stage 2 (VpcCidr, SubnetMask, AZoneNames, TwoAZoneConf).
+
+To change any of these, install a new server and move the data to it.
+
 ### Changing the server's settings
 
 Most stage 2 parameters can be changed with a stack update (**Use current template**): the instance type,
 Spot or On-Demand, the spam filter, the antivirus and the others. The update replaces the server with a new
 one that has the same data; mail is down for a few minutes. If the new server fails to install, the stack rolls
 back and the old one goes on working.
-
-Don't change the network settings (VpcCidr, SubnetMask, AZoneNames, TwoAZoneConf).
 
 **Lower prices without Spot.** A 1- or 3-year Reserved Instance or Savings Plan for your instance type, bought in
 the AWS console, lowers the On-Demand price close to the Spot level. Set InstanceLifecycle to On-Demand and
