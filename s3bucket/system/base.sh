@@ -758,7 +758,8 @@ EOF
   # no greylisting: it delays legitimate mail by minutes or hours (the sender retries later)
   rspamd_conf actions.conf "reject = 15;" "add_header = 6;" "greylist = null;"
   rspamd_conf greylist.conf "enabled = false;"
-  # Mail sent by logged-in users: at most 30 messages an hour and 300 a day per user (a spam bot on a stolen mailbox
+  # Mail sent by logged-in users: 30 messages an hour and 300 a day per user. Each is a bucket: 30 (300) messages
+  # can go in a row, then it refills at that rate, so the first hour allows about 60 and the first day 600 (a spam bot on a stolen mailbox
   # hits this within minutes; outbound-alert tells the admin); over it, a temporary refusal. skip_recipients: count
   # messages, not recipients (those are limited per message in Postfix). The admin can change the numbers in
   # override.d/ratelimit.conf. Their mail gets no spam header: it is sent as it is, or refused from 15 points.

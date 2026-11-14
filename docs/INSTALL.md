@@ -250,9 +250,13 @@ spam in bulk before you notice:
 
 | Limit | Default | Over the limit |
 |---|---|---|
-| Messages per user per hour | 30 | The message is refused for now ("try again later") |
-| Messages per user per day | 300 | The same |
+| Messages per user, hourly | 30 in a row, then 30 an hour | The message is refused for now ("try again later") |
+| Messages per user, daily | 300 in a row, then 300 a day | The same |
 | Recipients of one message | 20 | The extra recipients are refused |
+
+Each limit is an allowance that refills at a steady pace: a user who hasn't sent anything for a while can send
+30 messages in a row, and after that one more every two minutes (30 an hour). So the most a mailbox can send is
+about 60 messages in its first hour and 600 in its first day, then 30 an hour and 300 a day.
 
 A user also can send only as their own address or as an alias that delivers to their mailbox.
 

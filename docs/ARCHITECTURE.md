@@ -267,7 +267,9 @@ If a milter is down, mail still flows, unchecked or unsigned (`milter_default_ac
    1.2 or newer; port 25 has no login, so passwords can't be guessed through it.
 2. Postfix checks that the user sends as their own address or an alias that delivers to their mailbox
    (`reject_authenticated_sender_login_mismatch`), and allows at most 20 recipients per message.
-3. Rspamd counts the user's messages: over 30 an hour or 300 a day, the message is refused for now. Messages it
+3. Rspamd counts the user's messages: each user has an allowance of 30 messages that refills at 30 an hour, and one of 300 that
+   refills at 300 a day (so at most about 60 in the first hour and 600 in the first day); over either, the message
+   is refused for now. Messages it
    scores at 15 points or more, or with a virus or a blocked attachment, are refused. Outgoing mail never gets a
    spam header.
 4. OpenDKIM signs it with the domain's key. Postfix delivers it, with TLS when the receiving server offers it.
