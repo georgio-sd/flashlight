@@ -369,6 +369,30 @@ Resources:
                       time.sleep(15 * attempt)
 
 
+          def wait_for_image(image_id, context):
+              # A copied image can't start instances until the copy is finished (several minutes), and stage 2
+              # would fail on it. Waits for it as long as this function may run, keeping time for the answer to
+              # CloudFormation; the DNS records are made before, so the copy runs meanwhile.
+              while True:
+                  try:
+                      images = ec2.describe_images(ImageIds=[image_id])['Images']
+                      state = images[0]['State'] if images else 'pending'
+                  except Exception as e:
+                      # a new copy may not be visible for a moment
+                      print('Image state not read: ' + repr(e))
+                      state = 'pending'
+                  if state == 'available':
+                      print('Image ' + image_id + ' is available')
+                      return 'available'
+                  if state != 'pending':
+                      raise RuntimeError('image ' + image_id + ' is ' + state + ': the copy failed, update the stack to try again')
+                  if context.get_remaining_time_in_millis() < 45000:
+                      print('Image ' + image_id + ' is still being copied')
+                      return ('STILL BEING COPIED: create the stage 2 stack only when the image ' + image_id +
+                              ' is available (EC2 console, AMIs)')
+                  time.sleep(15)
+
+
           def upsert(zone_id, records):
               changes = [{'Action': 'UPSERT', 'ResourceRecordSet': {
                   'Name': name, 'Type': rtype, 'TTL': TTL, 'ResourceRecords': [{'Value': value}]}}
@@ -518,7 +542,8 @@ Resources:
                                     if key not in new})
                       data = {'DomainNames': ','.join(domains), 'DomainZoneIDs': ','.join(zone_ids),
                               'DNSRecAdmin': admin, 'DNSRecMail': mail,
-                              'ImageId': image_id, 'ReverseDNS': reverse_dns}
+                              'ImageId': image_id, 'ReverseDNS': reverse_dns,
+                              'ImageStatus': wait_for_image(image_id, context)}
                   elif event['RequestType'] == 'Delete':
                       clean_up(our_records(event['ResourceProperties']))
                       remove_reverse_dns(event['ResourceProperties']['EipAllocationId'])
@@ -531,7 +556,8 @@ Resources:
       LoggingConfig:
         LogGroup: !Ref DnsPresetLogGroup
       Runtime: python3.14
-      Timeout: 300
+      # the most a function may run: it waits for the copy of the server image
+      Timeout: 900
       MemorySize: 256
       Tags:
       - Key: Name
@@ -561,6 +587,9 @@ Outputs:
     Value: !GetAtt [ DnsPreset, ImageId ]
     Export:
       Name: !Sub "${AWS::StackName}-ImageId"
+  ImageStatus:
+    Description: The server image must be available before the stage 2 stack is created
+    Value: !GetAtt [ DnsPreset, ImageStatus ]
   DNSRecAdmin:
     Value: !GetAtt [ DnsPreset, DNSRecAdmin ]
     Export:

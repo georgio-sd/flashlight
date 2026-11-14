@@ -44,12 +44,16 @@ stage 2 refers to it, and its default there is `MailServerDnsPreset`.
 | MailSubDomain | Name of the mail server and webmail, `mail` by default: `mail.<main domain>` |
 | Updater | Leave as it is. Switching it between Even and Odd re-runs the stack's setup without changing anything else |
 
-The stack takes a few minutes. It creates:
+The stack takes a few minutes; the first time in an account up to 15, while the server image is copied. It
+creates:
 
 - the Elastic IP, the server's permanent address, with reverse DNS pointing to `mail.<main domain>`;
 - the A records of `mail.` and `admin.`, and an MX record in every mail domain;
 - the config bucket with the installer files of the release, copied from the public Flashlight bucket;
 - the server image (AMI) for your region.
+
+If the output `ImageStatus` says the image is still being copied, wait until it is available (EC2 console,
+AMIs) before you create stage 2.
 
 Its **Outputs** tab shows what it did: the address (`Eip`), the config bucket (`S3Bucket`), the image
 (`ImageId`), the DNS records, and links to the logs of its two Lambda functions.
