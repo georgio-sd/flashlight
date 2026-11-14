@@ -16,7 +16,8 @@ The whole installation takes about half an hour, most of it waiting for AWS.
    the domain's registrar must point to the Route 53 name servers. One of them is the **main domain**: the
    server's own names are made from it (`mail.<main domain>` and `admin.<main domain>` by default).
    Flashlight creates the MX, SPF, DKIM and DMARC records itself. If the domain already receives mail
-   elsewhere, its MX record moves to Flashlight when you install, and SPF is replaced by Flashlight's.
+   elsewhere, its MX record moves to Flashlight as soon as stage 1 is created (so create stage 2 right after
+   it), and its SPF record is replaced by Flashlight's.
    If you have just created the hosted zone or changed the domain's name servers at the registrar, wait until
    the change is visible before installing (`dig NS <domain>` shows the Route 53 servers); it can take up to
    48 hours. Until then Let's Encrypt can't validate the domain and the certificate isn't issued.
@@ -93,7 +94,7 @@ Don't change the network settings after the install.
 | Parameter | Default | What it does |
 |---|---|---|
 | InstanceType | t3.small | Main instance type. t3.small (2 GB) is enough for a small company with the spam filter; t3.medium (4 GB) or larger for the antivirus or for many users |
-| InstanceType2 | t3a.small | A second, interchangeable type. With Spot it gives the Auto Scaling group more capacity pools to choose from. With On-Demand the server runs on InstanceType, and on this one only when AWS has no capacity of the first. `None`: only InstanceType. Use it with a Reserved Instance (which applies to On-Demand only), so the server never runs on a type the reservation doesn't cover |
+| InstanceType2 | t3a.small | A second, interchangeable type of the same size as InstanceType (t3.medium with t3a.medium; the template checks it). With Spot it gives the Auto Scaling group more capacity pools to choose from. With On-Demand the server runs on InstanceType, and on this one only when AWS has no capacity of the first. `None`: only InstanceType. Use it with a Reserved Instance (which applies to On-Demand only), so the server never runs on a type the reservation doesn't cover |
 | InstanceLifecycle | Spot | `Spot` costs much less; AWS may take the instance back, and a new one takes over within about ten minutes. `On-Demand` is never taken back |
 | RebuildAfterDays | 30 | The server is rebuilt from scratch on current packages once it is this old, on the next Saturday-to-Sunday night at 03:15 (about 4 minutes without mail). This is how it gets security fixes and updates: the operating system, and the programs installed from its repositories (Postfix, Dovecot, Rspamd, ClamAV and others). The web applications (Roundcube, PostfixAdmin, phpMyAdmin) come with the Flashlight release and are updated by [upgrades](UPGRADING.md). 0 turns it off |
 | DiskVolumeSize | 10 | The server's disk in GiB. 8 is enough without swap; with swap at least 10 for small and medium types, 12 for large and xlarge |
@@ -294,6 +295,19 @@ sudo postconf -e flashlight_submission_recipient_limit=50 && sudo systemctl relo
 Both files survive server replacements and Flashlight upgrades. If you raise the limits a lot, check
 that your users really need it: these limits are what stops a stolen mailbox from getting your server's
 address onto blocklists.
+
+### Your own SPF and DMARC records
+
+Flashlight writes `v=spf1 ip4:<server address> -all` and a DMARC record with `p=reject` for every mail domain.
+If your company also sends mail through another service, or you want DMARC reports, edit the records in
+Route 53:
+
+- **SPF:** keep `ip4:<server address>` in the record and add what you need, for example
+  `v=spf1 ip4:203.0.113.10 include:_spf.example.net -all`. A record that allows the server's address is left
+  alone; one that doesn't is replaced at the next server start.
+- **DMARC:** an existing `_dmarc` record is never changed. Flashlight creates it only when the domain has none.
+
+The DKIM record is always Flashlight's.
 
 ### Your own settings
 

@@ -120,7 +120,9 @@ Parameters:
     AllowedValues: [ t3.small, t3.medium, t3.large, t3.xlarge ]
   InstanceType2:
     Type: String
-    Description: EC2 additional instance type
+    Description: >-
+      Second instance type, of the same size as InstanceType (with Spot the server runs on either one). None: only
+      InstanceType
     Default: t3a.small
     AllowedValues: [ None, t3a.small, t3a.medium, t3a.large, t3a.xlarge ]
   InstanceLifecycle:
@@ -201,6 +203,17 @@ Rules:
       AssertDescription: >-
         With Swap, the large and xlarge instance types (8 GB of memory or more) need a disk (DiskVolumeSize) of at
         least 12 GiB. Choose a bigger disk or Swap = DISABLED
+  InstanceTypesSameSize:
+    Assertions:
+    - Assert: !Or
+      - !Equals [ !Ref InstanceType2, 'None' ]
+      - !And [ !Equals [ !Ref InstanceType, 't3.small' ], !Equals [ !Ref InstanceType2, 't3a.small' ] ]
+      - !And [ !Equals [ !Ref InstanceType, 't3.medium' ], !Equals [ !Ref InstanceType2, 't3a.medium' ] ]
+      - !And [ !Equals [ !Ref InstanceType, 't3.large' ], !Equals [ !Ref InstanceType2, 't3a.large' ] ]
+      - !And [ !Equals [ !Ref InstanceType, 't3.xlarge' ], !Equals [ !Ref InstanceType2, 't3a.xlarge' ] ]
+      AssertDescription: >-
+        InstanceType2 must be the same size as InstanceType (t3.medium with t3a.medium, for example), or None:
+        with Spot the server may run on either type
   SpamhausKeyNeedsAntispam:
     RuleCondition: !Equals [ !Ref Antispam, 'DISABLED' ]
     Assertions:

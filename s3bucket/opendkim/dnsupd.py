@@ -6,12 +6,17 @@ usage: dnsupd.py DOMAINS ZONE_IDS EIP MAIL_HOST
   DOMAINS   comma-separated mail domains; ZONE_IDS their Route 53 zones in the same order
   MAIL_HOST the mail server's host name, in the zone of the first domain
 
-The records belong to the server and are always brought to these values:
-  mail._domainkey.<domain>  DKIM public key of /mnt/mailserver/etc/postfix/dkim/<domain>/mail.private
-  <domain>                  SPF "v=spf1 ip4:<EIP> -all"; other TXT strings of the domain (site
-                            verifications and the like) are kept, only the v=spf1 string is replaced
-  _dmarc.<domain>           "v=DMARC1; p=reject; sp=reject; adkim=r; aspf=r"
-  <MAIL_HOST>               SPF of the host name itself (checked for bounces, which have an empty sender)
+The records:
+  mail._domainkey.<domain>  DKIM public key of /mnt/mailserver/etc/postfix/dkim/<domain>/mail.private,
+                            always brought to this value
+  <domain>                  SPF "v=spf1 ip4:<EIP> -all". An SPF record that already allows our address
+                            (ip4:<EIP>) is the admin's own, e.g. with an include: of another mail service, and
+                            stays as it is; any other one is replaced. Other TXT strings of the domain (site
+                            verifications and the like) are always kept
+  _dmarc.<domain>           "v=DMARC1; p=reject; sp=reject; adkim=r; aspf=r", only if the domain has no DMARC
+                            record yet (the admin may have changed the policy or added a report address)
+  <MAIL_HOST>               SPF of the host name itself (checked for bounces, which have an empty sender),
+                            by the same rule as the domain's
 """
 import base64
 import subprocess
@@ -36,16 +41,29 @@ def dkim_value(domain):
     return txt(*[record[i:i + 255] for i in range(0, len(record), 255)])
 
 
-def apex_txt_with_spf(zone_id, domain, spf):
-    """the domain's TXT values with any v=spf1 string replaced by ours"""
-    name = domain.rstrip('.') + '.'
+def txt_values(zone_id, name):
+    """the TXT values of a name as Route 53 holds them (quoted strings), or an empty list"""
+    name = name.rstrip('.').lower() + '.'
     found = route53.list_resource_record_sets(HostedZoneId=zone_id, StartRecordName=name,
                                               StartRecordType='TXT', MaxItems='1')['ResourceRecordSets']
-    values = []
-    if found and found[0]['Name'] == name and found[0]['Type'] == 'TXT':
-        values = [r['Value'] for r in found[0]['ResourceRecords']
-                  if not r['Value'].strip('"').lower().startswith('v=spf1')]
-    return values + [txt(spf)]
+    if found and found[0]['Name'].lower() == name and found[0]['Type'] == 'TXT':
+        return [r['Value'] for r in found[0].get('ResourceRecords', [])]
+    return []
+
+
+def plain(value):
+    """a TXT value without its quotes (a long value is several quoted strings)"""
+    return value.replace('" "', '').strip('"')
+
+
+def txt_with_spf(zone_id, name, eip):
+    """the name's TXT values with our SPF; an SPF that already allows our address stays as it is"""
+    values = txt_values(zone_id, name)
+    for value in values:
+        words = plain(value).lower().split()
+        if words[:1] == ['v=spf1'] and ('ip4:' + eip in words or 'ip4:' + eip + '/32' in words):
+            return values
+    return [v for v in values if not plain(v).lower().startswith('v=spf1')] + [txt('v=spf1 ip4:%s -all' % eip)]
 
 
 def upsert(name, values):
@@ -57,16 +75,16 @@ def main():
     domains = sys.argv[1].split(',')
     zone_ids = sys.argv[2].split(',')
     eip, mail_host = sys.argv[3], sys.argv[4]
-    spf = 'v=spf1 ip4:%s -all' % eip
 
     for i, (domain, zone_id) in enumerate(zip(domains, zone_ids)):
         changes = [
             upsert('mail._domainkey.' + domain, [dkim_value(domain)]),
-            upsert(domain, apex_txt_with_spf(zone_id, domain, spf)),
-            upsert('_dmarc.' + domain, [txt('v=DMARC1; p=reject; sp=reject; adkim=r; aspf=r')]),
+            upsert(domain, txt_with_spf(zone_id, domain, eip)),
         ]
+        if not any(plain(v).lower().startswith('v=dmarc1') for v in txt_values(zone_id, '_dmarc.' + domain)):
+            changes.append(upsert('_dmarc.' + domain, [txt('v=DMARC1; p=reject; sp=reject; adkim=r; aspf=r')]))
         if i == 0:
-            changes.append(upsert(mail_host, [txt(spf)]))
+            changes.append(upsert(mail_host, txt_with_spf(zone_id, mail_host, eip)))
         route53.change_resource_record_sets(HostedZoneId=zone_id, ChangeBatch={'Changes': changes})
         print('dnsupd: %s: DKIM, SPF, DMARC%s updated' % (domain, ', SPF of ' + mail_host if i == 0 else ''))
 

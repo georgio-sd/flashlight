@@ -80,8 +80,9 @@ EFS, the IAM role. It's used for upgrades and for changing the domain list.
 3. **`user-script.sh`**, if the admin put one into the config bucket, runs next. Its failure is reported
    (`USER` line) but doesn't fail the install.
 4. **`install-finish result`** decides: on success it writes the EFS `flag` (the first install is done) and
-   schedules a check for after the reboot; on failure, see below. Then the instance reboots, into the new kernel
-   if the update brought one.
+   schedules a check for after the reboot; on failure, see below. After a good install the instance reboots, into
+   the new kernel if the update brought one. A failed install doesn't reboot, so the services configured before
+   the failure never start on a half-configured server.
 5. **`install-finish ready`** runs once after the reboot: when all services of the list are up (it waits up to
    2 minutes), it writes `READY` to the event log and signals SUCCESS to CloudFormation.
 
@@ -98,6 +99,10 @@ rolls back and deletes the EFS, and writes a `FAILED` line naming the command th
 - **during a replacement by the Auto Scaling group** (Spot, price check, rebuild, health check): it tries a new
   instance after 5 minutes, up to 3 failed installs in 3 hours. After that the last instance stays up for
   diagnosis.
+
+If the install can't even start (the AWS CLI can't be installed, or the config bucket can't be read), there is no
+`install-finish` to report it: the instance turns itself off after 5 minutes, which terminates it, and the Auto
+Scaling group starts a new one.
 
 ### Replacements
 
@@ -138,6 +143,7 @@ already upgraded to a newer release.
 | MAILBOX | Clean-up of deleted mailboxes |
 | BACKUP | The daily database dump |
 | ALERT | A mailbox that may be compromised |
+| CHECK, ERROR | The weekly Spot price check: its decision with the prices, or why it couldn't compare |
 | WARN | Something worked with a fallback (swap made smaller, the Rspamd repository unreachable...) |
 | USER | The admin's user-script.sh failed |
 
@@ -325,12 +331,13 @@ hours, with an `ALERT` line in the event log. The limits can be changed by the a
 | A of `mail.` and `admin.` | Stage 1 Lambda | Stack create and update |
 | MX of every domain (`10 mail.<main domain>`) | Stage 1 Lambda | Stack create and update |
 | Reverse DNS of the Elastic IP | Stage 1 Lambda | Stack create and update |
-| SPF (`v=spf1 ip4:<EIP> -all`) | `dnsupd.py` on the server | Every install |
+| SPF (`v=spf1 ip4:<EIP> -all`) | `dnsupd.py` on the server | Every install, unless the record already allows the address |
 | DKIM (`<selector>._domainkey`, RSA) | `dnsupd.py` on the server | Every install |
-| DMARC (`p=reject`) | `dnsupd.py` on the server | Every install |
+| DMARC (`p=reject`) | `dnsupd.py` on the server | Only when the domain has no DMARC record |
 
-`dnsupd.py` replaces only Flashlight's strings: other TXT values of the domain (site verifications, for
-example) stay. A domain removed from the stack loses its DKIM key and Flashlight's records.
+`dnsupd.py` keeps other TXT values of the domain (site verifications, for example). It also keeps the admin's
+own records: an SPF record that already allows the server's address (with an `include:` of another mail service,
+say) and any existing DMARC record. A domain removed from the stack loses its DKIM key and Flashlight's records.
 
 The certificate (Let's Encrypt, RSA) covers `mail.<main domain>` and `admin.<main domain>`; it is used by
 Postfix, Dovecot and Apache. Certbot validates through DNS (`_acme-challenge` TXT records in Route 53), so no

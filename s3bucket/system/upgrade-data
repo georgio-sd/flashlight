@@ -9,23 +9,29 @@
 #
 #   upgrade-data check      right after EFS is mounted, before anything changes: stop if the data belong to a
 #                           newer release (old code must not touch them); create the file if it is missing
-#   upgrade-data run        once MariaDB runs: if the data are older, back them up, run the migrations up to this
-#                           release in order (upgrade-X-Y.sh from the config bucket; s3bucket/migrations/ in the
-#                           repository) and restore all on a failure
+#   upgrade-data run        once MariaDB runs: if the data are older, bring them to this release step by step. A
+#                           step listed in "migrations" runs its script (upgrade-X-Y.sh from the config bucket;
+#                           s3bucket/migrations/ in the repository); the other steps change no data. Before the
+#                           first script everything is backed up, and restored if a script fails
 #   upgrade-data set KEY VALUE
 #   upgrade-data newer-data succeeds if the data belong to a newer release than this one, and prints both
 #                           (services-shutdown: an older instance must not resume service on such data)
 #
-# Releasing a new version: set this_release, add it to releases, and ship upgrade-<previous>-<new>.sh only if the
-# data need a one-off change (configs that Flashlight owns are simply replaced, web applications are updated by
-# version). A user can skip releases: all steps from the data's release up to this one run in a row.
+# Releasing a new version: set this_release and add it to releases. Only if the data need a one-off change, ship
+# upgrade-<previous>-<new>.sh and add the step "<previous>-<new>" to migrations (configs that Flashlight owns are
+# simply replaced, web applications are updated by version). A user can skip releases: all steps from the data's
+# release up to this one run in a row.
 #
 this_release=1.0
 releases="1.0"
+# the steps that have a migration script, e.g. "1.1-1.2 1.4-1.5"
+migrations=""
 #
-# Testing: THIS_RELEASE, RELEASES and MIGRATIONS_DIR (local folder instead of the config bucket) replace the above
+# Testing: THIS_RELEASE, RELEASES, MIGRATIONS and MIGRATIONS_DIR (local folder instead of the config bucket) replace
+# the above
 this_release=${THIS_RELEASE:-$this_release}
 releases=${RELEASES:-$releases}
+migrations=${MIGRATIONS-$migrations}
 export PATH=/usr/local/sbin:$PATH
 efs=/mnt/mailserver
 file=$efs/versions
@@ -109,6 +115,16 @@ case "$1" in
       instance-log FAILED "the data on EFS belong to Flashlight $data, which this installer can't upgrade from: nothing changed"
       exit 1
     fi
+    # no step with a migration script: the data themselves don't change, only their release
+    scripts=""
+    for step in $steps; do
+      [[ " $migrations " == *" $step "* ]] && scripts=1
+    done
+    if [ -z "$scripts" ]; then
+      set_value flashlight $this_release
+      instance-log UPGRADE "data $data -> $this_release, no data changes in between"
+      exit 0
+    fi
     dir=$efs/backup/upgrade-$data-$this_release-$(date +%Y-%m-%d-%H-%M-%S)
     instance-log UPGRADE "data $data -> $this_release, backup in ${dir#$efs/}"
     if ! backup $dir; then
@@ -116,6 +132,10 @@ case "$1" in
       exit 1
     fi
     for step in $steps; do
+      if [[ " $migrations " != *" $step "* ]]; then
+        set_value flashlight ${step#*-}
+        continue
+      fi
       script=$dir/upgrade-$step.sh
       if [ -n "$MIGRATIONS_DIR" ]; then cp $MIGRATIONS_DIR/upgrade-$step.sh $script
       else aws s3 cp s3://$BUCKET_CONFIG/upgrade-$step.sh $script --quiet

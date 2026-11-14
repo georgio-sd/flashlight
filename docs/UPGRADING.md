@@ -96,15 +96,16 @@ REBOOT   rebooting
 READY    installed and rebooted, services up
 ```
 
-The `UPGRADE` lines appear only when the release changes the data. `/mnt/mailserver/versions` now shows the
-new release. Then send a test message and log in to webmail.
+A release that doesn't change the data shows one line instead: `UPGRADE data 1.0 -> 1.1, no data changes in
+between`. `/mnt/mailserver/versions` now shows the new release. Then send a test message and log in to webmail.
 
 ## What happens on the server
 
 The new instance mounts EFS and compares the release of the data with its own release:
 
 - **Same release:** a normal install. Only the configs and the instance are new.
-- **Older data:** it starts MariaDB and backs up everything a data change may touch: the databases and the
+- **Older data, and no release in between changes them:** only the release recorded for the data is raised.
+- **Older data that must change:** it starts MariaDB and backs up everything a data change may touch: the databases and the
   `etc`, `www`, `root` and `automation` folders on EFS. Mail itself is never changed by an upgrade and is not
   in this backup. Then it runs the data changes of each release in between, in order. If any of them fails,
   it restores the whole backup, writes a `FAILED` line to the event log and stops; your data are then exactly

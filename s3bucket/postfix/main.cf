@@ -80,10 +80,15 @@ smtpd_helo_restrictions = permit_mynetworks,
  permit_sasl_authenticated,
  reject_non_fqdn_helo_hostname,
  reject_invalid_helo_hostname
-# a logged-in user sends only as their own address or an alias of it (first: webmail logs in from the server itself)
+# a logged-in user sends only as their own address or an alias of it: checked on ports 587 and 465, where users
+# log in (master.cf: there it comes before everything else, as webmail logs in from the server itself)
 smtpd_sender_login_maps = proxy:mysql:/etc/postfix/mysql/sender_login_maps.cf
-smtpd_sender_restrictions = reject_authenticated_sender_login_mismatch,
+flashlight_submission_sender_restrictions = reject_authenticated_sender_login_mismatch,
  permit_mynetworks,
+ permit_sasl_authenticated,
+ reject_non_fqdn_sender,
+ reject_unknown_sender_domain
+smtpd_sender_restrictions = permit_mynetworks,
  permit_sasl_authenticated,
  reject_non_fqdn_sender,
  reject_unknown_sender_domain

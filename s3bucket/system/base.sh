@@ -147,6 +147,8 @@ dnf install -y php php-cli php-fpm php-mysqlnd php-mbstring php-intl php-xml php
 # Quiet logs: each step below removes a warning that would otherwise appear at every boot
 # - chrony: IPv4 only (IPv6 is off, and its command socket on ::1 fails)
 if [ -f /etc/sysconfig/chronyd ]; then sed -i 's/^OPTIONS="\(.*\)"$/OPTIONS="\1 -4"/' /etc/sysconfig/chronyd; fi
+# - chrony's folders belong to root in the image, so chronyd can't save its clock drift (an error every hour)
+if id chrony > /dev/null 2>&1; then chown chrony:chrony /var/lib/chrony /var/log/chrony; fi
 # - rpcbind and rpc.statd serve NFSv3 only (EFS is mounted with NFSv4); they also fail on IPv6 sockets
 systemctl mask rpcbind.service rpcbind.socket rpc-statd.service rpc-statd-notify.service
 # - NFSv4 ID mapping domain (EFS maps users by number; without it the default is reported at every mount)
@@ -814,7 +816,7 @@ EnvironmentFile=/etc/olefy.conf
 ExecStart=/opt/olefy/bin/python -W ignore::SyntaxWarning /opt/olefy/olefy.py
 Restart=always
 RestartSec=3
-RuntimeMaxSec=4h
+MemoryMax=512M
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict

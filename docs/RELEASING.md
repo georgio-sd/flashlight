@@ -79,7 +79,8 @@ none.
 - after EFS is mounted and MariaDB is running, before any other service is configured;
 - with `bash -e`, so the first failing command fails the migration;
 - after a backup of all databases and of the `etc`, `www`, `root` and `automation` folders;
-- one after another, from the data's release to the installer's release, so a user can skip releases.
+- one after another, from the data's release to the installer's release, so a user can skip releases. A release
+  step without a migration only raises the release recorded for the data.
 
 If a migration fails, everything is restored from the backup and the install stops. A migration therefore
 doesn't need its own rollback, but it must not change anything outside the backup (mail, the queue, other
@@ -96,7 +97,8 @@ stay in the list for good: a server several releases behind needs every step in 
 
 1. **Version.** In `s3bucket/system/upgrade-data`, set `this_release=X.Y` and append `X.Y` to `releases`
    (oldest first, every release listed).
-2. **Migration**, if the data change: write `s3bucket/migrations/upgrade-<previous>-X.Y.sh`.
+2. **Migration**, if the data change: write `s3bucket/migrations/upgrade-<previous>-X.Y.sh` and add the step
+   `<previous>-X.Y` to `migrations` in `upgrade-data`. A step that isn't listed there runs no script.
 3. **Files list.** Every file in `s3bucket/` that instances use is in the stage 1 `Files` list, including new
    files and all migrations. A missing file is simply absent from the config bucket and fails the install.
 4. **BaseUrl.** In `1-dns-preset.yaml`, point `BaseUrl` to `.../vX.Y`.

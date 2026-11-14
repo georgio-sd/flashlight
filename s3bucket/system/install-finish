@@ -3,7 +3,8 @@
 # Decides what happens after an install. Self-contained: it may run when base.sh failed before
 # installing its helpers or mounting EFS.
 #
-#   install-finish result BASE_RC [USER_RC]   from UserData, after base.sh and user-script.sh, before the reboot
+#   install-finish result BASE_RC [USER_RC]   from UserData, after base.sh and user-script.sh; UserData then
+#                                             reboots, but only after a good install
 #   install-finish ready                      from cron after the reboot (scheduled only after a good install)
 #
 # Good install: the EFS flag is written; after the reboot the main services must be running, then READY goes
@@ -14,6 +15,7 @@
 #     a 20-minute timeout); no retries, the person updating the stack takes over
 #   - instance replaced by the ASG (spot, price check, scheduled rebuild, health check): up to 3 installs in
 #     a row are tried on new instances, 5 minutes apart; after that the instance stays up for diagnosis
+#   A failed install isn't rebooted: the services configured before the failure would start half-configured.
 # A failed user-script.sh is only reported (USER line): it's an optional addition and doesn't fail the install.
 #
 # Needs STACK, AWS_REGION and BUCKET_CONFIG (exported by UserData; saved for the after-reboot run).
