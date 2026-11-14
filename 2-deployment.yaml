@@ -658,6 +658,11 @@ Resources:
       SubnetId: !Ref PubSubnetC
   MailStorage:
     Type: AWS::EFS::FileSystem
+    # The mail storage outlives the stack: deleting the stack (or replacing this resource) leaves the file system
+    # with all mail and databases in the account, to be deleted by hand in the EFS console. (ExceptOnCreate: a
+    # failed first creation of the stack still cleans up its empty file system.)
+    DeletionPolicy: RetainExceptOnCreate
+    UpdateReplacePolicy: Retain
     Properties:
       Encrypted: True
       PerformanceMode: generalPurpose

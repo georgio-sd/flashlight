@@ -337,9 +337,14 @@ See [Upgrading Flashlight](UPGRADING.md).
 
 ### Deleting the server
 
-Deleting the stage 2 stack **deletes the mail storage with all mail and databases**. Copy whatever you need
-first, or make sure an AWS Backup recovery point exists. Then delete stage 2, then stage 1. Stage 1 removes
-Flashlight's DNS records; its config bucket can only be deleted once you empty it.
+Delete stage 2, then stage 1. Stage 1 removes Flashlight's DNS records; its config bucket can only be deleted
+once you empty it.
+
+**The mail storage is not deleted with the stack.** The EFS file system with all mail and databases stays in
+your account, so a stack deleted by mistake doesn't take the mail with it. It keeps costing its storage price
+until you delete it yourself: EFS console, the file system named in the stack's resources (`MailStorage`),
+**Delete**. Do that only when you are sure you no longer need the data, or have copied them; there is no way
+back. (If the very first creation of the stack fails, its empty file system is cleaned up automatically.)
 
 ## Troubleshooting
 

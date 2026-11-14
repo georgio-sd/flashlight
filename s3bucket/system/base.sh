@@ -142,7 +142,7 @@ sed -i "s/-\$releasever&/-\$releasever.$os_minor\&/" /etc/yum.repos.d/epel.repo
 dnf install -y php php-cli php-fpm php-mysqlnd php-mbstring php-intl php-xml php-gd php-pecl-zip php-opcache \
   httpd httpd-tools mod_ssl mariadb mariadb-server \
   postfix postfix-mysql dovecot dovecot-mysql dovecot-pigeonhole \
-  opendkim opendkim-tools certbot python3-certbot-dns-route53 pwgen python3-boto3 bind-utils mc
+  opendkim opendkim-tools certbot python3-certbot-dns-route53 pwgen python3-boto3 bind-utils mc nftables
 #
 # Quiet logs: each step below removes a warning that would otherwise appear at every boot
 # - chrony: IPv4 only (IPv6 is off, and its command socket on ::1 fails)
@@ -166,6 +166,18 @@ grep -vE '^d /var/lib/mysql ' /usr/lib/tmpfiles.d/mariadb.conf > /etc/tmpfiles.d
 printf '%s\n' "# Flashlight: no NFS in the boot image (root is on EBS; EFS is mounted after the boot)" \
   'omit_dracutmodules+=" nfs "' > /etc/dracut.conf.d/flashlight-no-nfs.conf
 dracut -f --kver "$(grubby --default-kernel | sed 's|^/boot/vmlinuz-||')"
+#
+# Instance metadata (IMDS, 169.254.169.254) for root only. It hands out the instance role's AWS credentials and the
+# UserData with the stack's parameters to any local process that asks; a broken-into web application (they run
+# as apache) would get the server's rights in AWS: DNS records, the Elastic IP, replacing the instance.
+# Everything of ours that needs it runs as root: the AWS CLI, boto3 scripts, certbot, the EFS mount helper, cron
+# jobs. A service that isn't root and needs AWS access would fail here with a refused connection.
+# (nftables.service loads the file at every boot; fail2ban keeps its own tables next to it)
+printf '%s\n' "# Flashlight: instance metadata for root only (base.sh). DON'T EDIT: rewritten at every install." \
+  'table inet flashlight_imds {' '  chain output {' '    type filter hook output priority 0; policy accept;' \
+  '    ip daddr 169.254.169.254 meta skuid != 0 reject' '  }' '}' > /etc/nftables/flashlight-imds.nft
+echo 'include "/etc/nftables/flashlight-imds.nft"' >> /etc/sysconfig/nftables.conf
+systemctl enable --now nftables
 #
 # Swap (stack parameter Swap): a cushion for short memory peaks, so the kernel doesn't stop a service when memory
 # runs out for a moment; the server slows down instead (if that happens often, it needs a bigger instance type).

@@ -172,7 +172,8 @@ already upgraded to a newer release.
 | `versions` | The Flashlight release of the data, and what the instance runs |
 | `flag`, `flag-ec2id-<id>` | The first install is done; the instance that owns the EFS now |
 
-EFS is encrypted at rest, and the instance mounts it over TLS. With MailStorageLifecyclePolicy, files not read
+The file system outlives the stack (`DeletionPolicy: RetainExceptOnCreate`): deleting the stage 2 stack leaves it
+in the account, to be deleted by hand. EFS is encrypted at rest, and the instance mounts it over TLS. With MailStorageLifecyclePolicy, files not read
 for a while move to the Infrequent Access class.
 
 ## Configuration: ours and the admin's
@@ -202,7 +203,7 @@ every boot; lines outside belong to the admin.
 | Service | Role | Listens on |
 |---|---|---|
 | Postfix | SMTP: receives and sends mail | 25 (other servers), 587 and 465 (users) |
-| Dovecot | IMAP, login checks for Postfix, delivery (LMTP), ManageSieve | 143, 993; 4190 local |
+| Dovecot | IMAP, login checks for Postfix, delivery (LMTP, a Unix socket for Postfix only), ManageSieve | 143, 993; 4190 (closed from outside) |
 | OpenDKIM | Signs outgoing mail | 127.0.0.1:8891 |
 | MariaDB | The PostfixAdmin, Roundcube and phpMyAdmin databases | Unix socket only |
 | Apache + PHP-FPM | Webmail, the admin site | 80 (redirects), 443 |
@@ -361,6 +362,10 @@ Times are in the server's time zone (TimeZone).
 
 ## Security
 
+- **Instance metadata for root only.** The metadata service (169.254.169.254) hands the instance role's AWS
+  credentials to any local process. A firewall rule (nftables, `flashlight_imds`) lets only root reach it, so
+  a broken-into web application, which runs as `apache`, doesn't get the server's rights in AWS. All of
+  Flashlight's AWS calls run as root; a non-root program of your own that needs AWS access is refused there.
 - **Network.** Only the mail, web and SSH ports are open. EFS accepts connections from the instance's security
   group only. IPv6 is off.
 - **Encryption.** EFS is encrypted at rest and in transit (TLS mount). The instance's root disk is encrypted with
