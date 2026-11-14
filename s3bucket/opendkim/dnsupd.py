@@ -57,13 +57,17 @@ def plain(value):
 
 
 def txt_with_spf(zone_id, name, eip):
-    """the name's TXT values with our SPF; an SPF that already allows our address stays as it is"""
+    """the name's TXT values with our SPF, and what happened to the SPF (for the log); an SPF that already allows
+    our address stays as it is"""
     values = txt_values(zone_id, name)
+    ours = 'v=spf1 ip4:%s -all' % eip
     for value in values:
         words = plain(value).lower().split()
         if words[:1] == ['v=spf1'] and ('ip4:' + eip in words or 'ip4:' + eip + '/32' in words):
-            return values
-    return [v for v in values if not plain(v).lower().startswith('v=spf1')] + [txt('v=spf1 ip4:%s -all' % eip)]
+            return values, 'unchanged' if plain(value) == ours else 'kept (the admin\'s own, allows our address)'
+    others = [v for v in values if not plain(v).lower().startswith('v=spf1')]
+    replaced = len(others) < len(values)
+    return others + [txt(ours)], 'replaced (did not allow our address)' if replaced else 'created'
 
 
 def upsert(name, values):
@@ -77,16 +81,26 @@ def main():
     eip, mail_host = sys.argv[3], sys.argv[4]
 
     for i, (domain, zone_id) in enumerate(zip(domains, zone_ids)):
-        changes = [
-            upsert('mail._domainkey.' + domain, [dkim_value(domain)]),
-            upsert(domain, txt_with_spf(zone_id, domain, eip)),
-        ]
-        if not any(plain(v).lower().startswith('v=dmarc1') for v in txt_values(zone_id, '_dmarc.' + domain)):
+        dkim_name = 'mail._domainkey.' + domain
+        dkim = dkim_value(domain)
+        dkim_now = txt_values(zone_id, dkim_name)
+        spf, spf_status = txt_with_spf(zone_id, domain, eip)
+        changes = [upsert(dkim_name, [dkim]), upsert(domain, spf)]
+        status = ['DKIM ' + ('unchanged' if [plain(v) for v in dkim_now] == [plain(dkim)]
+                             else 'replaced' if dkim_now else 'created'),
+                  'SPF ' + spf_status]
+        dmarc = [v for v in txt_values(zone_id, '_dmarc.' + domain) if plain(v).lower().startswith('v=dmarc1')]
+        if dmarc:
+            status.append('DMARC kept (' + plain(dmarc[0]) + ')')
+        else:
             changes.append(upsert('_dmarc.' + domain, [txt('v=DMARC1; p=reject; sp=reject; adkim=r; aspf=r')]))
+            status.append('DMARC created (p=reject)')
         if i == 0:
-            changes.append(upsert(mail_host, txt_with_spf(zone_id, mail_host, eip)))
+            host_spf, host_status = txt_with_spf(zone_id, mail_host, eip)
+            changes.append(upsert(mail_host, host_spf))
+            status.append('SPF of ' + mail_host + ' ' + host_status)
         route53.change_resource_record_sets(HostedZoneId=zone_id, ChangeBatch={'Changes': changes})
-        print('dnsupd: %s: DKIM, SPF, DMARC%s updated' % (domain, ', SPF of ' + mail_host if i == 0 else ''))
+        print('dnsupd: %s: %s' % (domain, '; '.join(status)))
 
 
 if __name__ == '__main__':
