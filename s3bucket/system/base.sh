@@ -707,6 +707,10 @@ includepkgs=rspamd-4.*
 skip_if_unavailable=1
 EOF
   dnf install -y valkey unbound
+  # Rspamd's user and group, made the way its packages up to 4.2 did: the 4.3.0 package no longer creates them
+  # (its files then belong to root, and Rspamd has no user to run as)
+  getent group _rspamd > /dev/null || groupadd -r _rspamd
+  id _rspamd > /dev/null 2>&1 || useradd -g _rspamd -c "Rspamd user" -s /bin/false -r -d /var/lib/rspamd _rspamd
   if ! dnf install -y rspamd; then
     /usr/local/sbin/instance-log WARN "Rspamd repository unreachable: installing the release's copy ($rspamd_rpm)"
     aws s3 cp s3://$BUCKET_CONFIG/$rspamd_rpm /root/
