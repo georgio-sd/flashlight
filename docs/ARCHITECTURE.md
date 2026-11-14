@@ -274,9 +274,9 @@ PostfixAdmin, the alerts) is only signed. Undeliverable mail is retried for a da
 
 ## Spam filter
 
-With Antispam (the default), the spam filter is Rspamd 4.x with its own helpers:
+With Antispam (the default), the spam filter is Rspamd 4.3 with its own helpers:
 
-- **Rspamd** comes from its official repository, pinned to major version 4 and checked with the signing key that
+- **Rspamd** comes from its official repository, pinned to version 4.3 (its bug-fix releases come by themselves; a newer version comes with a Flashlight release, after testing) and checked with the signing key that
   comes with the release. If the repository is unreachable, the copy of the package in the release is installed
   after a signature check (`WARN` line).
 - **Valkey** (a Redis fork) keeps the Bayes statistics, fuzzy hashes and rate limit counters, on EFS, written
@@ -419,7 +419,7 @@ there. Data changes between releases are migrations, run in order by the new ins
 | PostfixAdmin | 4.0 | The release (pinned) |
 | phpMyAdmin | 5.2 | The release (pinned) |
 | Certbot with the Route 53 plugin | | EPEL |
-| Rspamd | 4.x | Rspamd's repository, or the release's copy |
+| Rspamd | 4.3 | Rspamd's repository, or the release's copy |
 | Valkey, Unbound | | AlmaLinux |
 | oletools (olefy) | 0.60.2 | PyPI with pinned hashes; olefy.py in the release |
 | ClamAV | 1.4 | EPEL |

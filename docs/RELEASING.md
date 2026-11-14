@@ -112,9 +112,12 @@ stay in the list for good: a server several releases behind needs every step in 
    (https://support.google.com/mail/answer/6590) and `attachments-strict.map` with Microsoft's list of attachments
    Outlook blocks; update them and the date in their headers.
 7. **Rspamd package.** The release carries a copy of the Rspamd package, used when rspamd.com can't be reached.
-   On an AlmaLinux instance with the Rspamd repository, `dnf download rspamd` the newest 4.x, check it with
+   On an AlmaLinux instance with the Rspamd repository, download the newest package of the pinned version (`dnf download rspamd`), check it with
    `rpm -K` (key `rspamd/rspamd.asc`), upload it to `packages/`, and update its name in `base.sh` (`rspamd_rpm`)
    and in the stage 1 `Files` list.
+   Instances install only the pinned version (`includepkgs=rspamd-4.3.*` in `base.sh`). To move to a newer one
+   (4.4, 5.0), change the pin, take that version's package as the copy, and test a fresh install with it: a new
+   version can change the package itself, as 4.3.0 did.
    The macro check: compare `s3bucket/rspamd/olefy.py` with the newest olefy
    (https://github.com/HeinleinSupport/olefy), and regenerate `olefy-requirements.txt` from the newest oletools:
    in a Python 3.12 environment, `pip download --only-binary=:all: oletools colorclass python-magic`, then one line

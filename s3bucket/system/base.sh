@@ -687,11 +687,12 @@ systemctl enable opendkim
 # come through the big shared resolvers, AWS's included). Our settings in /etc/rspamd/local.d are rewritten at
 # every boot; the admin's own live on EFS in /mnt/mailserver/etc/rspamd/override.d.
 if [ "$ANTISPAM" = 'ENABLED' ]; then
-  # Rspamd comes from its own repository (it isn't in AlmaLinux or EPEL), major version 4 only: a new major version
-  # comes with a Flashlight release, after testing. Its packages are checked with the Rspamd signing key that comes
+  # Rspamd comes from its own repository (it isn't in AlmaLinux or EPEL), version 4.3 only: its bug-fix releases
+  # (4.3.x) come by themselves, a new version (4.4, 5.0) comes with a Flashlight release, after testing (the 4.3.0
+  # package, for one, stopped creating Rspamd's user and failed every install). Its packages are checked with the Rspamd signing key that comes
   # with the release. The repository is a single server: if it can't be reached, dnf skips it (also for later
   # updates), and the Rspamd package that came with this release is installed instead, after its signature check.
-  rspamd_rpm=rspamd-4.2.3-1.el10.x86_64.rpm
+  rspamd_rpm=rspamd-4.3.0-1.el10.x86_64.rpm
   aws s3 cp s3://$BUCKET_CONFIG/rspamd.asc /etc/pki/rpm-gpg/RPM-GPG-KEY-rspamd
   rpm --import /etc/pki/rpm-gpg/RPM-GPG-KEY-rspamd
   os_major=$(. /etc/os-release && echo "${VERSION_ID%%.*}")
@@ -703,7 +704,7 @@ enabled=1
 gpgcheck=1
 repo_gpgcheck=1
 gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-rspamd
-includepkgs=rspamd-4.*
+includepkgs=rspamd-4.3.*
 skip_if_unavailable=1
 EOF
   dnf install -y valkey unbound
