@@ -1,5 +1,6 @@
-# Request to remove email sending limitations and add PTR record
+# Before deploying, ask AWS to remove the email sending (port 25) limitation for your account:
 # https://console.aws.amazon.com/support/contacts?#/rdns-limits
+# Reverse DNS (PTR) of the Elastic IP is set by this stack itself (DnsPreset).
 #
 Metadata:
   AWS::CloudFormation::Interface:
@@ -28,12 +29,12 @@ Parameters:
   AdminSubDomain:
     Type: String
     Default: admin
-    AllowedPattern: "[a-z0-9]*"
+    AllowedPattern: "[a-z0-9]+"
     Description: Admin SubDomain (?????.maindomain.tld) Allowed pattern [a-z0-9]
   MailSubDomain:
     Type: String
     Default: mail
-    AllowedPattern: "[a-z0-9]*"
+    AllowedPattern: "[a-z0-9]+"
     Description: Mail SubDomain (?????.maindomain.tld) Allowed pattern [a-z0-9]
   Updater:
     Type: String
@@ -59,6 +60,13 @@ Resources:
               - !Split
                 - "/"
                 - !Ref "AWS::StackId"
+      # logs of failed installs (install-finish) are kept 90 days, like the install logs on EFS
+      LifecycleConfiguration:
+        Rules:
+        - Id: install-logs
+          Status: Enabled
+          Prefix: install-logs/
+          ExpirationInDays: 90
   IPAddressMS:
     Type: AWS::EC2::EIP
     Properties:
@@ -66,7 +74,17 @@ Resources:
       Tags:
       - Key: Name
         Value: !Sub "${AWS::StackName}-Flashlight"
-  LambdaExecutionRole:
+  DownloadBundlesLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${AWS::StackName}-DownloadBundles"
+      RetentionInDays: 30
+  DnsPresetLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${AWS::StackName}-DnsPreset"
+      RetentionInDays: 30
+  DownloadBundlesRole:
     Type: 'AWS::IAM::Role'
     Properties:
       Tags:
@@ -77,27 +95,53 @@ Resources:
         Statement:
         - Effect: Allow
           Principal:
-            Service:
-              - lambda.amazonaws.com
-          Action:
-            - 'sts:AssumeRole'
-      Path: /
+            Service: lambda.amazonaws.com
+          Action: 'sts:AssumeRole'
       Policies:
-      - PolicyName: LambdaExecutionRolePolicy
+      - PolicyName: DownloadBundles
         PolicyDocument:
           Version: 2012-10-17
           Statement:
           - Effect: Allow
-            Action:
-            - 'logs:CreateLogGroup'
-            - 'logs:CreateLogStream'
-            - 'logs:PutLogEvents'
-            - 'route53:*'
-            - 'route53domains:*'
-            - 's3:*'
-            - 'ec2:DescribeImages'
-            - 'ec2:CopyImage'
+            Action: [ 'logs:CreateLogStream', 'logs:PutLogEvents' ]
+            Resource: !GetAtt DownloadBundlesLogGroup.Arn
+          - Effect: Allow
+            Action: 's3:PutObject'
+            Resource: !Sub "${MSBucket.Arn}/*"
+  DnsPresetRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      Tags:
+      - Key: Name
+        Value: !Sub "${AWS::StackName}-Flashlight"
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service: lambda.amazonaws.com
+          Action: 'sts:AssumeRole'
+      Policies:
+      - PolicyName: DnsPreset
+        PolicyDocument:
+          Version: 2012-10-17
+          Statement:
+          - Effect: Allow
+            Action: [ 'logs:CreateLogStream', 'logs:PutLogEvents' ]
+            Resource: !GetAtt DnsPresetLogGroup.Arn
+          - Effect: Allow
+            Action: [ 'route53:GetHostedZone', 'route53:ListResourceRecordSets', 'route53:ChangeResourceRecordSets' ]
+            Resource: !Sub "arn:${AWS::Partition}:route53:::hostedzone/*"
+          - Effect: Allow
+            Action: [ 'ec2:DescribeImages', 'ec2:CopyImage', 'ec2:DescribeAddressesAttribute' ]
             Resource: '*'
+          # reverse DNS of this stack's Elastic IP; GetChange waits until the A records are applied
+          - Effect: Allow
+            Action: [ 'ec2:ModifyAddressAttribute', 'ec2:ResetAddressAttribute' ]
+            Resource: !Sub "arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:elastic-ip/${IPAddressMS.AllocationId}"
+          - Effect: Allow
+            Action: 'route53:GetChange'
+            Resource: !Sub "arn:${AWS::Partition}:route53:::change/*"
   DownloadBundles:
     Type: 'Custom::DownloadBundles'
     Properties:
@@ -105,108 +149,139 @@ Resources:
       S3BucketName: !Ref MSBucket
       ZoneIDs: !Join [ ',', !Ref ZoneIDs ]
       Updater: !Ref Updater
-      Urls:
-      - 'https://mail-server-bundles.s3.eu-central-1.amazonaws.com/v0.5/lambda-dns.zip'
-      - 'https://mail-server-bundles.s3.eu-central-1.amazonaws.com/v0.5/system/iptables'
-      - 'https://mail-server-bundles.s3.eu-central-1.amazonaws.com/v0.5/system/autoshutdown.service'
-      - 'https://mail-server-bundles.s3.eu-central-1.amazonaws.com/v0.5/system/scale-in.service'
-      - 'https://mail-server-bundles.s3.eu-central-1.amazonaws.com/v0.5/system/spot-instance-shutdown'
-      - 'https://mail-server-bundles.s3.eu-central-1.amazonaws.com/v0.5/system/spotprices.py'
-      - 'https://mail-server-bundles.s3.eu-central-1.amazonaws.com/v0.5/system/base.sh'
-      - 'https://mail-server-bundles.s3.eu-central-1.amazonaws.com/v0.5/system/fail2ban.sh'
-      - 'https://mail-server-bundles.s3.eu-central-1.amazonaws.com/v0.5/system/double-inst-prot.service'
-      - 'https://mail-server-bundles.s3.eu-central-1.amazonaws.com/v0.5/system/services-shutdown'
-      - 'https://mail-server-bundles.s3.eu-central-1.amazonaws.com/v0.5/mariadb/mysql_secure_installation_auto'
-      - 'https://mail-server-bundles.s3.eu-central-1.amazonaws.com/v0.5/mariadb/db-backup'
-      - 'https://mail-server-bundles.s3.eu-central-1.amazonaws.com/v0.5/phpmyadmin/config.inc.php'
-      - 'https://mail-server-bundles.s3.eu-central-1.amazonaws.com/v0.5/postfixadmin/config.local.php'
-      - 'https://mail-server-bundles.s3.eu-central-1.amazonaws.com/v0.5/apache/httpd.conf'
-      - 'https://mail-server-bundles.s3.eu-central-1.amazonaws.com/v0.5/apache/sites.conf'
-      - 'https://mail-server-bundles.s3.eu-central-1.amazonaws.com/v0.5/apache/ssl.conf'
-      - 'https://mail-server-bundles.s3.eu-central-1.amazonaws.com/v0.5/postfix/main.cf'
-      - 'https://mail-server-bundles.s3.eu-central-1.amazonaws.com/v0.5/postfix/master.cf'
-      - 'https://mail-server-bundles.s3.eu-central-1.amazonaws.com/v0.5/postfix/postfix-mysql.tar.gz'
-      - 'https://mail-server-bundles.s3.eu-central-1.amazonaws.com/v0.5/dovecot/dovecot.conf'
-      - 'https://mail-server-bundles.s3.eu-central-1.amazonaws.com/v0.5/dovecot/dovecot-mysql.conf'
-      - 'https://mail-server-bundles.s3.eu-central-1.amazonaws.com/v0.5/roundcube/config.inc.php.rc'
-      - 'https://mail-server-bundles.s3.eu-central-1.amazonaws.com/v0.5/roundcube/roundcubemail.sql'
-      - 'https://mail-server-bundles.s3.eu-central-1.amazonaws.com/v0.5/opendkim/opendkim.conf'
-      - 'https://mail-server-bundles.s3.eu-central-1.amazonaws.com/v0.5/opendkim/dnsupd.py'
-      - 'https://mail-server-bundles.s3.eu-central-1.amazonaws.com/v0.5/fail2ban/jail.local'
-      - 'https://mail-server-bundles.s3.eu-central-1.amazonaws.com/v0.5/fail2ban/postfix-sasl.conf'
+      BaseUrl: 'https://mail-server-bundles.s3.eu-central-1.amazonaws.com/v1.0'
+      Files:
+      - 'system/autoshutdown.service'
+      - 'system/spot-instance-shutdown'
+      - 'system/replace-instance'
+      - 'system/rebuild-check'
+      - 'system/mailbox-cleanup'
+      - 'system/outbound-alert'
+      - 'system/install-finish'
+      - 'system/imds'
+      - 'system/instance-log'
+      - 'system/instance-shutdown-log'
+      - 'system/upgrade-data'
+      - 'system/secrets'
+      - 'system/shutdown-log.service'
+      - 'system/spotprices.py'
+      - 'system/base.sh'
+      - 'system/double-inst-prot.service'
+      - 'system/services-shutdown'
+      - 'mariadb/db-backup'
+      - 'phpmyadmin/config.inc.php'
+      - 'postfixadmin/config.local.php'
+      - 'apache/sites.conf'
+      - 'postfix/main.cf'
+      - 'postfix/master.cf'
+      - 'postfix/mysql/virtual_mailbox_domains.cf'
+      - 'postfix/mysql/virtual_mailbox_maps.cf'
+      - 'postfix/mysql/virtual_alias_domain_mailbox_maps.cf'
+      - 'postfix/mysql/virtual_alias_maps.cf'
+      - 'postfix/mysql/virtual_alias_domain_maps.cf'
+      - 'postfix/mysql/virtual_alias_domain_catchall_maps.cf'
+      - 'postfix/mysql/relay_domains.cf'
+      - 'postfix/mysql/sender_login_maps.cf'
+      - 'dovecot/dovecot.conf'
+      - 'dovecot/dovecot-mysql.conf'
+      - 'roundcube/config.inc.php.rc'
+      - 'opendkim/opendkim.conf'
+      - 'opendkim/dnsupd.py'
+      - 'fail2ban/jail.local'
+      - 'rspamd/spamhaus-dqs-rbl.conf'
+      - 'rspamd/spamhaus-dqs-rbl_group.conf'
+      - 'rspamd/attachments-gmail.map'
+      - 'rspamd/attachments-strict.map'
+      - 'rspamd/olefy.py'
+      - 'rspamd/olefy-requirements.txt'
+      - 'packages/amazon-efs-utils-3.3.5-1.el10.x86_64.rpm'
+      - 'packages/postfixadmin-v4.0.6-php74.tar.gz'
+      - 'packages/phpMyAdmin-5.2.3-all-languages.tar.gz'
+      - 'packages/roundcubemail-1.7.6-complete.tar.gz'
+      - 'packages/roundcube-larry-03ccd35.tar.gz'
+      - 'packages/rspamd-4.3.0-1.el10.x86_64.rpm'
+      - 'rspamd/rspamd.asc'
   DownloadBundlesLambdaFunction:
     Type: 'AWS::Lambda::Function'
-    DependsOn: MSBucket
     Properties:
       Code:
         ZipFile: |
-          var AWS = require('aws-sdk')
-          var response = require('cfn-response')
-          var fs = require('fs')
-          var path = require('path')
-          var https = require('https')
-          var urlmod = require('url')
-          var {promisify} = require('util')
-          var stream = require('stream')
-          var finished = promisify(stream.finished)
-          var s3 = new AWS.S3()
+          # Copies installer files from the public Flashlight bucket into the stack's config bucket.
+          # Files are streamed straight from HTTPS to S3 (no /tmp), several at a time.
+          import json
+          import os
+          import time
+          import urllib.error
+          import urllib.request
+          from concurrent.futures import ThreadPoolExecutor
 
-          function getFilesizeInBytes(filename) {
-            var stats = fs.statSync(filename)
-            var fileSizeInBytes = stats["size"]
-            return fileSizeInBytes
-          }
+          import boto3
+          from boto3.s3.transfer import TransferConfig
 
-          download = async function(url) {
-            filename = path.basename(urlmod.parse(url, true).pathname)
-            console.log('/tmp/' + filename)
-            file = fs.createWriteStream('/tmp/' + filename)
-            request = https.get(url, function(resp) {
-              resp.pipe(file)
-            })
-            await finished(file)
-          }
+          WORKERS = 8
+          ATTEMPTS = 3
 
-          upload = async function(url, s3buketname) {
-            filename = path.basename(urlmod.parse(url, true).pathname)
-            if (filename == 'lambda-dns.zip') {
-              filename_new = 'lambda-dns-' + dt_frmt + '.zip'
-            } else {
-              filename_new = filename
-            }
-            console.log(filename + ': ' + getFilesizeInBytes('/tmp/' + filename))
-            var res = await new Promise((resolve, reject) => {
-              s3.upload({
-                Bucket: s3buketname,
-                Body: fs.createReadStream('/tmp/' + filename),
-                Key: filename_new,
-                ContentType: 'binary'
-              }, (err, data) => err == null ? resolve(data) : reject(err))
-            })
-            console.log('Uploaded: ' + filename)
-          }
+          s3 = boto3.client('s3')
+          # Parallelism comes from copying several files at once, so each file gets one upload thread
+          # and keeps at most one 8 MB chunk waiting in memory (the default is 10).
+          # Worst case: WORKERS x 16 MB, about 220 MB in total with Python itself.
+          transfer = TransferConfig(max_concurrency=1)
+          transfer.max_in_memory_upload_chunks = 1
 
-          exports.lambda_handler = async (event, context, callback) => {
-            dt_frmt = new Date().toISOString().replace(/-|:|\..+/gi, '').replace(/T/, '-')
-            console.log('Datetime ' + dt_frmt)
-            if ((event['RequestType'] == 'Create') || (event['RequestType'] == 'Update')) {
-              var s3buketname = event.ResourceProperties.S3BucketName
-              var urls = event.ResourceProperties.Urls
-              for(let url of urls) {
-                await download(url)
-                await upload(url, s3buketname)
-              }
-              responseData = {Result: "Create/Update", Datetime: dt_frmt}
-              return response.send(event, context, response.SUCCESS, responseData)
-            } else {
-              responseData = {Result: "Other"}
-              return response.send(event, context, response.SUCCESS, responseData)
-            }
-          }
+
+          def send(event, context, status, data=None, reason=None):
+              body = json.dumps({
+                  'Status': status,
+                  'Reason': reason or 'See CloudWatch log stream: ' + context.log_stream_name,
+                  'PhysicalResourceId': event.get('PhysicalResourceId') or 'DownloadBundles-' + event['ResourceProperties']['S3BucketName'],
+                  'StackId': event['StackId'],
+                  'RequestId': event['RequestId'],
+                  'LogicalResourceId': event['LogicalResourceId'],
+                  'Data': data or {},
+              }).encode()
+              req = urllib.request.Request(event['ResponseURL'], data=body, method='PUT',
+                                           headers={'Content-Type': '', 'Content-Length': str(len(body))})
+              urllib.request.urlopen(req, timeout=30)
+
+
+          def copy_file(bucket, base_url, path):
+              key = os.path.basename(path)
+              url = base_url + '/' + path
+              for attempt in range(1, ATTEMPTS + 1):
+                  try:
+                      with urllib.request.urlopen(url, timeout=60) as resp:
+                          s3.upload_fileobj(resp, bucket, key, Config=transfer)
+                      print('Copied ' + url + ' -> s3://' + bucket + '/' + key)
+                      return
+                  except Exception as e:
+                      # 4xx means the file is missing or closed, retrying will not help
+                      permanent = isinstance(e, urllib.error.HTTPError) and e.code < 500 and e.code not in (408, 429)
+                      if permanent or attempt == ATTEMPTS:
+                          raise RuntimeError(path + ': ' + str(e)) from e
+                      print('Attempt ' + str(attempt) + ' for ' + path + ' failed: ' + repr(e) + ', retrying')
+                      time.sleep(2 * attempt)
+
+
+          def lambda_handler(event, context):
+              print('RequestType: ' + event['RequestType'])
+              try:
+                  if event['RequestType'] in ('Create', 'Update'):
+                      props = event['ResourceProperties']
+                      bucket = props['S3BucketName']
+                      base_url = props['BaseUrl'].rstrip('/')
+                      with ThreadPoolExecutor(max_workers=WORKERS) as pool:
+                          list(pool.map(lambda path: copy_file(bucket, base_url, path), props['Files']))
+                  send(event, context, 'SUCCESS')
+              except Exception as e:
+                  print('ERROR: ' + repr(e))
+                  send(event, context, 'FAILED', reason=('DownloadBundles: ' + str(e))[:250])
       Handler: index.lambda_handler
-      Role: !GetAtt [ LambdaExecutionRole, Arn ]
-      Runtime: nodejs12.x
-      Timeout: '30'
+      Role: !GetAtt DownloadBundlesRole.Arn
+      LoggingConfig:
+        LogGroup: !Ref DownloadBundlesLogGroup
+      Runtime: python3.14
+      Timeout: 300
+      MemorySize: 256
       Tags:
       - Key: Name
         Value: !Sub "${AWS::StackName}-Flashlight"
@@ -216,20 +291,274 @@ Resources:
       ServiceToken: !GetAtt [ DnsPresetLambdaFunction, Arn ]
       MainZoneID: !Ref MainZoneID
       ZoneIDs: !Join [ ',', !Ref ZoneIDs ]
+      AdminSubDomain: !Ref AdminSubDomain
+      MailSubDomain: !Ref MailSubDomain
       ElasticIP: !Ref IPAddressMS
+      EipAllocationId: !GetAtt IPAddressMS.AllocationId
       Updater: !Ref Updater
   DnsPresetLambdaFunction:
     Type: 'AWS::Lambda::Function'
-    DependsOn: IPAddressMS
-    DependsOn: DownloadBundles
     Properties:
       Code:
-        S3Bucket: !Ref MSBucket
-        S3Key: !Sub "lambda-dns-${DownloadBundles.Datetime}.zip"
+        ZipFile: |
+          # Finds the latest Flashlight server image (copies it into this region if needed)
+          # and creates the base DNS records: A for admin/mail subdomains, MX for every mail domain,
+          # plus reverse DNS (PTR) of the Elastic IP pointing to the mail subdomain.
+          # DKIM, SPF and DMARC records are created later by the server itself (dnsupd.py).
+          # When the stack is deleted, or a domain is removed from it, Flashlight's records of that domain are
+          # removed too: only Flashlight's values, any other values of the same records stay.
+          import json
+          import time
+          import urllib.request
+
+          import boto3
+          from botocore.config import Config
+
+          SOURCE_REGION = 'us-west-2'
+          SOURCE_OWNER = '112904279782'
+          IMAGE_TAG = 'Mailserver:img_b'
+          TTL = 10800
+          COPY_ATTEMPTS = 3
+
+          # boto3 itself retries throttling and temporary AWS errors
+          aws_config = Config(retries={'mode': 'standard', 'max_attempts': 5})
+          route53 = boto3.client('route53', config=aws_config)
+          ec2 = boto3.client('ec2', config=aws_config)
+          ec2_source = boto3.client('ec2', region_name=SOURCE_REGION, config=aws_config)
+
+
+          def send(event, context, status, data=None, reason=None):
+              body = json.dumps({
+                  'Status': status,
+                  'Reason': reason or 'See CloudWatch log stream: ' + context.log_stream_name,
+                  'PhysicalResourceId': event.get('PhysicalResourceId') or 'DnsPreset-' + event['ResourceProperties']['MainZoneID'],
+                  'StackId': event['StackId'],
+                  'RequestId': event['RequestId'],
+                  'LogicalResourceId': event['LogicalResourceId'],
+                  'Data': data or {},
+              }).encode()
+              req = urllib.request.Request(event['ResponseURL'], data=body, method='PUT',
+                                           headers={'Content-Type': '', 'Content-Length': str(len(body))})
+              urllib.request.urlopen(req, timeout=30)
+
+
+          def local_image_id():
+              images = ec2_source.describe_images(Owners=[SOURCE_OWNER], Filters=[
+                  {'Name': 'description', 'Values': [IMAGE_TAG]},
+                  {'Name': 'state', 'Values': ['available']}])['Images']
+              if not images:
+                  raise RuntimeError('no ' + IMAGE_TAG + ' image from account ' + SOURCE_OWNER + ' in ' + SOURCE_REGION + ' is available to this account')
+              latest = max(images, key=lambda image: image['CreationDate'])
+              print('Latest image: ' + latest['Name'] + ' (' + latest['ImageId'] + ', ' + latest['CreationDate'] + ')')
+              for attempt in range(1, COPY_ATTEMPTS + 1):
+                  # Checked before every attempt: a failed call may still have started the copy
+                  local = ec2.describe_images(Owners=['self'], Filters=[
+                      {'Name': 'name', 'Values': [latest['Name']]},
+                      {'Name': 'state', 'Values': ['available', 'pending']}])['Images']
+                  if local:
+                      return local[0]['ImageId']
+                  try:
+                      copy = ec2.copy_image(Name=latest['Name'], Description=IMAGE_TAG,
+                                            SourceImageId=latest['ImageId'], SourceRegion=SOURCE_REGION)
+                      print('Copying image as ' + copy['ImageId'])
+                      return copy['ImageId']
+                  except Exception as e:
+                      if attempt == COPY_ATTEMPTS:
+                          raise RuntimeError('image copy failed after ' + str(attempt) + ' attempts: ' + str(e))
+                      print('Image copy attempt ' + str(attempt) + ' failed: ' + repr(e) + ', retrying')
+                      time.sleep(15 * attempt)
+
+
+          def wait_for_image(image_id, context):
+              # A copied image can't start instances until the copy is finished (several minutes), and stage 2
+              # would fail on it. Waits for it as long as this function may run, keeping time for the answer to
+              # CloudFormation; the DNS records are made before, so the copy runs meanwhile.
+              while True:
+                  try:
+                      images = ec2.describe_images(ImageIds=[image_id])['Images']
+                      state = images[0]['State'] if images else 'pending'
+                  except Exception as e:
+                      # a new copy may not be visible for a moment
+                      print('Image state not read: ' + repr(e))
+                      state = 'pending'
+                  if state == 'available':
+                      print('Image ' + image_id + ' is available')
+                      return 'available'
+                  if state != 'pending':
+                      raise RuntimeError('image ' + image_id + ' is ' + state + ': the copy failed, update the stack to try again')
+                  if context.get_remaining_time_in_millis() < 45000:
+                      print('Image ' + image_id + ' is still being copied')
+                      return ('STILL BEING COPIED: create the stage 2 stack only when the image ' + image_id +
+                              ' is available (EC2 console, AMIs)')
+                  time.sleep(15)
+
+
+          def upsert(zone_id, records):
+              changes = [{'Action': 'UPSERT', 'ResourceRecordSet': {
+                  'Name': name, 'Type': rtype, 'TTL': TTL, 'ResourceRecords': [{'Value': value}]}}
+                  for name, rtype, value in records]
+              change = route53.change_resource_record_sets(HostedZoneId=zone_id, ChangeBatch={'Changes': changes})
+              print('Zone ' + zone_id + ': ' + ', '.join(rtype + ' ' + name for name, rtype, _ in records))
+              time.sleep(0.25)  # Route 53 API allows 5 requests per second
+              return change['ChangeInfo']['Id']
+
+
+          def set_reverse_dns(allocation_id, name, change_id):
+              # AWS accepts a reverse DNS name only if its A record already points to the address,
+              # so wait until Route 53 has applied the A records (INSYNC, usually within a minute)
+              route53.get_waiter('resource_record_sets_changed').wait(Id=change_id, WaiterConfig={'Delay': 10, 'MaxAttempts': 18})
+              try:
+                  update = ec2.modify_address_attribute(AllocationId=allocation_id, DomainName=name)['Address']
+                  status = update.get('PtrRecordUpdate', {}).get('Status', 'unknown')
+                  print('Reverse DNS ' + allocation_id + ' -> ' + name + ': ' + status)
+                  return name
+              except Exception as e:
+                  # not fatal for the stack: mail works, but other servers may treat it as spam until it's set
+                  print('Reverse DNS not set: ' + repr(e))
+                  return 'NOT SET (' + str(e)[:150] + ')'
+
+
+          def remove_reverse_dns(allocation_id):
+              # an Elastic IP with a reverse DNS record is locked to the account and can't be released,
+              # so remove the record before CloudFormation deletes the address. The removal is applied
+              # within a few minutes (PtrRecordUpdate PENDING): wait for it, or the release fails
+              def ptr():
+                  return ec2.describe_addresses_attribute(AllocationIds=[allocation_id],
+                                                          Attribute='domain-name')['Addresses']
+              if not ptr():
+                  return
+              ec2.reset_address_attribute(AllocationId=allocation_id, Attribute='domain-name')
+              for _ in range(24):
+                  if not ptr():
+                      print('Reverse DNS removed from ' + allocation_id)
+                      return
+                  time.sleep(10)
+              print('Reverse DNS of ' + allocation_id + ' still being removed; if the stack deletion fails '
+                    'on the Elastic IP, delete the stack again in a few minutes')
+
+
+          def zone_ids_of(props):
+              # the main zone first, no repeats
+              return list(dict.fromkeys([props['MainZoneID']] + [z for z in props['ZoneIDs'].split(',') if z]))
+
+
+          def equals(ours):
+              return lambda value: value.lower() == ours.lower()
+
+
+          def starts(prefix):
+              return lambda value: value.startswith(prefix)
+
+
+          def our_records(props):
+              # every record Flashlight makes for these stack settings, as {(zone ID, name, type): test of a value being
+              # ours}: A and MX are made here, DKIM, SPF and DMARC by the server (dnsupd.py; same values there).
+              # Zones that no longer exist are skipped.
+              spf = '"v=spf1 ip4:' + props['ElasticIP'] + ' -all"'
+              records = {}
+              mail = None
+              for i, zone_id in enumerate(zone_ids_of(props)):
+                  try:
+                      domain = route53.get_hosted_zone(Id=zone_id)['HostedZone']['Name'].rstrip('.').lower()
+                  except route53.exceptions.NoSuchHostedZone:
+                      print('Zone ' + zone_id + ' no longer exists, skipped')
+                      continue
+                  if i == 0:
+                      admin = (props['AdminSubDomain'] + '.' + domain).lower()
+                      mail = (props['MailSubDomain'] + '.' + domain).lower()
+                      records[(zone_id, admin + '.', 'A')] = equals(props['ElasticIP'])
+                      records[(zone_id, mail + '.', 'A')] = equals(props['ElasticIP'])
+                      records[(zone_id, mail + '.', 'TXT')] = equals(spf)
+                  if mail:
+                      records[(zone_id, domain + '.', 'MX')] = equals('10 ' + mail + '.')
+                  records[(zone_id, domain + '.', 'TXT')] = equals(spf)
+                  records[(zone_id, 'mail._domainkey.' + domain + '.', 'TXT')] = starts('"v=DKIM1')
+                  records[(zone_id, '_dmarc.' + domain + '.', 'TXT')] = starts('"v=DMARC1')
+              return records
+
+
+          def remove(records):
+              # removes our values from these records; a record left with no values is deleted
+              by_zone = {}
+              for (zone_id, name, rtype), ours in records.items():
+                  by_zone.setdefault(zone_id, []).append((name, rtype, ours))
+              for zone_id, items in by_zone.items():
+                  changes = []
+                  for name, rtype, ours in items:
+                      found = route53.list_resource_record_sets(HostedZoneId=zone_id, StartRecordName=name,
+                                                                StartRecordType=rtype, MaxItems='1')['ResourceRecordSets']
+                      time.sleep(0.25)  # Route 53 API allows 5 requests per second
+                      if not found or found[0]['Name'].lower() != name or found[0]['Type'] != rtype \
+                              or 'ResourceRecords' not in found[0]:
+                          continue
+                      record = found[0]
+                      kept = [r for r in record['ResourceRecords'] if not ours(r['Value'])]
+                      if len(kept) == len(record['ResourceRecords']):
+                          continue
+                      if kept:
+                          changes.append({'Action': 'UPSERT', 'ResourceRecordSet': dict(record, ResourceRecords=kept)})
+                      else:
+                          changes.append({'Action': 'DELETE', 'ResourceRecordSet': record})
+                  if changes:
+                      route53.change_resource_record_sets(HostedZoneId=zone_id, ChangeBatch={'Changes': changes})
+                      print('Zone ' + zone_id + ' cleaned: ' + ', '.join(c['ResourceRecordSet']['Type'] + ' ' +
+                            c['ResourceRecordSet']['Name'] + (' (other values kept)' if c['Action'] == 'UPSERT' else '')
+                            for c in changes))
+
+
+          def clean_up(records):
+              # a leftover record must not fail the stack: it is only reported
+              try:
+                  remove(records)
+              except Exception as e:
+                  print('DNS cleanup failed, remove the records by hand: ' + repr(e))
+
+
+          def lambda_handler(event, context):
+              print('RequestType: ' + event['RequestType'])
+              try:
+                  data = {}
+                  if event['RequestType'] in ('Create', 'Update'):
+                      props = event['ResourceProperties']
+                      main_zone = props['MainZoneID']
+                      zone_ids = zone_ids_of(props)
+                      domains = [route53.get_hosted_zone(Id=z)['HostedZone']['Name'].rstrip('.') for z in zone_ids]
+                      admin = props['AdminSubDomain'] + '.' + domains[0]
+                      mail = props['MailSubDomain'] + '.' + domains[0]
+                      ip = props['ElasticIP']
+                      image_id = local_image_id()
+                      for i, (zone_id, domain) in enumerate(zip(zone_ids, domains)):
+                          records = [(domain, 'MX', '10 ' + mail + '.')]
+                          if i == 0:
+                              records += [(admin, 'A', ip), (mail, 'A', ip)]
+                          change_id = upsert(zone_id, records)
+                          if i == 0:
+                              main_change_id = change_id
+                      reverse_dns = set_reverse_dns(props['EipAllocationId'], mail, main_change_id)
+                      if event['RequestType'] == 'Update':
+                          # records of the domains (or host names) removed from the stack
+                          new = our_records(props)
+                          clean_up({key: ours for key, ours in our_records(event['OldResourceProperties']).items()
+                                    if key not in new})
+                      data = {'DomainNames': ','.join(domains), 'DomainZoneIDs': ','.join(zone_ids),
+                              'DNSRecAdmin': admin, 'DNSRecMail': mail,
+                              'ImageId': image_id, 'ReverseDNS': reverse_dns,
+                              'ImageStatus': wait_for_image(image_id, context)}
+                  elif event['RequestType'] == 'Delete':
+                      clean_up(our_records(event['ResourceProperties']))
+                      remove_reverse_dns(event['ResourceProperties']['EipAllocationId'])
+                  send(event, context, 'SUCCESS', data)
+              except Exception as e:
+                  print('ERROR: ' + repr(e))
+                  send(event, context, 'FAILED', reason=('DnsPreset: ' + str(e))[:250])
       Handler: index.lambda_handler
-      Role: !GetAtt [ LambdaExecutionRole, Arn ]
-      Runtime: python3.7
-      Timeout: '30'
+      Role: !GetAtt DnsPresetRole.Arn
+      LoggingConfig:
+        LogGroup: !Ref DnsPresetLogGroup
+      Runtime: python3.14
+      # the most a function may run: it waits for the copy of the server image
+      Timeout: 900
+      MemorySize: 256
       Tags:
       - Key: Name
         Value: !Sub "${AWS::StackName}-Flashlight"
@@ -242,10 +571,6 @@ Outputs:
     Value: !GetAtt [ DnsPreset, DomainZoneIDs ]
     Export:
       Name: !Sub "${AWS::StackName}-DomainZoneIDs"
-  NumberOfDomains:
-    Value: !GetAtt [ DnsPreset, NumberOfDomains ]
-    Export:
-      Name: !Sub "${AWS::StackName}-NumberOfDomains"
   S3Bucket:
     Value: !Ref MSBucket
     Export:
@@ -262,17 +587,23 @@ Outputs:
     Value: !GetAtt [ DnsPreset, ImageId ]
     Export:
       Name: !Sub "${AWS::StackName}-ImageId"
+  ImageStatus:
+    Description: The server image must be available before the stage 2 stack is created
+    Value: !GetAtt [ DnsPreset, ImageStatus ]
   DNSRecAdmin:
     Value: !GetAtt [ DnsPreset, DNSRecAdmin ]
     Export:
       Name: !Sub "${AWS::StackName}-DNSRecAdmin"
+  ReverseDNS:
+    Description: Reverse DNS (PTR) of the Elastic IP, or NOT SET with the reason
+    Value: !GetAtt [ DnsPreset, ReverseDNS ]
   DNSRecMail:
     Value: !GetAtt [ DnsPreset, DNSRecMail ]
     Export:
       Name: !Sub "${AWS::StackName}-DNSRecMail"
   LogDnsPreset:
     Description: Logs for the DnsPreset lambda function are located in Cloudwatch logs.
-    Value: !Sub "/aws/lambda/${DnsPresetLambdaFunction}"
+    Value: !Ref DnsPresetLogGroup
   LogDownloadBundles:
     Description: Logs for the DownloadBundles lambda function are located in Cloudwatch logs.
-    Value: !Sub "/aws/lambda/${DownloadBundlesLambdaFunction}"
+    Value: !Ref DownloadBundlesLogGroup

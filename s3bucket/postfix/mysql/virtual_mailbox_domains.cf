@@ -1,0 +1,7 @@
+# Postfix lookup in the PostfixAdmin database (domains whose mail is stored here).
+# Query from PostfixAdmin 4 DOCUMENTS/POSTFIX_CONF.txt (backup-MX variant: backup-MX domains go to relay_domains). {database_password} is filled in by base.sh.
+user = postfix
+password = {database_password}
+hosts = localhost
+dbname = postfix
+query = SELECT domain FROM domain WHERE domain='%s' AND backupmx = '0' AND active = '1'

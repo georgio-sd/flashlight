@@ -1,6 +1,10 @@
 <?php
 /* vim: set expandtab sw=4 ts=4 sts=4: */
 /**
+ * Flashlight configuration of phpMyAdmin.
+ * DON'T EDIT THIS FILE: base.sh rewrites it at every boot from the Flashlight release, so upgrades can
+ * change it. Your own settings go to /mnt/mailserver/etc/phpmyadmin/custom.php, included at the end.
+ *
  * phpMyAdmin sample configuration, you can use it as base for
  * manual configuration. For easier setup you can use setup/
  *
@@ -153,3 +157,9 @@ $cfg['SaveDir'] = '';
  * You can find more configuration options in the documentation
  * in the doc/ folder or at <https://docs.phpmyadmin.net/>.
  */
+
+// Your own settings (read last, so they win): /mnt/mailserver/etc/phpmyadmin/custom.php
+// It is never changed by Flashlight upgrades; set values there as in this file, e.g. $cfg['MaxRows'] = 100;
+if (is_file('/mnt/mailserver/etc/phpmyadmin/custom.php')) {
+    include '/mnt/mailserver/etc/phpmyadmin/custom.php';
+}

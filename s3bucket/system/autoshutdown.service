@@ -1,11 +1,11 @@
 [Unit]
-Description=Autoshutdown before spot instance termination
+Description=Replace this spot instance cleanly when AWS sends the interruption notice
 After=mnt-mailserver.mount
 
 [Service]
 ExecStart=/mnt/mailserver/automation/spot-instance-shutdown
 KillMode=process
+Restart=on-failure
 
 [Install]
 WantedBy=multi-user.target
-

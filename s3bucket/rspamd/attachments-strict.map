@@ -1,0 +1,26 @@
+# Flashlight attachment policy "Strict" (stack parameter AttachmentPolicy): these file types are rejected in
+# addition to the Gmail list (attachments-gmail.map), also inside archives. All of them are on Microsoft's list
+# of attachments Outlook blocks: https://support.microsoft.com/en-us/office/blocked-attachments-in-outlook-434752e1-02d3-4e90-9124-8b81e49a8519
+# (checked 2026-11-13); files that companies legitimately send (certificates, Access databases, pst, Python, Perl)
+# were left out. DON'T EDIT: replaced by Flashlight releases; your own changes go to override.d.
+app
+gadget
+hlp
+inf
+msh
+msh1
+msh1xml
+msh2
+msh2xml
+mshxml
+msu
+ps1xml
+psc1
+psc2
+psd1
+reg
+scf
+url
+vhdx
+ws
+xbap

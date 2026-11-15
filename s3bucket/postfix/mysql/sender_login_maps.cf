@@ -1,0 +1,8 @@
+# Postfix lookup in the PostfixAdmin database: the logins allowed to send as an address (smtpd_sender_login_maps).
+# A mailbox may send as itself and as every alias that delivers to it, also in alias domains. {database_password}
+# is filled in by base.sh.
+user = postfix
+password = {database_password}
+hosts = localhost
+dbname = postfix
+query = SELECT goto FROM alias WHERE address = '%s' AND active = '1' UNION SELECT alias.goto FROM alias, alias_domain WHERE alias_domain.alias_domain = '%d' AND alias.address = CONCAT('%u', '@', alias_domain.target_domain) AND alias.active = '1' AND alias_domain.active = '1'

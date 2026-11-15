@@ -1,0 +1,58 @@
+#!/bin/bash
+#
+# Cleans up after mailboxes deleted in PostfixAdmin (which deletes only the database records).
+# Runs from cron every 10 minutes. For each mail folder on EFS whose mailbox no longer exists:
+#   - moves its mail and Sieve filters to the trash: /mnt/mailserver/mail/.deleted/<date>-<address>/
+#     (so a new mailbox with the same name starts empty, and a mistake can be undone by moving them back)
+#   - deletes its Roundcube user (settings, contacts, identities are deleted with it)
+# Trash entries older than 30 days (counted from the move) are deleted for good.
+# Every action leaves a MAILBOX line in /mnt/mailserver/log/instance.log.
+#
+# imds and instance-log live in /usr/local/sbin, which is not in cron's PATH
+export PATH=/usr/local/sbin:$PATH
+mail=/mnt/mailserver/mail
+trash=$mail/.deleted
+keep_days=30
+
+# one run at a time
+exec 9> /run/mailbox-cleanup.lock
+flock -n 9 || exit 0
+
+# all mailboxes, active or not. If the database doesn't answer or has no mailboxes at all, touch nothing:
+# otherwise a database failure would move everybody's mail to the trash
+mailboxes=$(mysql -N -B postfix -e "SELECT username FROM mailbox") || exit 1
+[ -n "$mailboxes" ] || exit 0
+has_mailbox() { grep -qixF -- "$1" <<< "$mailboxes"; }
+
+# mail folders are <domain>/<address>; the other folders in $mail (sieve, shared-folders, .deleted) are not domains
+for dir in "$mail"/*/*@*/; do
+  [ -d "$dir" ] || continue
+  dir=${dir%/}
+  address=${dir##*/}
+  domain=${dir%/*}; domain=${domain##*/}
+  case "$domain" in sieve|shared-folders|.*) continue ;; esac
+  has_mailbox "$address" && continue
+  dest=$trash/$(date +%Y-%m-%d-%H%M%S)-$address
+  mkdir -p "$dest"
+  mv "$dir" "$dest/mail"
+  [ -d "$mail/sieve/$domain/$address" ] && mv "$mail/sieve/$domain/$address" "$dest/sieve"
+  chmod 700 "$trash"
+  instance-log MAILBOX "$address: deleted in PostfixAdmin, mail moved to ${dest#$mail/}"
+  # folders of a deleted domain are removed once empty
+  rmdir "$mail/$domain" "$mail/sieve/$domain" 2> /dev/null
+done
+
+# Roundcube users without a mailbox
+for user in $(mysql -N -B roundcube -e "SELECT username FROM users"); do
+  has_mailbox "$user" && continue
+  mysql roundcube -e "DELETE FROM users WHERE username = '${user//\'/}'" &&
+    instance-log MAILBOX "$user: Roundcube user deleted (no mailbox)"
+done
+
+# empty the trash after $keep_days days
+[ -d "$trash" ] || exit 0
+find "$trash" -mindepth 1 -maxdepth 1 -type d -mtime +$keep_days -print0 |
+  while IFS= read -r -d '' entry; do
+    rm -rf -- "$entry"
+    instance-log MAILBOX "trash: ${entry##*/} deleted for good (older than $keep_days days)"
+  done

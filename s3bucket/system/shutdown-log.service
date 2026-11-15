@@ -1,0 +1,16 @@
+[Unit]
+Description=Log this instance's shutdown or reboot to /mnt/mailserver/log/instance.log
+Wants=network-online.target
+After=network-online.target mnt-mailserver.mount
+RequiresMountsFor=/mnt/mailserver
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/bin/true
+# stopped before EFS and the network go down (reverse order of After=), so the line still gets written
+ExecStop=/usr/local/sbin/instance-shutdown-log
+TimeoutStopSec=30
+
+[Install]
+WantedBy=multi-user.target
