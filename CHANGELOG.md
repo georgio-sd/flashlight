@@ -18,8 +18,6 @@ folder is frozen.
 
 - Stage 2 waits up to 30 minutes for the install instead of 20: an install can take 12 minutes on a slower
   instance type or region.
-- RELEASING: a new server image must be published together with the snapshot of its disk, or other accounts
-  can't copy it.
 
 ## [1.0] - 2026-11-14
 

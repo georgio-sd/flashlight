@@ -43,7 +43,7 @@ CloudFormation exports. That's why stage 1 can't change its domain list while st
 | Auto Scaling group | Exactly one instance (min = max = 1) in any of the zones, Spot or On-Demand |
 
 The Auto Scaling group uses a mixed instances policy with up to two interchangeable types (InstanceType and
-InstanceType2) and, for Spot, the `price-capacity-optimized` allocation strategy. It waits up to 20 minutes for
+InstanceType2) and, for Spot, the `price-capacity-optimized` allocation strategy. It waits up to 30 minutes for
 the instance's success signal (CreationPolicy). A stack update that changes the launch template creates a new
 Auto Scaling group (AutoScalingReplacingUpdate): the old instance runs until the new one has signalled success,
 and if the new one fails, the update rolls back and the old one stays.
@@ -95,7 +95,7 @@ downloaded.
 rolls back and deletes the EFS, and writes a `FAILED` line naming the command that failed. Then:
 
 - **during a stack create or update:** it signals FAILURE at once, so the rollback starts in a minute instead of
-  after the 20-minute timeout. No retry: the person running the update takes over.
+  after the 30-minute timeout. No retry: the person running the update takes over.
 - **during a replacement by the Auto Scaling group** (Spot, price check, rebuild, health check): it tries a new
   instance after 5 minutes, up to 3 failed installs in 3 hours. After that the last instance stays up for
   diagnosis.
