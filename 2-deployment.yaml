@@ -597,9 +597,10 @@ Resources:
     UpdatePolicy:
       AutoScalingReplacingUpdate:
         WillReplace: True
+    # an install takes 4 to 12 minutes (slower instance types, regions and package mirrors), with a reserve
     CreationPolicy:
       ResourceSignal:
-        Timeout: PT20M
+        Timeout: PT30M
     Properties:
       DesiredCapacity: 1
       MinSize: 1

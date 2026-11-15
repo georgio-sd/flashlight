@@ -12,7 +12,7 @@
 # Failed install: FAILED goes to instance.log, and the install log is also kept in the config bucket
 #   (install-logs/), which survives even a rolled-back stack. Then:
 #   - stack being created or updated: FAILURE goes to CloudFormation at once (rollback in a minute instead of
-#     a 20-minute timeout); no retries, the person updating the stack takes over
+#     a 30-minute timeout); no retries, the person updating the stack takes over
 #   - instance replaced by the ASG (spot, price check, scheduled rebuild, health check): up to 3 installs in
 #     a row are tried on new instances, 5 minutes apart; after that the instance stays up for diagnosis
 #   A failed install isn't rebooted: the services configured before the failure would start half-configured.

@@ -327,11 +327,17 @@ Resources:
           ec2_source = boto3.client('ec2', region_name=SOURCE_REGION, config=aws_config)
 
 
-          def send(event, context, status, data=None, reason=None):
+          # A failed first creation answers with this ID, so its rollback (a Delete with the same ID) can tell
+          # that the records it would clean up were never this stack's: they may be the domain's own records
+          # with the same values (an MX to mail.<domain>, a DKIM key at mail._domainkey), made before the install
+          FAILED_CREATE = 'DnsPreset-failed-'
+
+
+          def send(event, context, status, data=None, reason=None, physical_id=None):
               body = json.dumps({
                   'Status': status,
                   'Reason': reason or 'See CloudWatch log stream: ' + context.log_stream_name,
-                  'PhysicalResourceId': event.get('PhysicalResourceId') or 'DnsPreset-' + event['ResourceProperties']['MainZoneID'],
+                  'PhysicalResourceId': physical_id or event.get('PhysicalResourceId') or 'DnsPreset-' + event['ResourceProperties']['MainZoneID'],
                   'StackId': event['StackId'],
                   'RequestId': event['RequestId'],
                   'LogicalResourceId': event['LogicalResourceId'],
@@ -545,12 +551,22 @@ Resources:
                               'ImageId': image_id, 'ReverseDNS': reverse_dns,
                               'ImageStatus': wait_for_image(image_id, context)}
                   elif event['RequestType'] == 'Delete':
-                      clean_up(our_records(event['ResourceProperties']))
+                      if event['PhysicalResourceId'].startswith(FAILED_CREATE):
+                          # rollback of a failed first creation: leave the domains' records alone (a failure
+                          # after the records were written leaves them pointing to the released address; the
+                          # next successful creation overwrites them)
+                          print('Rollback of a failed creation: DNS records left as they are')
+                      else:
+                          clean_up(our_records(event['ResourceProperties']))
+                      # the reverse DNS is always this stack's own, and blocks releasing the Elastic IP
                       remove_reverse_dns(event['ResourceProperties']['EipAllocationId'])
                   send(event, context, 'SUCCESS', data)
               except Exception as e:
                   print('ERROR: ' + repr(e))
-                  send(event, context, 'FAILED', reason=('DnsPreset: ' + str(e))[:250])
+                  failed_id = None
+                  if event['RequestType'] == 'Create':
+                      failed_id = FAILED_CREATE + event['ResourceProperties']['MainZoneID']
+                  send(event, context, 'FAILED', reason=('DnsPreset: ' + str(e))[:250], physical_id=failed_id)
       Handler: index.lambda_handler
       Role: !GetAtt DnsPresetRole.Arn
       LoggingConfig:

@@ -8,6 +8,19 @@ Releases with its templates. How to move a server to a newer release: [docs/UPGR
 Changes for the next release (1.1). Its installer files are in the public bucket folder `v1.1/`; the `v1.0/`
 folder is frozen.
 
+### Fixed
+
+- A failed first creation of stage 1 no longer deletes the domain's own DNS records on its rollback. The rollback
+  cleaned up every record whose value matched Flashlight's, so an existing MX to `mail.<domain>` and a DKIM key at
+  `mail._domainkey` were deleted although stage 1 had never written them.
+
+### Changed
+
+- Stage 2 waits up to 30 minutes for the install instead of 20: an install can take 12 minutes on a slower
+  instance type or region.
+- RELEASING: a new server image must be published together with the snapshot of its disk, or other accounts
+  can't copy it.
+
 ## [1.0] - 2026-11-14
 
 A rewrite of the installer on current software, with a spam filter, automatic recovery and upgrades between

@@ -19,6 +19,18 @@ Instances read their files from the config bucket only, never from the public bu
 A published release folder is never changed. Users' stacks point to it, and stage 1 copies it again on later
 updates (a changed domain list, the `Updater` switch). A fix is a new release.
 
+### The server image
+
+The instances start from a Flashlight image (AMI) owned by account 112904279782 in us-west-2, with the description
+`Mailserver:img_b`. It is not part of a release folder: stage 1 of every release takes the newest image with that
+description and copies it into the user's region. A new image therefore reaches the users of all releases at their
+next stage 1 update, so it must work with all of them. Most releases don't need a new one: the instance updates
+its operating system at every install anyway.
+
+Other accounts can copy the image only if both the image and the snapshot of its disk are public. A public image
+alone isn't enough: the copy fails with "You do not have permission to access the storage of this ami", and so
+does stage 1 in the user's account. The snapshot must not be encrypted (an encrypted snapshot can't be public).
+
 ## Rules for changes
 
 ### Files Flashlight owns
@@ -131,6 +143,19 @@ stay in the list for good: a server several releases behind needs every step in 
    `THIS_RELEASE`, which `upgrade-data` reads instead of its built-in values.
 10. **Publish the files.** Upload `s3bucket/` to `s3://mail-server-bundles/vX.Y/` keeping the layout, and check
    that every path of the `Files` list is there.
+   **New server image** (only if the release has one): make the image and the snapshot of its disk public, then
+   check both:
+
+   ```
+   aws ec2 modify-image-attribute --region us-west-2 --image-id ami-... --launch-permission "Add=[{Group=all}]"
+   aws ec2 modify-snapshot-attribute --region us-west-2 --snapshot-id snap-... \
+     --attribute createVolumePermission --operation-type add --group-names all
+   aws ec2 describe-image-attribute --region us-west-2 --image-id ami-... --attribute launchPermission
+   aws ec2 describe-snapshot-attribute --region us-west-2 --snapshot-id snap-... --attribute createVolumePermission
+   ```
+
+   The snapshot ID is in the image's block device mapping (`aws ec2 describe-images --image-ids ami-...`). The
+   real test is stage 1 in another AWS account: it copies the image and waits until the copy is available.
 11. **Publish the code.** Merge into `main`, tag `vX.Y`, and write the release notes: what changed, whether the
    release changes the data, and any action the user must take.
 
