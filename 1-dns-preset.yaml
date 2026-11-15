@@ -149,7 +149,7 @@ Resources:
       S3BucketName: !Ref MSBucket
       ZoneIDs: !Join [ ',', !Ref ZoneIDs ]
       Updater: !Ref Updater
-      BaseUrl: 'https://mail-server-bundles.s3.eu-central-1.amazonaws.com/v1.0'
+      BaseUrl: 'https://mail-server-bundles.s3.eu-central-1.amazonaws.com/v1.1'
       Files:
       - 'system/autoshutdown.service'
       - 'system/spot-instance-shutdown'
