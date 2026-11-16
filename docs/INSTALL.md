@@ -190,7 +190,9 @@ maintenance mode for a moment (about 15 minutes without mail service; other serv
 
 The new server adds the domain to PostfixAdmin, creates its DKIM key and its MX, SPF, DKIM and DMARC records.
 A removed domain loses Flashlight's DNS records and its DKIM key, but stays in PostfixAdmin with its mailboxes:
-delete it there if you no longer need them.
+delete it there if you no longer need them. Deleting the domain in PostfixAdmin deletes its mailboxes and aliases
+too; their mail goes to `/mnt/mailserver/mail/.deleted/` within 10 minutes and is kept there for 30 days. A domain
+deleted in PostfixAdmin but still in the stack's list comes back, empty, at the next instance install.
 
 ### What can't be changed after the install
 
