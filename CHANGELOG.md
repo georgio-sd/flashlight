@@ -13,6 +13,9 @@ folder is frozen.
 - A failed first creation of stage 1 no longer deletes the domain's own DNS records on its rollback. The rollback
   cleaned up every record whose value matched Flashlight's, so an existing MX to `mail.<domain>` and a DKIM key at
   `mail._domainkey` were deleted although stage 1 had never written them.
+- With three Availability Zones, the first server no longer starts before the mail storage can be mounted in the
+  third zone. Stage 2 waited only for the first two zones, so an instance placed in the third one could fail to
+  install while its EFS mount target was still being created.
 
 ### Changed
 

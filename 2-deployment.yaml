@@ -457,9 +457,17 @@ Resources:
     Properties:
       Path: "/"
       Roles: [ !Ref InstanceRole ]
+  # Waits for all EFS mount targets, so no instance starts in a zone whose mount target isn't ready yet.
+  # DependsOn can't name MailStorageMountTargetC: with two zones it doesn't exist and the template is rejected.
+  # A reference inside Fn::If creates a dependency only when its condition is true, and this empty resource
+  # (it costs nothing) carries that reference; the LaunchTemplate then depends on it.
+  MailStorageMountTargets:
+    Type: AWS::CloudFormation::WaitConditionHandle
+    Metadata:
+      MountTargetC: !If [ ThreeAZoneConf, !Ref MailStorageMountTargetC, 'none (two zones)' ]
   LaunchTemplate:
     Type: AWS::EC2::LaunchTemplate
-    DependsOn: [ MailStorageMountTargetA, MailStorageMountTargetB ]
+    DependsOn: [ MailStorageMountTargetA, MailStorageMountTargetB, MailStorageMountTargets ]
     Properties:
       LaunchTemplateData:
         ImageId:
