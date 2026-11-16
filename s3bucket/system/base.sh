@@ -645,6 +645,10 @@ ln -sf /mnt/mailserver/etc/httpd/custom.conf /etc/httpd/conf.d/zz-custom.conf
 rm -f /mnt/mailserver/etc/httpd/sites.conf
 # the package's httpd.conf needs its DocumentRoot to exist (/var/www is on EFS); nothing is served from it
 mkdir -p /var/www/html
+# the package loads every load balancer method (00-proxy.conf), but no balancer is used here (only proxy_fcgi to
+# PHP-FPM and proxy_http to the Rspamd web interface); without mod_heartmonitor, the heartbeat method logs
+# "AH02282: No slotmem from mod_heartmonitor" at every start
+sed -i 's/^LoadModule lbmethod_heartbeat_module/#&/' /etc/httpd/conf.modules.d/00-proxy.conf
 #
 # PHP-FPM pool sized by memory (local file, rewritten at every boot): about 10 PHP processes per 2 GB
 # (the package default of up to 50 could run a small server out of memory); processes are started
