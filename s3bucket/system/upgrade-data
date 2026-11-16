@@ -16,14 +16,15 @@
 #   upgrade-data set KEY VALUE
 #   upgrade-data newer-data succeeds if the data belong to a newer release than this one, and prints both
 #                           (services-shutdown: an older instance must not resume service on such data)
+#   upgrade-data release    prints this installer's release
 #
-# Releasing a new version: set this_release and add it to releases. Only if the data need a one-off change, ship
-# upgrade-<previous>-<new>.sh and add the step "<previous>-<new>" to migrations (configs that Flashlight owns are
-# simply replaced, web applications are updated by version). A user can skip releases: all steps from the data's
-# release up to this one run in a row.
+# Starting work on a new version: set this_release and add it to releases (the code names the version being worked
+# on). Only if the data need a one-off change, ship upgrade-<previous>-<new>.sh and add the step "<previous>-<new>"
+# to migrations (configs that Flashlight owns are simply replaced, web applications are updated by version). A user
+# can skip releases: all steps from the data's release up to this one run in a row.
 #
-this_release=1.0
-releases="1.0"
+this_release=1.1
+releases="1.0 1.1"
 # the steps that have a migration script, e.g. "1.1-1.2 1.4-1.5"
 migrations=""
 #
@@ -157,6 +158,8 @@ case "$1" in
     data=$(get flashlight)
     echo "Flashlight $data (this instance: $this_release)"
     newer "$data" "$this_release" ;;
+  release)
+    echo "$this_release" ;;
   *)
-    echo "usage: upgrade-data check | run | set KEY VALUE | newer-data"; exit 2 ;;
+    echo "usage: upgrade-data check | run | set KEY VALUE | newer-data | release"; exit 2 ;;
 esac

@@ -107,7 +107,8 @@ case "$1" in
     [ -n "$user_rc" ] && [ "$user_rc" != 0 ] && event USER "user-script.sh failed with code $user_rc (details in the install log)"
     if [ "$base_rc" = 0 ]; then
       # the flag tells the next instances that the first install is done
-      printf "Flashlight Mail Server v1.0 (re)deployed at $(date)\nDo not delete this file" > $efs/flag
+      printf "Flashlight Mail Server v%s (re)deployed at %s\nDo not delete this file" \
+        "$(/usr/local/sbin/upgrade-data release)" "$(date)" > $efs/flag
       # after the reboot: check the services, then READY (cron-boot-runner runs /etc/cron.once once)
       printf 'STACK=%q\nAWS_REGION=%q\nBUCKET_CONFIG=%q\n' "$STACK" "$AWS_REGION" "$BUCKET_CONFIG" > $env_file
       mkdir -p /etc/cron.once

@@ -105,25 +105,43 @@ A migration runs once per release step and can rely on the data being exactly at
 Migrations live in `s3bucket/migrations/` and go into the stage 1 `Files` list. All migrations of all releases
 stay in the list for good: a server several releases behind needs every step in between.
 
+## Starting a version
+
+Released versions are on `main`; the next version is worked on in the `develop` branch. As soon as work on `X.Y`
+starts, the code names `X.Y` everywhere, so a stand installed from `develop` is an `X.Y` server:
+
+1. In `s3bucket/system/upgrade-data`, set `this_release=X.Y` and append `X.Y` to `releases` (oldest first, every
+   release listed). The flag file on EFS and the `versions` file take the number from there.
+2. In `1-dns-preset.yaml`, point `BaseUrl` to `.../vX.Y`.
+3. In `CHANGELOG.md`, open an `[Unreleased]` section for the changes of `X.Y`.
+4. Create the bucket folder `vX.Y/` and add it to the public bucket's policy. Until the release it holds the
+   work in progress and is updated from `develop`; test stands install from it.
+
+A stand installed from `develop` marks its data as `X.Y` at its next install. If a migration to `X.Y` is added
+later, the stand's data won't run it. To test it there, set the data back with
+`upgrade-data set flashlight <previous>` and replace the instance, or use a stand installed from the previous
+release (checklist, step 8).
+
 ## Release checklist
 
-1. **Version.** In `s3bucket/system/upgrade-data`, set `this_release=X.Y` and append `X.Y` to `releases`
-   (oldest first, every release listed).
+The release fixes what was done on `develop` and builds the bridge from the previous release.
+
+1. **Version.** `this_release`, the last entry of `releases` and `BaseUrl` name `X.Y` (set when the work
+   started, see above).
 2. **Migration**, if the data change: write `s3bucket/migrations/upgrade-<previous>-X.Y.sh` and add the step
    `<previous>-X.Y` to `migrations` in `upgrade-data`. A step that isn't listed there runs no script.
 3. **Files list.** Every file in `s3bucket/` that instances use is in the stage 1 `Files` list, including new
    files and all migrations. A missing file is simply absent from the config bucket and fails the install.
-4. **BaseUrl.** In `1-dns-preset.yaml`, point `BaseUrl` to `.../vX.Y`.
-5. **Maintenance template.** If `2-deployment.yaml` changed, regenerate it:
+4. **Maintenance template.** If `2-deployment.yaml` changed, regenerate it:
 
    ```
    python build/make-maintenance.py 2-deployment.yaml x-maintenance.yaml
    ```
 
-6. **Attachment lists.** Compare `s3bucket/rspamd/attachments-gmail.map` with Google's list of blocked file types
+5. **Attachment lists.** Compare `s3bucket/rspamd/attachments-gmail.map` with Google's list of blocked file types
    (https://support.google.com/mail/answer/6590) and `attachments-strict.map` with Microsoft's list of attachments
    Outlook blocks; update them and the date in their headers.
-7. **Rspamd package.** The release carries a copy of the Rspamd package, used when rspamd.com can't be reached.
+6. **Rspamd package.** The release carries a copy of the Rspamd package, used when rspamd.com can't be reached.
    On an AlmaLinux instance with the Rspamd repository, download the newest package of the pinned version (`dnf download rspamd`), check it with
    `rpm -K` (key `rspamd/rspamd.asc`), upload it to `packages/`, and update its name in `base.sh` (`rspamd_rpm`)
    and in the stage 1 `Files` list.
@@ -134,15 +152,16 @@ stay in the list for good: a server several releases behind needs every step in 
    (https://github.com/HeinleinSupport/olefy), and regenerate `olefy-requirements.txt` from the newest oletools:
    in a Python 3.12 environment, `pip download --only-binary=:all: oletools colorclass python-magic`, then one line
    `name==version --hash=sha256:...` per downloaded file.
-8. **Test a fresh install** on a test stand with `CertificateMode=staging`: install READY, mail between the
+7. **Test a fresh install** on a test stand with `CertificateMode=staging`: install READY, mail between the
    stand's own domains, webmail, admin pages, DKIM, DNS records.
-9. **Test the upgrade** on a stand installed from the previous release, following UPGRADING.md step by step:
+8. **Test the upgrade** on a stand installed from the previous release, following UPGRADING.md step by step:
    `UPGRADE` lines in the event log, `flashlight=X.Y` in `versions`, the admin's settings files unchanged, mail
    still there. If the release has a migration, also test a release skip (from two releases back) if one exists,
    and a failing migration. A failing migration is tested on the instance with `MIGRATIONS_DIR`, `RELEASES` and
    `THIS_RELEASE`, which `upgrade-data` reads instead of its built-in values.
-10. **Publish the files.** Upload `s3bucket/` to `s3://mail-server-bundles/vX.Y/` keeping the layout, and check
-   that every path of the `Files` list is there.
+9. **Publish the files.** Upload `s3bucket/` to `s3://mail-server-bundles/vX.Y/` once more, keeping the layout,
+   so the folder matches the release, and check that every path of the `Files` list is there. From now on the
+   folder is frozen.
    **New server image** (only if the release has one): make the image and the snapshot of its disk public, then
    check both:
 
@@ -156,8 +175,9 @@ stay in the list for good: a server several releases behind needs every step in 
 
    The snapshot ID is in the image's block device mapping (`aws ec2 describe-images --image-ids ami-...`). The
    real test is stage 1 in another AWS account: it copies the image and waits until the copy is available.
-11. **Publish the code.** Merge into `main`, tag `vX.Y`, and write the release notes: what changed, whether the
-   release changes the data, and any action the user must take.
+10. **Publish the code.** In `CHANGELOG.md`, turn `[Unreleased]` into `[X.Y] - <date>`. Merge into `main`, tag
+   `vX.Y`, and write the release notes: what changed, whether the release changes the data, and any action the
+   user must take. Then start the next version on `develop` (see above).
 
 ## Testing tips
 
