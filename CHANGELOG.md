@@ -21,6 +21,11 @@ folder is frozen.
 
 - Stage 2 waits up to 30 minutes for the install instead of 20: an install can take 12 minutes on a slower
   instance type or region.
+- The mail storage (EFS) is named `<stage 2 stack name>-Flashlight` in the EFS console, also after the stack
+  is deleted, so it is clear whose file system it is.
+- Switching Antivirus off removes the virus signature database (about 110 MB) from the mail storage at the next
+  install; switching it on again downloads it again.
+- INSTALL: deleting the server step by step, including emptying the config bucket before deleting stage 1.
 
 ## [1.0] - 2026-11-14
 

@@ -164,7 +164,7 @@ already upgraded to a newer release.
 | `www/webmail/` | Roundcube's logs |
 | `rspamd/` | The spam filter's web interface settings, statistics, graphs, whitelist |
 | `valkey/` | What the spam filter has learned |
-| `clamav/` | The antivirus signatures |
+| `clamav/` | The antivirus signatures (only while Antivirus is enabled) |
 | `root/` | `credentials`, `secrets` (generated passwords and keys), the fail2ban note |
 | `automation/` | The cron scripts |
 | `backup/` | Database dumps (28 days) and upgrade backups (90 days) |
@@ -173,7 +173,7 @@ already upgraded to a newer release.
 | `flag`, `flag-ec2id-<id>` | The first install is done; the instance that owns the EFS now |
 
 The file system outlives the stack (`DeletionPolicy: RetainExceptOnCreate`): deleting the stage 2 stack leaves it
-in the account, to be deleted by hand. EFS is encrypted at rest, and the instance mounts it over TLS. With MailStorageLifecyclePolicy, files not read
+in the account, to be deleted by hand; its name (`<stack>-Flashlight`) tells whose it is. EFS is encrypted at rest, and the instance mounts it over TLS. With MailStorageLifecyclePolicy, files not read
 for a while move to the Infrequent Access class.
 
 ## Configuration: ours and the admin's

@@ -673,6 +673,10 @@ Resources:
     DeletionPolicy: RetainExceptOnCreate
     UpdateReplacePolicy: Retain
     Properties:
+      # the name in the EFS console; it stays after the stack is deleted and tells whose file system it is
+      FileSystemTags:
+      - Key: Name
+        Value: !Sub "${AWS::StackName}-Flashlight"
       Encrypted: True
       PerformanceMode: generalPurpose
       ThroughputMode: !Ref MailStorageThroughputMode

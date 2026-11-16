@@ -351,14 +351,23 @@ See [Upgrading Flashlight](UPGRADING.md).
 
 ### Deleting the server
 
-Delete stage 2, then stage 1. Stage 1 removes Flashlight's DNS records; its config bucket can only be deleted
-once you empty it.
+1. **Delete the stage 2 stack.** The server and its network are deleted; the mail storage stays (below).
+2. **Empty the config bucket** of stage 1: S3 console, the bucket from stage 1's output `S3Bucket`, **Empty**.
+   CloudFormation can't delete a bucket that has files in it, so without this the deletion of stage 1 fails.
+   Empty it only after step 1: the server writes its logs and backups there while it runs.
+3. **Delete the stage 1 stack.** It removes Flashlight's DNS records, resets the reverse DNS and releases the
+   Elastic IP address. (Stage 1 can't be deleted while stage 2 exists: stage 2 uses its outputs.)
 
 **The mail storage is not deleted with the stack.** The EFS file system with all mail and databases stays in
-your account, so a stack deleted by mistake doesn't take the mail with it. It keeps costing its storage price
-until you delete it yourself: EFS console, the file system named in the stack's resources (`MailStorage`),
-**Delete**. Do that only when you are sure you no longer need the data, or have copied them; there is no way
-back. (If the very first creation of the stack fails, its empty file system is cleaned up automatically.)
+your account, so a stack deleted by mistake doesn't take the mail with it. It has no deletion protection
+switch to turn off: the stack simply leaves it behind. It keeps costing its storage price until you delete it
+yourself: EFS console, the file system named `<stage 2 stack name>-Flashlight`, **Delete**. Do that only when
+you are sure you no longer need the data, or have copied them; there is no way back. With
+MailStorageBackupPolicy, its daily AWS Backup copies stay after that until they expire (35 days).
+
+A file system created before Flashlight 1.1 gets its name only when its stack is updated to 1.1. Otherwise note
+its ID before deleting stage 2: the stack's **Resources** tab, `MailStorage`. (If the very first creation of the
+stack fails, its empty file system is cleaned up automatically.)
 
 ## Troubleshooting
 

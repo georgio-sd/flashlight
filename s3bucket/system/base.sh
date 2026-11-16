@@ -701,6 +701,11 @@ echo "OPTIONS=\"-x $dkim/opendkim.conf\"" > /etc/sysconfig/opendkim
 efs_unit opendkim
 systemctl enable opendkim
 #
+# The virus scanner's signature database (see Antivirus below) is downloaded data only: without the scanner it
+# doesn't stay on EFS (enabling it again downloads it again, about a minute). Antivirus needs Antispam (the template
+# checks), so this runs outside the spam filter part, also when the spam filter is off.
+[ "$ANTIVIRUS" = 'ENABLED' ] || rm -rf /mnt/mailserver/clamav
+#
 # Spam filtering (stack parameter Antispam): Rspamd checks incoming mail as the first Postfix milter (main.cf);
 # spam gets an "X-Spam: Yes" header and goes to Junk (Dovecot's sieve_before), obvious spam is rejected. Valkey
 # (Redis) keeps what Rspamd learns, on EFS; Unbound is Rspamd's own DNS resolver (blocklists refuse queries that
