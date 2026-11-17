@@ -227,7 +227,13 @@ as started only when it answers (up to a minute); with the antivirus, Rspamd sta
 started when it answers, after loading its database (up to 2 minutes). Neither wait ever fails or stops a
 service: if one is slow or down, the others start after the wait and mail flows unchecked meanwhile; Rspamd
 connects to clamd for every message, so the virus scan resumes by itself once clamd answers. A crashed clamd is
-restarted after 30 seconds, at most 5 times in 10 minutes.
+restarted after 30 seconds, at most 5 times in 10 minutes (each start loads its database: about 1 GB).
+
+Postfix, Dovecot, Valkey, Rspamd, PHP-FPM and Apache restart after a crash every 30 seconds with no limit, so they
+come back by themselves after a short EFS outage, for example; MariaDB, OpenDKIM, Unbound, fail2ban and crond keep
+their packages' own restart settings. A service stopped with `systemctl stop` (also when another instance takes
+over or this one is replaced) stays stopped. The Auto Scaling group's health check sees only the instance, not its
+services, so these restarts are what brings a crashed service back.
 
 `/usr/local/etc/flashlight-services` lists the services of this instance (they depend on the stack's
 parameters): `services_running` must be up after an install, `services_efs` write to EFS and are stopped

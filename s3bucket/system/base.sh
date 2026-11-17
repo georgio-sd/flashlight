@@ -42,6 +42,17 @@ unit_env() {
   systemctl daemon-reload
 }
 #
+# A crashed service starts again by itself after 30 seconds, with no limit on the attempts: a short EFS outage, for
+# example, stops the services, and they come back once EFS is there again (systemd's default gives up after 5
+# quick attempts). "systemctl stop" (services-shutdown, replace-instance) and a clean exit never restart it.
+# usage: restart_unit UNIT [MODE] (MODE: on-failure, the default, or the package's own, e.g. always)
+restart_unit() {
+  mkdir -p /etc/systemd/system/$1.service.d
+  printf '%s\n' '[Unit]' 'StartLimitIntervalSec=0' '[Service]' "Restart=${2:-on-failure}" 'RestartSec=30' \
+    > /etc/systemd/system/$1.service.d/restart.conf
+  systemctl daemon-reload
+}
+#
 # The admin's own settings file of a program, on EFS: created once with an explanation, then never changed
 # (our files are rewritten at every boot; settings that must survive upgrades go to these files)
 # usage: custom_file PATH "comment line" ...
@@ -500,6 +511,7 @@ fi
 rm -rf /var/spool/postfix
 ln -s /mnt/mailserver/spool/postfix /var/spool/postfix
 efs_unit postfix
+restart_unit postfix
 # its lookups go to the PostfixAdmin database; with the spam filter it also waits for Rspamd (and Rspamd for the
 # virus scanner), so mail isn't taken before it can be checked. Ordering only: if Rspamd fails, Postfix still starts
 postfix_after="mariadb.service"
@@ -546,6 +558,7 @@ custom_file /mnt/mailserver/etc/dovecot/custom.conf \
   "# set here win; Flashlight upgrades never change this file. Reload Dovecot after editing (systemctl reload" \
   "# dovecot). Example:" "#   protocol imap {" "#     mail_max_userip_connections = 50" "#   }"
 efs_unit dovecot
+restart_unit dovecot
 # logins are checked against the PostfixAdmin database
 start_after dovecot mariadb.service
 systemctl enable dovecot
@@ -668,6 +681,8 @@ php_children=$(awk '/^MemTotal/ {n = int($2 / 1024 / 200); print (n < 5 ? 5 : n)
 sed -i "s/^pm = .*/pm = ondemand/; s/^pm.max_children = .*/pm.max_children = $php_children/" /etc/php-fpm.d/www.conf
 efs_unit httpd
 efs_unit php-fpm
+restart_unit httpd
+restart_unit php-fpm
 unit_env httpd "OPTIONS="
 # the web applications use the database; Apache passes their requests to PHP-FPM
 start_after php-fpm mariadb.service
@@ -1034,6 +1049,9 @@ EOF
   rspamadm configtest
   efs_unit valkey
   efs_unit rspamd
+  restart_unit valkey
+  # the package restarts Rspamd always, but after 100 ms, so 5 quick failures stopped it for good
+  restart_unit rspamd always
   # Unbound and Rspamd need the network up (Rspamd loads its lists from the internet when it starts); Rspamd also
   # uses Valkey and Unbound. Its workers listen on 127.0.0.1 ("localhost" gave each socket twice here).
   start_after unbound network-online.target
