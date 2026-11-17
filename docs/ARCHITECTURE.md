@@ -219,8 +219,15 @@ every boot; lines outside belong to the admin.
 
 Services that use EFS start only when it is mounted (`RequiresMountsFor`) and not at all if it isn't, so MariaDB
 can't start on an empty local folder. A service starts after the services it uses: Postfix, Dovecot and
-PHP-FPM after MariaDB, Apache after PHP-FPM, Rspamd after Valkey, Unbound and olefy, fail2ban after the services
-whose logs it reads. These are ordering dependencies only: restarting MariaDB doesn't restart Postfix.
+PHP-FPM after MariaDB, Apache after PHP-FPM, Rspamd after Valkey, Unbound, olefy and clamd, fail2ban after the
+services whose logs it reads. These are ordering dependencies only: restarting MariaDB doesn't restart Postfix.
+
+Mail comes in only once it can be checked: with the spam filter, Postfix starts after Rspamd, and Rspamd counts
+as started only when it answers (up to a minute); with the antivirus, Rspamd starts after clamd, which counts as
+started when it answers, after loading its database (up to 2 minutes). Neither wait ever fails or stops a
+service: if one is slow or down, the others start after the wait and mail flows unchecked meanwhile; Rspamd
+connects to clamd for every message, so the virus scan resumes by itself once clamd answers. A crashed clamd is
+restarted after 30 seconds, at most 5 times in 10 minutes.
 
 `/usr/local/etc/flashlight-services` lists the services of this instance (they depend on the stack's
 parameters): `services_running` must be up after an install, `services_efs` write to EFS and are stopped

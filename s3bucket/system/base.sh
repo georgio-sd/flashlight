@@ -492,8 +492,11 @@ fi
 rm -rf /var/spool/postfix
 ln -s /mnt/mailserver/spool/postfix /var/spool/postfix
 efs_unit postfix
-# its lookups go to the PostfixAdmin database
-start_after postfix mariadb.service
+# its lookups go to the PostfixAdmin database; with the spam filter it also waits for Rspamd (and Rspamd for the
+# virus scanner), so mail isn't taken before it can be checked. Ordering only: if Rspamd fails, Postfix still starts
+postfix_after="mariadb.service"
+[ "$ANTISPAM" = 'ENABLED' ] && postfix_after="$postfix_after rspamd.service"
+start_after postfix $postfix_after
 systemctl enable postfix
 #
 # Configuring dovecot. Our dovecot.conf and dovecot-mysql.conf come from the release at every boot (the package's
@@ -896,6 +899,16 @@ EOF
       "  message = '\${SCANNER}: virus found: \"\${VIRUS}\"';" "  timeout = 20.0;" "  max_size = 20971520;" "}"
     efs_unit clamd@scan
     efs_unit clamav-freshclam
+    # clamd needs some time to load its database. It counts as started once it answers (up to 2 minutes; the "-"
+    # means a slow load doesn't fail or stop it: after 2 minutes it counts as started anyway and goes on loading),
+    # so Rspamd, and Postfix after it, don't take mail it can't scan yet. Rspamd connects for every message, so it
+    # uses clamd as soon as it answers, also after a slow start or a restart. A crash restarts it, at most 5 times
+    # in 10 minutes (then it stays down and mail goes on without the virus scan).
+    printf '%s\n' '[Unit]' 'StartLimitIntervalSec=600' 'StartLimitBurst=5' '[Service]' \
+      'ExecStartPost=-/usr/bin/clamdscan --config-file=/etc/clamd.d/scan.conf --ping=120:1' 'TimeoutStartSec=420' \
+      'Restart=on-failure' 'RestartSec=30' > /etc/systemd/system/clamd@scan.service.d/ready.conf
+    systemctl daemon-reload
+    rspamd_after="$rspamd_after clamd@scan.service"
     systemctl enable clamd@scan clamav-freshclam
   fi
   #
@@ -1017,6 +1030,12 @@ EOF
   # uses Valkey and Unbound. Its workers listen on 127.0.0.1 ("localhost" gave each socket twice here).
   start_after unbound network-online.target
   start_after rspamd valkey.service unbound.service network-online.target$rspamd_after
+  # Rspamd counts as started once its controller answers (up to a minute, never a failure: see clamd above), and
+  # Postfix starts after it (see Postfix), so no mail comes in before it is checked ("$$": systemd's own "$")
+  printf '%s\n' '[Service]' \
+    "ExecStartPost=-/bin/sh -c 'for i in \$\$(seq 60); do curl -sf http://127.0.0.1:11334/ping > /dev/null && exit 0; sleep 1; done; exit 1'" \
+    > /etc/systemd/system/rspamd.service.d/ready.conf
+  systemctl daemon-reload
   unit_env rspamd "RSPAMD_LOCAL_ADDR=127.0.0.1"
   systemctl enable unbound valkey rspamd
 fi
