@@ -19,6 +19,9 @@ folder is frozen.
 - A stack update that changes only InstanceType, InstanceType2 or InstanceLifecycle now replaces the server, as
   the documentation says. Before, the Auto Scaling group applied the new type or Spot setting only to the next
   instance it started (after a Spot interruption or the scheduled rebuild).
+- After a server start, mail is taken only once the spam filter (and the virus scanner, with Antivirus) answer.
+  Before, Postfix could take mail while they were still starting, and with Antivirus the mail of the first
+  half-minute or so passed without the virus scan. A crashed virus scanner now restarts by itself.
 
 ### Changed
 
