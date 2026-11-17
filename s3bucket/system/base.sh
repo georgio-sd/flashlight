@@ -139,6 +139,9 @@ dnf install -y epel-release
 # in UserData, so a newer AlmaLinux release gets its matching EPEL branch.
 os_minor=$(. /etc/os-release && echo "${VERSION_ID#*.}")
 sed -i "s/-\$releasever&/-\$releasever.$os_minor\&/" /etc/yum.repos.d/epel.repo
+# Postfix 3.8.5-11 leaves its queue folder to its tmpfiles rules, which run only at the end of the install, after
+# its own install script has looked for the folder ("fatal: chdir(/var/spool/postfix)" in the mail log otherwise)
+mkdir -p /var/spool/postfix
 dnf install -y php php-cli php-fpm php-mysqlnd php-mbstring php-intl php-xml php-gd php-pecl-zip php-opcache \
   httpd httpd-tools mod_ssl mariadb mariadb-server \
   postfix postfix-mysql dovecot dovecot-mysql dovecot-pigeonhole \
@@ -156,10 +159,15 @@ sed -i 's/^#Domain = .*/Domain = localdomain/' /etc/idmapd.conf
 # - the logrotate rule of sssd-common (sssd itself isn't installed) rotates as user sssd, which can't read the
 #   root-owned log folder
 if id sssd > /dev/null 2>&1 && [ -d /var/log/sssd ]; then chown sssd:sssd /var/log/sssd; fi
-# - the tmpfiles rules of httpd and mariadb create folders where we keep links to EFS (/var/www, /var/lib/mysql):
-#   the same rules without those lines (a file in /etc/tmpfiles.d replaces the package's one of the same name)
+# - the tmpfiles rules of httpd, mariadb and postfix create folders where we keep links to EFS (/var/www,
+#   /var/lib/mysql, the mail queue /var/spool/postfix): the same rules without those lines (a file in
+#   /etc/tmpfiles.d replaces the package's one of the same name). They run before EFS is mounted, and would report
+#   the links as broken. Postfix's rules are all about its queue (since 3.8.5-11), so its file ends up empty.
 grep -vE '^d /var/www( |/)' /usr/lib/tmpfiles.d/httpd.conf > /etc/tmpfiles.d/httpd.conf
 grep -vE '^d /var/lib/mysql ' /usr/lib/tmpfiles.d/mariadb.conf > /etc/tmpfiles.d/mariadb.conf
+if [ -f /usr/lib/tmpfiles.d/postfix.conf ]; then
+  grep -vE '^[a-zA-Z] /var/spool/postfix( |/|$)' /usr/lib/tmpfiles.d/postfix.conf > /etc/tmpfiles.d/postfix.conf || true
+fi
 # - the boot image (initramfs) of the AlmaLinux cloud image has NFS support, which starts rpcbind, rpc.statd and
 #   rpc.idmapd early in the boot with their own warnings. The root file system is on EBS and EFS is mounted after
 #   the boot, so it is left out; the image of the kernel this instance boots next is rebuilt (about 45 seconds)
