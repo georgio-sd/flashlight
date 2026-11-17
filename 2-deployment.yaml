@@ -470,6 +470,16 @@ Resources:
     DependsOn: [ MailStorageMountTargetA, MailStorageMountTargetB, MailStorageMountTargets ]
     Properties:
       LaunchTemplateData:
+        # The instance types and Spot/On-Demand are settings of the Auto Scaling group (MixedInstancesPolicy), and
+        # a change there alone applies only to the next instance the group starts. As tags here they also make a new
+        # template version, so a stack update that changes them replaces the server like any other setting.
+        TagSpecifications:
+        - ResourceType: instance
+          Tags:
+          - Key: 'flashlight:instance-types'
+            Value: !If [ SecondInstanceType, !Sub "${InstanceType},${InstanceType2}", !Ref InstanceType ]
+          - Key: 'flashlight:lifecycle'
+            Value: !Ref InstanceLifecycle
         ImageId:
           Fn::ImportValue: !Sub "${DnsPreset}-ImageId"
         KeyName: !Ref KeyName

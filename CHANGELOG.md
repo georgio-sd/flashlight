@@ -16,6 +16,9 @@ folder is frozen.
 - With three Availability Zones, the first server no longer starts before the mail storage can be mounted in the
   third zone. Stage 2 waited only for the first two zones, so an instance placed in the third one could fail to
   install while its EFS mount target was still being created.
+- A stack update that changes only InstanceType, InstanceType2 or InstanceLifecycle now replaces the server, as
+  the documentation says. Before, the Auto Scaling group applied the new type or Spot setting only to the next
+  instance it started (after a Spot interruption or the scheduled rebuild).
 
 ### Changed
 
