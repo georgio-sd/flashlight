@@ -3,7 +3,7 @@
 # The stack's variables come from UserData. Without them some steps would act on empty values (an empty
 # domain list, for example, would delete every DKIM key), so stop before touching anything.
 for var in EIP_ID EIP AWS_REGION STACK MAIL_STORAGE BUCKET_CONFIG TIMEZONE ADMIN_EMAIL CERT_MODE INSTANCE_LIFECYCLE \
-    DOMAIN_NAMES DOMAIN_ZONE_IDS ADMIN_DOMAIN MAIL_DOMAIN REBUILD_AFTER_DAYS ANTISPAM SWAP ATTACHMENT_POLICY ANTIVIRUS; do
+    DOMAIN_NAMES DOMAIN_ZONE_IDS ADMIN_DOMAIN MAIL_DOMAIN REBUILD_AFTER_DAYS ANTISPAM ATTACHMENT_POLICY ANTIVIRUS; do
   [ -n "${!var}" ] || { echo "base.sh: $var is not set, nothing done"; exit 1; }
 done
 #
@@ -77,6 +77,15 @@ sed -i "s/^udp6\(.*\)/#udp6\1/; s/^tcp6\(.*\)/#tcp6\1/" /etc/netconfig
 # Disabling amazon-ssm-agent
 systemctl disable amazon-ssm-agent
 #
+# Disabling nm-cloud-setup: it sets up extra private IPs and network interfaces from the instance metadata, and the
+# server has one interface with one IP (AWS maps the Elastic IP itself). Left on, it polls the metadata every 5
+# minutes, and at boot NetworkManager restarts it several times a second, which logs "code=killed, status=15/TERM"
+# at every boot. Masked, so NetworkManager's dispatcher can't start it either.
+if systemctl list-unit-files nm-cloud-setup.service > /dev/null 2>&1; then
+  systemctl disable --now nm-cloud-setup.timer
+  systemctl mask nm-cloud-setup.service
+fi
+#
 # Installing amazon-efs-utils (prebuilt RPM, see build/efs-utils.md) and mounting EFS
 cd ~
 efs_rpm=amazon-efs-utils-3.3.5-1.el10.x86_64.rpm
@@ -84,6 +93,12 @@ aws s3 cp s3://$BUCKET_CONFIG/$efs_rpm .
 dnf install -y ./$efs_rpm
 rm $efs_rpm
 mkdir /mnt/mailserver
+# A unique NFS client identity for this instance. Without it Linux introduces itself to EFS by the hostname,
+# which the old and the new instance share during a replacement: EFS takes them for one client, and when one
+# of them reconnects or unmounts, it wipes the other's state (its file locks are lost). modprobe.d applies at
+# every boot, modprobe now to the mount below.
+echo "options nfs nfs4_unique_id=$(imds instance-id)" > /etc/modprobe.d/flashlight-nfs.conf
+modprobe nfs
 # tls: encrypt traffic to EFS (costs about 1 s of CPU per GB transferred, no visible speed loss)
 echo -e "$MAIL_STORAGE:/ /mnt/mailserver efs _netdev,tls 0 0" >> /etc/fstab
 mount -a
@@ -198,32 +213,38 @@ printf '%s\n' "# Flashlight: instance metadata for root only (base.sh). DON'T ED
 echo 'include "/etc/nftables/flashlight-imds.nft"' >> /etc/sysconfig/nftables.conf
 systemctl enable --now nftables
 #
-# Swap (stack parameter Swap): a cushion for short memory peaks, so the kernel doesn't stop a service when memory
-# runs out for a moment; the server slows down instead (if that happens often, it needs a bigger instance type).
+# Swap: a cushion for short memory peaks (ClamAV holds two copies of its database while it loads new signatures,
+# for example), so the kernel doesn't stop a service when memory runs out for a moment; the server slows down
+# instead (if that happens often, it needs a bigger instance type). Idle mail connections are what goes out first.
 # Half the memory, at most 4 GB: 2 GB of memory -> 1 GB of swap, 4 -> 2, 8 and more -> 4. Besides it the disk keeps
 # 1.5 GB free; the template's rules ask for a big enough disk, and if the swap still doesn't fit, it is made
 # smaller (or none) with a WARN line in instance.log. The disk is encrypted, so whatever goes to swap is too.
-if [ "$SWAP" = 'ENABLED' ]; then
-  mem_mb=$(awk '/^MemTotal/ {print int($2 / 1024)}' /proc/meminfo)
-  # (memory rounded to whole GB, as the instance types are sold, then halved)
-  swap_mb=$(( (mem_mb + 512) / 1024 * 512 ))
-  if [ $swap_mb -gt 4096 ]; then swap_mb=4096; fi
-  fit_mb=$(( $(df -m --output=avail / | tail -1) - 1536 ))
-  if [ $fit_mb -lt $swap_mb ]; then
-    /usr/local/sbin/instance-log WARN "swap: only $(( fit_mb > 0 ? fit_mb : 0 )) of $swap_mb MB fit on the disk, choose a bigger DiskVolumeSize"
-    swap_mb=$(( fit_mb > 0 ? fit_mb / 256 * 256 : 0 ))
-  fi
-  if [ $swap_mb -ge 256 ]; then
-    dd if=/dev/zero of=/swapfile bs=1M count=$swap_mb status=none
-    chmod 600 /swapfile
-    mkswap /swapfile
-    swapon /swapfile
-    echo '/swapfile none swap defaults 0 0' >> /etc/fstab
-  fi
-  # swap only under real memory pressure
-  echo 'vm.swappiness = 10' > /etc/sysctl.d/90-flashlight-swap.conf
-  sysctl -p /etc/sysctl.d/90-flashlight-swap.conf
+mem_mb=$(awk '/^MemTotal/ {print int($2 / 1024)}' /proc/meminfo)
+# (memory rounded to whole GB, as the instance types are sold, then halved)
+swap_mb=$(( (mem_mb + 512) / 1024 * 512 ))
+if [ $swap_mb -gt 4096 ]; then swap_mb=4096; fi
+fit_mb=$(( $(df -m --output=avail / | tail -1) - 1536 ))
+if [ $fit_mb -lt $swap_mb ]; then
+  /usr/local/sbin/instance-log WARN "swap: only $(( fit_mb > 0 ? fit_mb : 0 )) of $swap_mb MB fit on the disk, choose a bigger DiskVolumeSize"
+  swap_mb=$(( fit_mb > 0 ? fit_mb / 256 * 256 : 0 ))
 fi
+if [ $swap_mb -ge 256 ]; then
+  dd if=/dev/zero of=/swapfile bs=1M count=$swap_mb status=none
+  chmod 600 /swapfile
+  mkswap /swapfile
+  swapon /swapfile
+  echo '/swapfile none swap defaults 0 0' >> /etc/fstab
+fi
+# swap only under real memory pressure
+echo 'vm.swappiness = 10' > /etc/sysctl.d/90-flashlight-swap.conf
+sysctl -p /etc/sysctl.d/90-flashlight-swap.conf
+#
+# Every IMAP connection waiting in IDLE uses an inotify instance of the vmail user: the kernel's default of 128
+# was exceeded at ~1000 connections in load tests, and Dovecot then falls back to checking the folders by timer.
+# The kernel spends memory on these only for what is in use.
+printf '%s\n' 'fs.inotify.max_user_instances = 8192' 'fs.inotify.max_user_watches = 524288' \
+  > /etc/sysctl.d/90-flashlight-inotify.conf
+sysctl -p /etc/sysctl.d/90-flashlight-inotify.conf
 #
 # One-time jobs after the final reboot: /etc/cron.once runs once from @reboot. install-finish puts the
 # READY check there (services up -> READY and the CloudFormation signal), only after a good install.
@@ -253,10 +274,13 @@ if [ ! -f $flag ]; then
 fi
 rm -rf /var/lib/mysql
 ln -s /mnt/mailserver/mysql /var/lib/mysql
-# all clients are local (unix socket), so don't listen on the network
+# all clients are local (unix socket), so don't listen on the network. log_warnings 1 instead of MariaDB's
+# default 2: Postfix's proxymap ends its database connections without a goodbye when it exits (after 100
+# clients, as every Postfix process), and level 2 logs each of them as "Aborted connection" (dozens an hour
+# under load). Real errors and warnings are still logged; set 2 in custom.cnf to see these again.
 printf '%s\n' "# Flashlight's MariaDB settings. DON'T EDIT: rewritten at every boot from the Flashlight release." \
   "# Your own settings go to /mnt/mailserver/etc/mariadb/custom.cnf (zz-custom.cnf here, read last)." \
-  "[mysqld]" "bind-address = 127.0.0.1" > /etc/my.cnf.d/flashlight.cnf
+  "[mysqld]" "bind-address = 127.0.0.1" "log_warnings = 1" > /etc/my.cnf.d/flashlight.cnf
 custom_file /mnt/mailserver/etc/mariadb/custom.cnf \
   "# Your MariaDB settings. MariaDB reads this file last (as /etc/my.cnf.d/zz-custom.cnf), so the values set" \
   "# here win; Flashlight upgrades never change this file. Restart MariaDB after editing it. Example:" \
@@ -270,7 +294,9 @@ unit_env mariadb "MYSQLD_OPTS= _WSREP_NEW_CLUSTER="
 # if memory runs out anyway, the kernel stops other processes first (Rspamd and the PHP workers come back by
 # themselves; without the database, logins and mail lookups fail)
 printf '[Service]\nOOMScoreAdjust=-500\n' > /etc/systemd/system/mariadb.service.d/oom.conf
-systemctl daemon-reload
+# the package restarts it only after a crash signal (on-abort); an exit on an error (a short EFS outage, a lost
+# NFS lock) left it stopped and the server without logins
+restart_unit mariadb
 systemctl enable --now mariadb
 #
 # Data from an older Flashlight release: back up, run the migrations up to this release, restore all on a failure
@@ -543,8 +569,17 @@ sievec -c /dev/null /etc/dovecot/sieve/spam-to-junk.sieve
 aws s3 cp s3://$BUCKET_CONFIG/dovecot-mysql.conf /etc/dovecot
 imap_sieve=""
 [ "$ANTISPAM" = 'ENABLED' ] && imap_sieve=" imap_sieve"
+# IMAP connections the memory holds: ~2 MB each (1.5-1.6 MB measured in load tests), after the services (about
+# 1.5 GB, 2.5 GB with ClamAV; its second copy while loading new signatures goes to swap) and 512 MB left for the
+# page cache. Never below Dovecot's default of 1024: 2-4 GB servers keep it (too many connections there means
+# swapping, which is better than refused mail programs); 8 GB with ClamAV gets ~2350, 16 GB ~6350.
+services_mb=1536
+[ "$ANTIVIRUS" = 'ENABLED' ] && services_mb=2560
+imap_limit=$(( (mem_mb - services_mb - 512) / 2 ))
+[ $imap_limit -lt 1024 ] && imap_limit=1024
 sed -i "s/{MainDomain}/$(echo "$DOMAIN_NAMES" | cut -d',' -f 1)/; s/{MailDomain}/$MAIL_DOMAIN/; s/{ImapSievePlugin}/$imap_sieve/" \
   /etc/dovecot/dovecot.conf
+sed -i "s/{ImapProcessLimit}/$imap_limit/; s/{ServiceClientLimit}/$(( imap_limit + 1000 ))/g" /etc/dovecot/dovecot.conf
 # (a separate assignment, so a missing secret stops the install instead of leaving an empty password)
 postfix_db_password=$(/usr/local/sbin/secrets get postfix_db_password)
 sed -i "s/{database_password}/$postfix_db_password/" /etc/dovecot/dovecot-mysql.conf

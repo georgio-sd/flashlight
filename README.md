@@ -107,7 +107,8 @@ need to buy capacity in advance "for growth":
   instance type (InstanceType2) to None, so the server always runs on the reserved type.
 - **The server size is a setting.** When the company grows, choose a larger instance type in a stack update:
   the server is replaced by a bigger one with the same data, without reinstalling anything. If the load drops,
-  go back to a smaller one the same way.
+  go back to a smaller one the same way. Which size fits how many users, measured with load tests:
+  [Choosing the instance type](docs/INSTALL.md#choosing-the-instance-type).
 - **Storage grows by itself.** EFS has no fixed size: you pay for the gigabytes of mail you actually have.
   Mail that nobody has opened for a month moves automatically to a storage class that is about ten times
   cheaper, and comes back on first access.

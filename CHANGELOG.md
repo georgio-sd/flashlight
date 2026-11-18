@@ -22,6 +22,15 @@ folder is frozen.
 - After a server start, mail is taken only once the spam filter (and the virus scanner, with Antivirus) answer.
   Before, Postfix could take mail while they were still starting, and with Antivirus the mail of the first
   half-minute or so passed without the virus scan. A crashed virus scanner now restarts by itself.
+- The database (MariaDB) restarts by itself after it stops on an error, like the mail services. Before, it came
+  back only after a crash, and an exit on an error (a short outage of the mail storage, for example) left the
+  server without logins until someone started it.
+- During a server replacement the old and the new server no longer disturb each other's connection to the mail
+  storage. Both introduced themselves to EFS by the same hostname, so EFS took them for one client, and the new
+  server could lose its file locks when the old one shut down.
+- Around 1000 connected mail programs no longer slow every login down: Dovecot's internal services were limited
+  to 1000 connections, and mail programs waiting for new mail (IDLE) ran out of the kernel's notification
+  instances after 128.
 
 ### Changed
 
@@ -32,6 +41,23 @@ folder is frozen.
 - Switching Antivirus off removes the virus signature database (about 110 MB) from the mail storage at the next
   install; switching it on again downloads it again.
 - INSTALL: deleting the server step by step, including emptying the config bucket before deleting stage 1.
+- INSTALL: setting up mail programs step by step: where to add the account in the common programs, why every
+  domain uses `mail.<main domain>`, what is supported and what isn't, and the usual cause when sending fails.
+- INSTALL: choosing the instance type, from load tests: how many webmail users and mail program connections each
+  type carries, why mailboxes are not users, and how the t3 CPU credits work.
+- Instance types: c7i (with c6a as its pair) and m7i (with m6a) in large and xlarge, which have the whole CPU at all
+  times with no credits; t3.large is gone (no more CPU than t3.medium, at about the price of m6a.large). InstanceType2
+  must be the pair of InstanceType: t3a for t3, c6a for c7i, m6a for m7i. A stack on t3.large chooses another type
+  at the upgrade.
+- The swap file is always made; the Swap parameter is gone and DiskVolumeSize starts at 10 GiB (12 for 8 GB of
+  memory and more). A stack with Swap = DISABLED and an 8 GiB disk sets DiskVolumeSize to 10 at the upgrade.
+- The database log no longer fills with "Aborted connection" notes (dozens an hour under load): Postfix ends its
+  lookup connections without a goodbye, which is harmless. MariaDB logs at level 1 instead of 2; errors and real
+  warnings are still logged.
+- The network helper nm-cloud-setup is off: the server has one network interface and nothing for it to set up.
+  It polled the instance metadata every 5 minutes and logged "code=killed, status=15/TERM" at every boot.
+- The number of mail program connections grows with the server's memory: about 2350 on 8 GB with the antivirus,
+  6350 on 16 GB (1024, Dovecot's default, on 2-4 GB servers).
 
 ## [1.0] - 2026-11-14
 

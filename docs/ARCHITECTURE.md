@@ -49,7 +49,8 @@ Auto Scaling group (AutoScalingReplacingUpdate): the old instance runs until the
 and if the new one fails, the update rolls back and the old one stays.
 
 The template's Rules refuse combinations that can't work: a Spamhaus key or the antivirus without the spam
-filter, the antivirus on small instance types, swap on a disk that's too small.
+filter, the antivirus on small instance types, a second instance type that isn't the pair of the first (t3a for
+t3, c6a for c7i, m6a for m7i: the same size and memory), a disk too small for the swap file.
 
 ### Maintenance mode: `x-maintenance.yaml`
 
@@ -71,6 +72,8 @@ EFS, the IAM role. It's used for upgrades and for changing the domain list.
    - associates the Elastic IP;
    - writes its own flag `flag-ec2id-<instance id>` on EFS, which makes any other running instance stop its
      services (see [Only one instance](#only-one-instance));
+   - turns off what the image runs but the server doesn't need (amazon-ssm-agent; nm-cloud-setup, which sets up
+     extra IPs and network interfaces from the instance metadata, while the server has one interface with one IP);
    - creates swap, quiets known harmless warnings, installs the packages;
    - starts MariaDB and, if the data are from an older release, upgrades them (see [UPGRADING](UPGRADING.md));
    - rebuilds every configuration file from the release, then applies the admin's own settings files;
@@ -176,6 +179,12 @@ The file system outlives the stack (`DeletionPolicy: RetainExceptOnCreate`): del
 in the account, to be deleted by hand; its name (`<stack>-Flashlight`) tells whose it is. EFS is encrypted at rest, and the instance mounts it over TLS. With MailStorageLifecyclePolicy, files not read
 for a while move to the Infrequent Access class.
 
+Each instance introduces itself to EFS with its own NFS client identity, the instance ID (`nfs4_unique_id`,
+set in `/etc/modprobe.d/flashlight-nfs.conf`). By default Linux uses the hostname, which the old and the new
+instance share during a replacement: EFS would take them for one client, and when one of them reconnected or
+unmounted, it would wipe the other's state, so the new server could lose its file locks (the kernel's
+`NFS: lost N locks`).
+
 ## Configuration: ours and the admin's
 
 Flashlight's configuration files are rewritten from the release at every install, so they always match the
@@ -229,9 +238,9 @@ service: if one is slow or down, the others start after the wait and mail flows 
 connects to clamd for every message, so the virus scan resumes by itself once clamd answers. A crashed clamd is
 restarted after 30 seconds, at most 5 times in 10 minutes (each start loads its database: about 1 GB).
 
-Postfix, Dovecot, Valkey, Rspamd, PHP-FPM and Apache restart after a crash every 30 seconds with no limit, so they
-come back by themselves after a short EFS outage, for example; MariaDB, OpenDKIM, Unbound, fail2ban and crond keep
-their packages' own restart settings. A service stopped with `systemctl stop` (also when another instance takes
+MariaDB, Postfix, Dovecot, Valkey, Rspamd, PHP-FPM and Apache restart after a crash every 30 seconds with no
+limit, so they come back by themselves after a short EFS outage or a lost NFS lock, for example; OpenDKIM,
+Unbound, fail2ban and crond keep their packages' own restart settings. A service stopped with `systemctl stop` (also when another instance takes
 over or this one is replaced) stays stopped. The Auto Scaling group's health check sees only the instance, not its
 services, so these restarts are what brings a crashed service back.
 
@@ -241,7 +250,21 @@ together when another instance takes over or this one is replaced.
 
 MariaDB is the last process the kernel stops when memory runs out (`OOMScoreAdjust=-500`): without it, logins
 and mail lookups fail, while Rspamd and the PHP workers come back by themselves. A swap file of half the memory
-(at most 4 GB) absorbs short peaks. PHP-FPM's pool is sized by memory, about 10 processes per 2 GB.
+(at most 4 GB) is always made and absorbs short peaks, such as ClamAV holding two copies of its database while
+it loads new signatures. PHP-FPM's pool is sized by memory, about 10 processes per 2 GB.
+
+MariaDB logs with `log_warnings = 1` instead of its default 2: Postfix's lookups go through proxymap, which ends
+its database connections without a goodbye when it exits (after 100 clients, like every Postfix process), and
+level 2 would log each as "Aborted connection", dozens an hour under load. Errors and real warnings are still
+logged; `log_warnings = 2` in the admin's `custom.cnf` shows these again.
+
+Dovecot's connection limits are sized by memory too, at every boot: an always-connected mail program costs
+about 1.6 MB (measured), so IMAP gets about one connection per 2 MB of what is left after the services (1.5 GB,
+2.5 GB with ClamAV) and 512 MB for the page cache, never fewer than Dovecot's default 1024: 2-4 GB servers keep
+1024, 8 GB with ClamAV gets about 2350, 16 GB about 6350. The stats, anvil and auth services, which every
+IMAP and LMTP process connects to, take that limit plus 1000. One mailbox may have up to 30 IMAP connections
+from one address, so a desktop program, a second computer and a phone behind an office's NAT address all fit. The kernel allows 8192 inotify instances per
+user (the default of 128 is used up by ~128 mail programs waiting in IDLE).
 
 ## Mail flow
 

@@ -97,12 +97,11 @@ Don't change the network settings after the install.
 
 | Parameter | Default | What it does |
 |---|---|---|
-| InstanceType | t3.small | Main instance type. t3.small (2 GB) is enough for a small company with the spam filter; t3.medium (4 GB) or larger for the antivirus or for many users |
-| InstanceType2 | t3a.small | A second, interchangeable type of the same size as InstanceType (t3.medium with t3a.medium; the template checks it). With Spot it gives the Auto Scaling group more capacity pools to choose from. With On-Demand the server runs on InstanceType, and on this one only when AWS has no capacity of the first. `None`: only InstanceType. Use it with a Reserved Instance (which applies to On-Demand only), so the server never runs on a type the reservation doesn't cover |
+| InstanceType | t3.small | Main instance type: t3.small, t3.medium, t3.xlarge, c7i.large, c7i.xlarge, m7i.large or m7i.xlarge. t3.small (2 GB) is enough for a small company with the spam filter; t3.medium (4 GB) or larger for the antivirus. See [Choosing the instance type](#choosing-the-instance-type) |
+| InstanceType2 | t3a.small | The pair of InstanceType, of the same size and memory: t3a for t3, c6a for c7i, m6a for m7i (t3.medium with t3a.medium; the template checks it). With Spot it gives the Auto Scaling group more capacity pools to choose from: a single type is sometimes unavailable on Spot for a while. With On-Demand the server runs on InstanceType, and on this one only when AWS has no capacity of the first. `None`: only InstanceType. Use it with a Reserved Instance (which applies to On-Demand only), so the server never runs on a type the reservation doesn't cover |
 | InstanceLifecycle | Spot | `Spot` costs much less; AWS may take the instance back, and a new one takes over within about ten minutes. `On-Demand` is never taken back |
 | RebuildAfterDays | 30 | The server is rebuilt from scratch on current packages once it is this old, on the next Saturday-to-Sunday night at 03:15 (about 4 minutes without mail). This is how it gets security fixes and updates: the operating system, and the programs installed from its repositories (Postfix, Dovecot, Rspamd, ClamAV and others). The web applications (Roundcube, PostfixAdmin, phpMyAdmin) come with the Flashlight release and are updated by [upgrades](UPGRADING.md). 0 turns it off |
-| DiskVolumeSize | 10 | The server's disk in GiB. 8 is enough without swap; with swap at least 10 for small and medium types, 12 for large and xlarge |
-| Swap | ENABLED | A swap file for short memory peaks, sized automatically (half the memory, at most 4 GB) |
+| DiskVolumeSize | 10 | The server's disk in GiB: the system plus a swap file for short memory peaks, sized automatically (half the memory, at most 4 GB). 10 for types with 2-4 GB of memory, at least 12 for 8 GB and more |
 
 ### Mail storage (EFS)
 
@@ -113,8 +112,8 @@ Don't change the network settings after the install.
 | MailStorageBackupPolicy | DISABLED | ENABLED: daily backups of the whole storage with AWS Backup (billed by AWS) |
 
 The template checks the combinations before it creates anything: a Spamhaus key or the antivirus without the
-spam filter, the antivirus on a small instance type, or swap on a disk that is too small are refused with an
-explanation.
+spam filter, the antivirus on a small instance type, a second instance type that isn't the pair of the first,
+or a disk too small for the swap file are refused with an explanation.
 
 ### What happens next
 
@@ -124,6 +123,83 @@ to CloudFormation and the stack becomes **CREATE_COMPLETE**, usually 10 to 15 mi
 
 If the installation fails, the stack rolls back within a few minutes. The install log is then in the config
 bucket, in `install-logs/` (see [Troubleshooting](#troubleshooting)).
+
+## Choosing the instance type
+
+The server's load comes from three things, and each needs something different:
+
+| What people do | What it uses | Measured cost |
+|---|---|---|
+| **Webmail** (Roundcube in a browser) | CPU | about 0.3% of a t3 server per active user |
+| **Mail programs and phones** (Outlook, Thunderbird, Apple Mail, phone mail apps) | Memory | about 1.5 MB per open connection; a desktop program keeps 1-3 connections, a phone 1-2 |
+| **Incoming mail, spam and virus checks** | Little CPU; the antivirus takes about 1 GB of memory | about 1000 messages an hour add 3% CPU |
+
+**Mailboxes are not users.** The numbers below are about what the server does **at the same moment**, not about
+how many mailboxes it holds:
+
+- **Active users** are the people working in webmail at the same time, each with an action every 15-45 seconds
+  all day long. Real users are much less busy: they read a message, then write a document or go to a meeting.
+- **Connections** are the mail programs and phones connected right now.
+
+A mailbox that nobody is using at the moment costs the server nothing but its space on the mail storage. So one
+server holds **many more mailboxes than the numbers below**. An office with 500 mailboxes may have 50 people in
+webmail at the same moment and a few hundred programs and phones connected: a t3.medium or a c7i.large handles
+that easily. Size the server by your **busiest hour**, not by the number of mailboxes.
+
+| Instance type (pair) | vCPU / memory | Active webmail users | Mail program connections | Antivirus |
+|---|---|---|---|---|
+| t3.small (t3a.small) | 2 / 2 GB | 150 (workday) | about 300 | no |
+| t3.medium (t3a.medium) | 2 / 4 GB | 150 (workday) | about 600 | yes |
+| c7i.large (c6a.large) | 2 / 4 GB | 300 (any time) | about 600 | yes |
+| m7i.large (m6a.large) | 2 / 8 GB | 300 (any time) | about 2000 | yes |
+| t3.xlarge (t3a.xlarge) | 4 / 16 GB | 450 (workday) | several thousand | yes |
+| c7i.xlarge (c6a.xlarge) | 4 / 8 GB | about 600 (any time) | about 2000 | yes |
+| m7i.xlarge (m6a.xlarge) | 4 / 16 GB | about 600 (any time) | several thousand | yes |
+
+- **Workday (t3):** the number holds for a 10-hour workday within the t3 CPU credits (see below). Around the
+  clock, a t3 carries about 60 (small, medium) or 230 (xlarge) active users at no extra cost. More users still
+  get fast answers, but the extra CPU is billed. If you are often above the number, move to a bigger type. For
+  t3.xlarge the limit is response time, not credits.
+- **Any time (c, m):** these types have no credits. The number keeps the CPU near 75% at any hour, with the same
+  response times as a t3 at its workday number: half of the answers in about 0.2 s, 95% within 0.8 s. The two
+  types of a pair (c7i and c6a, m7i and m6a) carry the same load.
+- **Connections:** the server sizes its limit by memory. Above it, a new connection is refused politely and the
+  connected ones keep working. To estimate your office, count each person's devices: a desktop program plus a
+  phone is usually 2-4 connections.
+
+**Which one to pick:**
+
+- **t3.small:** a small office without antivirus, the cheapest option.
+- **t3.medium:** a small or medium office with antivirus. It has the same CPU as t3.small; the extra memory is for
+  the antivirus and for mail programs.
+- **c7i.large:** many people in webmail for most of the day. The whole CPU is always yours at a fixed price.
+- **m7i.large:** many mail programs and phones, or large mailboxes. Same CPU as c7i.large, twice the memory.
+- **xlarge types:** for larger offices. Choose t3, c or m by the same rules.
+
+**The second type** (InstanceType2) should normally be the pair. With Spot, AWS sometimes has no capacity of one
+type for a while, and the Auto Scaling group then starts the other one.
+
+**After a server replacement** (a Spot interruption, the scheduled rebuild, a type change), all mail programs
+reconnect within a minute or two. With a couple of thousand connections, logins are slow for those first
+minutes, then back to normal.
+
+### t3 CPU credits
+
+A t3 server is guaranteed only part of its CPU (the **baseline**). It earns credits while it runs below the
+baseline and spends them above it. Flashlight runs t3 in **Unlimited** mode (the AWS default): the server
+**never slows down**, and CPU used beyond the earned credits is **billed** at $0.05 per vCPU-hour (on Spot too).
+
+| Type | Baseline | Active webmail users within the baseline: around the clock / 10-hour workday |
+|---|---|---|
+| t3.small, t3.medium | 20% | about 60 / about 150 |
+| t3.xlarge | 40% | about 230 / about 450 (limited by response time) |
+
+- **A quiet night pays for a busy day:** the credits earned overnight cover the workday. A shorter workday allows
+  a little more, an evening load a little less.
+- **Credits belong to the running instance.** A new one (after a Spot interruption, a scheduled rebuild or a type
+  change) starts with none, so the first busy day may be billed.
+- **Going over is cheap:** a t3.small kept at about 150 active users around the clock adds roughly $18 a month. If
+  that happens every day, a c or m type is the better deal.
 
 ## First login
 
@@ -157,16 +233,52 @@ the mailboxes in PostfixAdmin (**Virtual List**, **Add Mailbox**), and set their
 
 ### Mail programs
 
-| | Server | Port | Security |
-|---|---|---|---|
-| Incoming (IMAP) | `mail.<main domain>` | 993 | SSL/TLS |
-| | | 143 | STARTTLS |
-| Outgoing (SMTP) | `mail.<main domain>` | 587 | STARTTLS |
-| | | 465 | SSL/TLS |
+Add the account in the mail program as an **IMAP** account. Most programs ask for the e-mail address and the
+password first; if they then show server settings, or offer "manual setup", "advanced" or "other", enter the
+server name yourself:
 
-The login is the full e-mail address, with its password. Use `mail.<main domain>` for mailboxes of every
-domain: the certificate is issued for that name. Webmail is at `https://mail.<main domain>/`. Messages can be
-up to 20 MB.
+| | Server | Port | Security | Login |
+|---|---|---|---|---|
+| Incoming (IMAP) | `mail.<main domain>` | 993 | SSL/TLS | the full e-mail address and its password |
+| Outgoing (SMTP) | `mail.<main domain>` | 587 | STARTTLS | the same; authentication "normal password" |
+
+| Program | Where to add the account |
+|---|---|
+| Outlook | File → Add Account; then Advanced options → Let me set up my account manually → IMAP |
+| Thunderbird | Account Settings → Account Actions → Add Mail Account; then Configure manually |
+| Apple Mail (Mac) | Mail → Add Account → Other Mail Account |
+| iPhone, iPad | Settings → Apps → Mail → Mail Accounts → Add Account → Other → Add Mail Account |
+| Android (Gmail app) | Settings → Add account → Other → Personal (IMAP) |
+
+**One server, several domains.** One Flashlight server can hold mailboxes of several domains, for example
+`john@example.com` and `sam@domain.net`. The first domain of the server is its **main domain**, and the server
+has one name for all of them: `mail.<main domain>`. If `example.com` is the main domain here, both John and Sam
+enter `mail.example.com` as the server, never `mail.domain.net`:
+
+- the server's certificate is issued for `mail.<main domain>` only, so any other name gives a certificate warning;
+- a program that tries to find the settings itself guesses the server from the address: for `john@example.com` it
+  may find `mail.example.com` (Thunderbird does), for `sam@domain.net` it can't. Even when the automatic setup
+  works, check that the server name is `mail.<main domain>`.
+
+**Also supported:**
+
+- incoming on port 143 with STARTTLS;
+- outgoing on port 465 with SSL/TLS.
+
+If a network blocks one port, try the other.
+
+**Not supported:**
+
+- POP3 (use IMAP: mail stays on the server and every device sees the same folders);
+- sending through port 25 (it receives mail from other servers and accepts no logins);
+- connections without encryption (TLS 1.2 or newer is required).
+
+**If sending fails** while receiving works, check the outgoing settings first: an outgoing server on port 25, or
+with the automatic setup still on, is the usual cause. In Apple Mail, turn off "Automatically manage connection
+settings" and enter port 587 with TLS.
+
+Webmail is at `https://mail.<main domain>/`. Messages can be up to 20 MB. One mailbox may have up to 30 connections
+from one address, so a computer and a phone behind the same office router both fit.
 
 ### Checking that it works
 
