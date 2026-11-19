@@ -130,6 +130,10 @@ The release fixes what was done on `develop` and builds the bridge from the prev
    started, see above).
 2. **Migration**, if the data change: write `s3bucket/migrations/upgrade-<previous>-X.Y.sh` and add the step
    `<previous>-X.Y` to `migrations` in `upgrade-data`. A step that isn't listed there runs no script.
+   A new MariaDB release series (the first two numbers, e.g. 10.11 to 11.4, usually with a new AlmaLinux) changes
+   the format of the data on EFS: the migration then runs `mariadb-upgrade`, tested on a stand with a copy of the
+   previous release's data. Updates within a series (10.11.18 to 10.11.19), which every rebuild may bring, need
+   nothing: the package's own start check (`mariadb-check-upgrade`) compares only the series.
 3. **Files list.** Every file in `s3bucket/` that instances use is in the stage 1 `Files` list, including new
    files and all migrations. A missing file is simply absent from the config bucket and fails the install.
 4. **Maintenance template.** If `2-deployment.yaml` changed, regenerate it:
