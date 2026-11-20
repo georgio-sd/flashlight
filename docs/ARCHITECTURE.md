@@ -41,6 +41,7 @@ CloudFormation exports. That's why stage 1 can't change its domain list while st
 | IAM role and instance profile | What the instance may do in AWS (see [Security](#security)) |
 | Launch template | Image, type, encrypted root disk, UserData |
 | Auto Scaling group | Exactly one instance (min = max = 1) in any of the zones, Spot or On-Demand |
+| SNS topic, up to 3 email subscriptions, CloudWatch alarm | Alert emails, only with AlertEmail (see [Alert emails](#alert-emails)) |
 
 The Auto Scaling group uses a mixed instances policy with up to two interchangeable types (InstanceType and
 InstanceType2) and, for Spot, the `price-capacity-optimized` allocation strategy. It waits up to 30 minutes for
@@ -54,9 +55,10 @@ t3, c6a for c7i, m6a for m7i: the same size and memory), a disk too small for th
 
 ### Maintenance mode: `x-maintenance.yaml`
 
-The same template as stage 2 without the launch template and the Auto Scaling group, generated from it by
-`build/make-maintenance.py`. Updating stage 2 to it removes the instance and keeps everything else: the network,
-EFS, the IAM role. It's used for upgrades and for changing the domain list.
+The same template as stage 2 without the launch template, the Auto Scaling group and the alarm that watches the
+group, generated from it by `build/make-maintenance.py`. Updating stage 2 to it removes the instance and keeps
+everything else: the network, EFS, the IAM role, the alert topic with its confirmed subscriptions. It's used for
+upgrades and for changing the domain list.
 
 ## The life of an instance
 
@@ -101,11 +103,34 @@ rolls back and deletes the EFS, and writes a `FAILED` line naming the command th
   after the 30-minute timeout. No retry: the person running the update takes over.
 - **during a replacement by the Auto Scaling group** (Spot, price check, rebuild, health check): it tries a new
   instance after 5 minutes, up to 3 failed installs in 3 hours. After that the last instance stays up for
-  diagnosis.
+  diagnosis. With AlertEmail, the first failure and the last one send an alert email, and so does the first
+  working install after failures (see [Alert emails](#alert-emails)).
 
 If the install can't even start (the AWS CLI can't be installed, or the config bucket can't be read), there is no
-`install-finish` to report it: the instance turns itself off after 5 minutes, which terminates it, and the Auto
-Scaling group starts a new one.
+`install-finish` to report it. UserData then sends the alert email itself (with the AWS CLI, or without it with
+`curl` signing the request with the instance role's keys), and the instance turns itself off after 30 minutes,
+which terminates it, and the Auto Scaling group starts a new one. Until an install works, this repeats about
+every 35 minutes, with one email each time.
+
+### Alert emails
+
+Only with the AlertEmail parameter (up to 3 addresses); without it, none of this is created. Stage 2 creates an
+SNS topic with an email subscription per address; AWS sends each address a confirmation email, and an address
+that doesn't confirm within 48 hours is dropped by AWS. Subscriptions follow the position in the list: removing
+an address subscribes the ones after it again, and each gets a new confirmation email (in a test SNS kept the
+address's confirmed subscription, which AWS doesn't document, so INSTALL asks to click the link). CloudFormation doesn't notice an
+address that unsubscribed or was dropped; updating the stack without it and then with it subscribes it again.
+The server never subscribes anyone itself.
+
+| Event | Sent by | Emails |
+|---|---|---|
+| An install after a replacement failed | `install-finish` | The first failure ("retrying"), the last of 3 ("server is DOWN"), and the first working install after failures ("up again"; the newest failure log it reported is kept in `log/alert-last-failure` on EFS, so each run of failures gets one). Stack creates and updates send none: the person running them watches |
+| The install can't start | UserData | One per attempt, about every 35 minutes. No "up again" afterwards: without the bucket and EFS the instance has nowhere to record the failure |
+| No instance for 15 minutes | CloudWatch alarm `<stack>-no-mail-server-instance` on the group's `GroupInServiceInstances` metric (collected only with AlertEmail, at no cost) | ALARM once, OK when an instance runs again. AWS has no capacity for the instance types (Spot or On-Demand); a normal replacement leaves the group empty for a few minutes only. A new alarm goes from INSUFFICIENT_DATA to OK and sends one OK email: when AlertEmail is set on an existing stack and when maintenance ends (the alarm is made again). A stack update keeps the alarm and its state |
+
+At `READY`, `install-finish` also compares AlertEmail (read from the stack's parameters) with the topic's
+subscriptions and writes a `WARN` line for each address that isn't confirmed yet or has no subscription. The
+instance role may publish to the topic and list its subscriptions, nothing else in SNS.
 
 ### Replacements
 
@@ -147,7 +172,7 @@ already upgraded to a newer release.
 | BACKUP | The daily database dump |
 | ALERT | A mailbox that may be compromised |
 | CHECK, ERROR | The weekly Spot price check: its decision with the prices, or why it couldn't compare |
-| WARN | Something worked with a fallback (swap made smaller, the Rspamd repository unreachable...) |
+| WARN | Something worked with a fallback (swap made smaller, the Rspamd repository unreachable...), or an AlertEmail address isn't confirmed |
 | USER | The admin's user-script.sh failed |
 
 ## Data on EFS
@@ -412,7 +437,8 @@ Times are in the server's time zone (TimeZone).
   the AWS-managed key, so swap is too. Users connect with TLS 1.2 or newer; port 25 offers TLS to other servers.
 - **The instance's rights in AWS** (IAM role): associate the Elastic IP; change TXT records only, in the stack's
   zones only; replace only its own stack's instances; signal its own stack; read the config bucket, write
-  `install-logs/`, and full access to `upload/`. It can't change the installer files, so a compromised server
+  `install-logs/`, and full access to `upload/`; with AlertEmail, publish to the stack's alert topic and list
+  its subscriptions. It can't change the installer files, so a compromised server
   can't plant a modified installer for the next instances.
 - **Passwords.** Generated on the first install, kept in `root/secrets` and `root/credentials` (root only). The
   admin tools are behind the admin site's password (basic auth over HTTPS) and their own logins.

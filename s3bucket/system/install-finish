@@ -16,9 +16,14 @@
 #   - instance replaced by the ASG (spot, price check, scheduled rebuild, health check): up to 3 installs in
 #     a row are tried on new instances, 5 minutes apart; after that the instance stays up for diagnosis
 #   A failed install isn't rebooted: the services configured before the failure would start half-configured.
+# Alert emails (stack parameter AlertEmail, SNS topic ALERT_TOPIC), only for replacements by the ASG, not for
+#   stack operations (the person updating the stack watches them): the first failed install ("retrying"), the
+#   last one ("giving up"), and READY after failures ("recovered"). READY also checks that every AlertEmail
+#   address is subscribed and confirmed (WARN lines otherwise).
 # A failed user-script.sh is only reported (USER line): it's an optional addition and doesn't fail the install.
 #
-# Needs STACK, AWS_REGION and BUCKET_CONFIG (exported by UserData; saved for the after-reboot run).
+# Needs STACK, AWS_REGION and BUCKET_CONFIG, optional ALERT_TOPIC and MAIL_DOMAIN (exported by UserData; saved
+# for the after-reboot run).
 # Testing: DRY_RUN=1 only prints the AWS actions; STACK_STATUS=... pretends a stack status; RETRY_PAUSE=seconds;
 # SERVICES=... replaces the list of services checked after the reboot
 #
@@ -54,6 +59,48 @@ aws_do() {
   if [ "$DRY_RUN" = 1 ]; then echo "DRY RUN: aws $*"; else aws "$@"; fi
 }
 
+# alert "subject" "text": an email to the AlertEmail addresses (nothing without the alert topic)
+alert() {
+  [ -n "$ALERT_TOPIC" ] || return 0
+  local subject="Flashlight ${MAIL_DOMAIN:-$STACK}: $1"
+  aws_do sns publish --topic-arn "$ALERT_TOPIC" --region "$AWS_REGION" --subject "${subject:0:99}" \
+    --message "$(printf '%s\n\nStack: %s (%s)\nInstance: %s %s\nEvent log: %s/log/instance.log\n' \
+      "$2" "$STACK" "$AWS_REGION" "$id" "$pool" $efs)" > /dev/null || event WARN "alert email not sent: $1"
+}
+
+# the newest log of a failed replacement install in the last 24 hours (empty if none)
+last_failed_replace() {
+  local key
+  key=$(aws s3api list-objects-v2 --bucket "$BUCKET_CONFIG" --prefix install-logs/replace- \
+    --query "sort_by(Contents[?LastModified>='$(date -u -d '-24 hours' +%Y-%m-%dT%H:%M:%S)'], &LastModified)[-1].Key" \
+    --output text 2> /dev/null)
+  [ "$key" = None ] || echo "$key"
+}
+
+# READY: is every AlertEmail address subscribed and confirmed? (the addresses come from the stack's parameters)
+check_subscriptions() {
+  local wanted subs addr state
+  [ -n "$ALERT_TOPIC" ] || return 0
+  wanted=$(aws cloudformation describe-stacks --stack-name "$STACK" --region "$AWS_REGION" \
+    --query "Stacks[0].Parameters[?ParameterKey=='AlertEmail'].ParameterValue" --output text 2> /dev/null)
+  if ! subs=$(aws sns list-subscriptions-by-topic --topic-arn "$ALERT_TOPIC" --region "$AWS_REGION" \
+       --query 'Subscriptions[].[Endpoint,SubscriptionArn]' --output text 2> /dev/null) || [ -z "$wanted" ]; then
+    event WARN "alert emails: the subscriptions of the AlertEmail addresses can't be checked"
+    return
+  fi
+  for addr in ${wanted//,/ }; do
+    # a confirmed subscription has an ARN; an address may have several (one added by hand): the confirmed one wins
+    state=$(awk -v a="${addr,,}" 'tolower($1) == a { print $2 }' <<< "$subs" | sort | head -1)
+    case "$state" in
+      arn:*) ;;
+      PendingConfirmation)
+        event WARN "alert email $addr: not confirmed yet; click the link in the email from AWS Notifications (valid for 48 hours after the stack update)" ;;
+      *)
+        event WARN "alert email $addr: no subscription (unsubscribed, or not confirmed within 48 hours). To subscribe it again, update the stack without it, then with it" ;;
+    esac
+  done
+}
+
 signal() {
   aws_do cloudformation signal-resource --stack-name "$STACK" --logical-resource-id AutoScalingGroup \
     --unique-id "$id" --status "$1" --region "$AWS_REGION" 2> /dev/null
@@ -84,14 +131,32 @@ failed() {
       [[ "$attempts" =~ ^[0-9]+$ ]] || attempts=$max_attempts
       if [ "$attempts" -lt $max_attempts ]; then
         event REPLACE "install failed ($attempts of $max_attempts attempts), trying a new instance in $(( ${RETRY_PAUSE:-300} / 60 )) minutes"
+        # an email for the first failure only; the next one comes when an install works or the last one fails
+        [ "$attempts" = 1 ] && alert "server install failed on a new instance, retrying" \
+          "The mail server didn't install on a new instance that replaced the previous one (Spot interruption, scheduled rebuild or a failed health check). The server is down until an install works.
+
+Reason: $reason
+Next: a new instance tries again in $(( ${RETRY_PAUSE:-300} / 60 )) minutes (attempt $attempts of $max_attempts). Another email follows when an install works, or when the last attempt fails.
+Install log: $where"
         sleep ${RETRY_PAUSE:-300}
         aws_do autoscaling terminate-instance-in-auto-scaling-group --instance-id "$id" \
           --no-should-decrement-desired-capacity --region "$AWS_REGION" > /dev/null
       else
         event FAILED "giving up after $attempts failed installs in 3 hours; this instance stays up for diagnosis"
+        alert "server is DOWN, install failed $attempts times" \
+          "The mail server didn't install on $attempts new instances in a row, and no further attempt is made. The server is down: mail is not received (other servers keep it in their queues for a few days) and not sent.
+
+Reason of the last failure: $reason
+Install log: $where (the logs of the earlier attempts are in the same folder)
+The last instance stays up for diagnosis. Once the cause is fixed, start a new install: terminate this instance (the Auto Scaling group starts a new one) or update the stack."
       fi ;;
     *)
-      event FAILED "stack status unknown ('$status'), no retry" ;;
+      event FAILED "stack status unknown ('$status'), no retry"
+      alert "server install failed, no retry" \
+        "The mail server didn't install on a new instance, and the stack's status can't be read ('$status'), so no further attempt is made. The server may be down.
+
+Reason: $reason
+Install log: $where" ;;
   esac
 }
 
@@ -110,9 +175,11 @@ case "$1" in
       printf "Flashlight Mail Server v%s (re)deployed at %s\nDo not delete this file" \
         "$(/usr/local/sbin/upgrade-data release)" "$(date)" > $efs/flag
       # after the reboot: check the services, then READY (cron-boot-runner runs /etc/cron.once once)
-      printf 'STACK=%q\nAWS_REGION=%q\nBUCKET_CONFIG=%q\n' "$STACK" "$AWS_REGION" "$BUCKET_CONFIG" > $env_file
+      printf 'STACK=%q\nAWS_REGION=%q\nBUCKET_CONFIG=%q\nALERT_TOPIC=%q\nMAIL_DOMAIN=%q\n' \
+        "$STACK" "$AWS_REGION" "$BUCKET_CONFIG" "$ALERT_TOPIC" "$MAIL_DOMAIN" > $env_file
       mkdir -p /etc/cron.once
-      printf '#!/bin/bash\n/usr/local/sbin/install-finish ready\n' > /etc/cron.once/install-ready
+      # (its lines also go to the install log)
+      printf '#!/bin/bash\n/usr/local/sbin/install-finish ready >> %s 2>&1\n' $log > /etc/cron.once/install-ready
       chmod 700 /etc/cron.once/install-ready
     else
       # only the command's name: its arguments may hold generated passwords
@@ -127,7 +194,22 @@ case "$1" in
     done
     if [ -z "$down" ]; then
       event READY "installed and rebooted, services up"
+      # read before the signal: after it, a stack update can complete within seconds and look like a replacement
+      status=${STACK_STATUS:-$(aws cloudformation describe-stacks --stack-name "$STACK" --region "$AWS_REGION" \
+        --query 'Stacks[0].StackStatus' --output text 2> /dev/null)}
       signal SUCCESS
+      check_subscriptions
+      # "recovered": a replacement install worked after failed ones that weren't followed by a working install yet.
+      # The newest failure log is remembered on EFS, so each run of failures gets one such email; it is
+      # remembered after a stack operation too (no email then), so a later replacement doesn't report it again.
+      last=$(last_failed_replace)
+      if [ -n "$last" ] && [ "$last" != "$(cat $efs/log/alert-last-failure 2> /dev/null)" ]; then
+        [[ "$status" == *_COMPLETE ]] && alert "server is up again" \
+          "The mail server installed on a new instance after failed attempts and is working again. Mail that other servers kept in their queues arrives over the next hours.
+
+Last failure log: s3://$BUCKET_CONFIG/$last"
+        echo "$last" > $efs/log/alert-last-failure
+      fi
     else
       failed "services not running after the reboot: $down"
     fi ;;

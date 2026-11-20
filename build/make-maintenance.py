@@ -1,5 +1,5 @@
 """Builds x-maintenance.yaml from 2-deployment.yaml: same template without the instance (LaunchTemplate,
-AutoScalingGroup) and without the Route 53 statement that imports the stage 1 zone list.
+AutoScalingGroup, and the NoInstanceAlarm that watches the group) and without the Route 53 statement that imports the stage 1 zone list.
 
 Run it after every change of 2-deployment.yaml, so both templates keep the same parameters and resources
 (switching a stack between them must not lose parameter values or fail on allowed values):
@@ -11,11 +11,11 @@ src, dst = sys.argv[1], sys.argv[2]
 NL = '\r\n'
 lines = open(src, newline='').read().split(NL)
 
-# 1. drop the LaunchTemplate and AutoScalingGroup resources (top-level keys under Resources, 2-space indent)
+# 1. drop the LaunchTemplate, AutoScalingGroup and NoInstanceAlarm resources (top-level keys under Resources, 2-space indent)
 out, skip = [], False
 for l in lines:
     if l.startswith('  ') and not l.startswith('   ') and l.rstrip().endswith(':'):
-        skip = l.strip() in ('LaunchTemplate:', 'AutoScalingGroup:')
+        skip = l.strip() in ('LaunchTemplate:', 'AutoScalingGroup:', 'NoInstanceAlarm:')
     if not skip:
         out.append(l)
 lines = out

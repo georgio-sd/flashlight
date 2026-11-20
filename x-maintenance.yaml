@@ -13,6 +13,7 @@ Metadata:
         default: "Mail Server Configuration"
       Parameters:
       - AdminEmail
+      - AlertEmail
       - TimeZone
       - Fail2ban
       - CertificateMode
@@ -43,6 +44,16 @@ Parameters:
   AdminEmail:
     Type: String
     Description: Email of MailServer Admin
+  AlertEmail:
+    Type: String
+    Default: ''
+    Description: >-
+      Optional. Up to 3 addresses, separated by commas without spaces, that get an email when the server can't
+      come back after an instance replacement. Use addresses on another mail service, not on this server: when
+      it is down, it can't receive them. Each address gets a confirmation email from AWS Notifications; click
+      its link within 48 hours. Empty: no alert emails
+    AllowedPattern: '|[^\s,@]+@[^\s,@]+\.[^\s,@]+(,[^\s,@]+@[^\s,@]+\.[^\s,@]+){0,2}'
+    ConstraintDescription: up to 3 email addresses separated by commas, without spaces
   TimeZone:
     Type: String
     Default: America/Chicago
@@ -211,6 +222,11 @@ Conditions:
   SpotInstance: !Equals [ !Ref InstanceLifecycle, 'Spot' ]
   SecondInstanceType: !Not [ !Equals [ !Ref InstanceType2, 'None' ] ]
   MailStorageIA: !Not [ !Equals [ !Ref MailStorageLifecyclePolicy, 'None' ] ]
+  # AlertEmail: the alert system exists only with at least one address; two trailing commas let Fn::Select take
+  # the 2nd and 3rd address even when there are fewer
+  Alerts: !Not [ !Equals [ !Ref AlertEmail, '' ] ]
+  AlertEmail2: !Not [ !Equals [ !Select [ 1, !Split [ ',', !Join [ '', [ !Ref AlertEmail, ',,' ] ] ] ], '' ] ]
+  AlertEmail3: !Not [ !Equals [ !Select [ 2, !Split [ ',', !Join [ '', [ !Ref AlertEmail, ',,' ] ] ] ], '' ] ]
 Resources:
   MailServerVPC:
     Type: AWS::EC2::VPC
@@ -385,6 +401,13 @@ Resources:
           - Effect: Allow
             Action: [ 'cloudformation:SignalResource', 'cloudformation:DescribeStacks' ]
             Resource: !Ref 'AWS::StackId'
+          # install-finish: alert emails, and the check that the AlertEmail addresses are subscribed
+          - !If
+            - Alerts
+            - Effect: Allow
+              Action: [ 'sns:Publish', 'sns:ListSubscriptionsByTopic' ]
+              Resource: !Ref AlertTopic
+            - !Ref 'AWS::NoValue'
           # Config bucket: read everything, list it (checks for a missing file, the count of failed installs), write
           # the logs of failed installs, and full access to the admin's own upload/ folder. Installer files can't be
           # changed or deleted, so a compromised server can't plant a modified installer for the next instances.
@@ -433,6 +456,38 @@ Resources:
     Type: AWS::CloudFormation::WaitConditionHandle
     Metadata:
       MountTargetC: !If [ ThreeAZoneConf, !Ref MailStorageMountTargetC, 'none (two zones)' ]
+  AlertTopic:
+    Type: AWS::SNS::Topic
+    Condition: Alerts
+    Properties:
+      # the sender's name in the emails (at most 100 characters, so not the stack name; the subjects name the server)
+      DisplayName: Flashlight alerts
+  # Subscriptions follow the position in AlertEmail: removing the first address re-creates the ones after it,
+  # which then need a new confirmation
+  AlertSubscription1:
+    Type: AWS::SNS::Subscription
+    Condition: Alerts
+    Properties:
+      TopicArn: !Ref AlertTopic
+      Protocol: email
+      Endpoint: !Select [ 0, !Split [ ',', !Ref AlertEmail ] ]
+  AlertSubscription2:
+    Type: AWS::SNS::Subscription
+    Condition: AlertEmail2
+    Properties:
+      TopicArn: !Ref AlertTopic
+      Protocol: email
+      Endpoint: !Select [ 1, !Split [ ',', !Ref AlertEmail ] ]
+  AlertSubscription3:
+    Type: AWS::SNS::Subscription
+    Condition: AlertEmail3
+    Properties:
+      TopicArn: !Ref AlertTopic
+      Protocol: email
+      Endpoint: !Select [ 2, !Split [ ',', !Ref AlertEmail ] ]
+  # No running instance for 15 minutes: AWS can't start one (no free capacity for the instance types, Spot or
+  # On-Demand). A normal replacement leaves the group empty for a few minutes only. One email when it starts
+  # (ALARM), one when an instance runs again (OK).
   MailStorageSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:

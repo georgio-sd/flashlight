@@ -8,6 +8,15 @@ Releases with its templates. How to move a server to a newer release: [docs/UPGR
 Changes for the next release (1.1). Its installer files are in the public bucket folder `v1.1/`; the `v1.0/`
 folder is frozen.
 
+### Added
+
+- Alert emails (new optional stage 2 parameter AlertEmail, up to 3 outside addresses): an email when the server
+  can't come back after an instance replacement (the install on the new instance failed, is retried or given up,
+  or worked again after failures; or the install can't even start), and when AWS can't start any instance for
+  15 minutes (no free capacity of the instance types), with a second email once an instance runs again. Each
+  address is confirmed once with the link in an email from AWS Notifications; the server reports addresses that
+  aren't confirmed in its event log.
+
 ### Fixed
 
 - A failed first creation of stage 1 no longer deletes the domain's own DNS records on its rollback. The rollback
@@ -36,6 +45,8 @@ folder is frozen.
 
 - Stage 2 waits up to 30 minutes for the install instead of 20: an install can take 12 minutes on a slower
   instance type or region.
+- When a new instance can't even begin the install (the AWS CLI can't be installed or the config bucket can't be
+  read), it now waits 30 minutes instead of 5 before it turns itself off and the next instance tries.
 - The mail storage (EFS) is named `<stage 2 stack name>-Flashlight` in the EFS console, also after the stack
   is deleted, so it is clear whose file system it is.
 - Switching Antivirus off removes the virus signature database (about 110 MB) from the mail storage at the next

@@ -13,6 +13,7 @@ Metadata:
         default: "Mail Server Configuration"
       Parameters:
       - AdminEmail
+      - AlertEmail
       - TimeZone
       - Fail2ban
       - CertificateMode
@@ -43,6 +44,16 @@ Parameters:
   AdminEmail:
     Type: String
     Description: Email of MailServer Admin
+  AlertEmail:
+    Type: String
+    Default: ''
+    Description: >-
+      Optional. Up to 3 addresses, separated by commas without spaces, that get an email when the server can't
+      come back after an instance replacement. Use addresses on another mail service, not on this server: when
+      it is down, it can't receive them. Each address gets a confirmation email from AWS Notifications; click
+      its link within 48 hours. Empty: no alert emails
+    AllowedPattern: '|[^\s,@]+@[^\s,@]+\.[^\s,@]+(,[^\s,@]+@[^\s,@]+\.[^\s,@]+){0,2}'
+    ConstraintDescription: up to 3 email addresses separated by commas, without spaces
   TimeZone:
     Type: String
     Default: America/Chicago
@@ -211,6 +222,11 @@ Conditions:
   SpotInstance: !Equals [ !Ref InstanceLifecycle, 'Spot' ]
   SecondInstanceType: !Not [ !Equals [ !Ref InstanceType2, 'None' ] ]
   MailStorageIA: !Not [ !Equals [ !Ref MailStorageLifecyclePolicy, 'None' ] ]
+  # AlertEmail: the alert system exists only with at least one address; two trailing commas let Fn::Select take
+  # the 2nd and 3rd address even when there are fewer
+  Alerts: !Not [ !Equals [ !Ref AlertEmail, '' ] ]
+  AlertEmail2: !Not [ !Equals [ !Select [ 1, !Split [ ',', !Join [ '', [ !Ref AlertEmail, ',,' ] ] ] ], '' ] ]
+  AlertEmail3: !Not [ !Equals [ !Select [ 2, !Split [ ',', !Join [ '', [ !Ref AlertEmail, ',,' ] ] ] ], '' ] ]
 Resources:
   MailServerVPC:
     Type: AWS::EC2::VPC
@@ -404,6 +420,13 @@ Resources:
           - Effect: Allow
             Action: [ 'cloudformation:SignalResource', 'cloudformation:DescribeStacks' ]
             Resource: !Ref 'AWS::StackId'
+          # install-finish: alert emails, and the check that the AlertEmail addresses are subscribed
+          - !If
+            - Alerts
+            - Effect: Allow
+              Action: [ 'sns:Publish', 'sns:ListSubscriptionsByTopic' ]
+              Resource: !Ref AlertTopic
+            - !Ref 'AWS::NoValue'
           # Config bucket: read everything, list it (checks for a missing file, the count of failed installs), write
           # the logs of failed installs, and full access to the admin's own upload/ folder. Installer files can't be
           # changed or deleted, so a compromised server can't plant a modified installer for the next instances.
@@ -495,6 +518,7 @@ Resources:
             export BUCKET_CONFIG=${bucketconfig}
             export INSTANCE_LIFECYCLE=${InstanceLifecycle}
             export REBUILD_AFTER_DAYS=${RebuildAfterDays}
+            export ALERT_TOPIC=${alerttopic}
             #
             export TIMEZONE=${TimeZone}
             export ADMIN_EMAIL=${AdminEmail}
@@ -570,11 +594,41 @@ Resources:
             # Install result: keeps the install log, writes the EFS flag after a good install (READY follows the
             # reboot), or reports FAILED and then fails the stack operation or retries on a new instance
             if [ ! -x /usr/local/sbin/install-finish ]; then
-              # Nothing above worked (no AWS CLI, or the config bucket can't be read), so nothing can report it
-              # either. The instance turns itself off, which terminates it, and the Auto Scaling group starts a
-              # new one; a stack operation fails by its timeout.
-              echo "install-finish is missing: the install can't run, shutting down in 5 minutes"
-              sleep 300
+              # Nothing above worked (no AWS CLI, or the config bucket can't be read), so install-finish can't
+              # report it. An alert email goes out here (AlertEmail), through the AWS CLI or, without it, through
+              # curl. Then the instance turns itself off in 30 minutes, which terminates it, and the Auto Scaling
+              # group starts a new one (an email about every 35 minutes until an install works); a stack
+              # operation fails by its timeout.
+              echo "install-finish is missing: the install can't run, shutting down in 30 minutes"
+              # no trace from here: it would put the instance role's keys into the system log
+              set +x
+              if [ -n "$ALERT_TOPIC" ]; then
+                md=http://169.254.169.254/latest/meta-data
+                token=$(curl -s -X PUT http://169.254.169.254/latest/api/token -H "X-aws-ec2-metadata-token-ttl-seconds: 300")
+                id=$(curl -s -H "X-aws-ec2-metadata-token: $token" $md/instance-id)
+                subject="Flashlight ${maildomain}: the install can't start on a new instance"
+                message="The mail server can't install on a new instance: the AWS CLI or the config bucket ${bucketconfig}
+            is not available. The instance shuts down in 30 minutes and the Auto Scaling group starts a new one, which
+            tries again; this email repeats until an install works.
+
+            Stack: ${AWS::StackName} (${AWS::Region})
+            Instance: $id
+            Details: EC2 console, the instance, Actions > Monitor and troubleshoot > Get system log"
+                if command -v aws > /dev/null; then
+                  aws sns publish --region ${AWS::Region} --topic-arn "$ALERT_TOPIC" --subject "$subject" --message "$message"
+                else
+                  # the instance role's temporary keys from the instance metadata; curl signs the request (SigV4)
+                  role=$(curl -s -H "X-aws-ec2-metadata-token: $token" $md/iam/security-credentials/)
+                  creds=$(curl -s -H "X-aws-ec2-metadata-token: $token" $md/iam/security-credentials/$role)
+                  key() { sed -n "s/.*\"$1\" *: *\"\([^\"]*\)\".*/\1/p" <<< "$creds"; }
+                  curl -s --aws-sigv4 "aws:amz:${AWS::Region}:sns" --user "$(key AccessKeyId):$(key SecretAccessKey)" \
+                    -H "X-Amz-Security-Token: $(key Token)" --data-urlencode Action=Publish \
+                    --data-urlencode Version=2010-03-31 --data-urlencode "TopicArn=$ALERT_TOPIC" \
+                    --data-urlencode "Subject=$subject" --data-urlencode "Message=$message" \
+                    https://sns.${AWS::Region}.amazonaws.com/
+                fi
+              fi
+              sleep 1800
               shutdown -h now
               exit 1
             fi
@@ -596,6 +650,7 @@ Resources:
               Fn::ImportValue: !Sub "${DnsPreset}-DomainNames"
             domainzoneids:
               Fn::ImportValue: !Sub "${DnsPreset}-DomainZoneIDs"
+            alerttopic: !If [ Alerts, !Ref AlertTopic, '' ]
   AutoScalingGroup:
     Type: AWS::AutoScaling::AutoScalingGroup
     UpdatePolicy:
@@ -613,6 +668,12 @@ Resources:
       MaxSize: 1
       VPCZoneIdentifier: [ !Ref PubSubnetA, !Ref PubSubnetB, !If [ ThreeAZoneConf, !Ref PubSubnetC, !Ref 'AWS::NoValue' ] ]
       TerminationPolicies: [ OldestInstance ]
+      # the count of running instances, for the NoInstanceAlarm (group metrics cost nothing)
+      MetricsCollection: !If
+      - Alerts
+      - - Granularity: 1Minute
+          Metrics: [ GroupInServiceInstances ]
+      - !Ref 'AWS::NoValue'
       MixedInstancesPolicy:
         InstancesDistribution:
           OnDemandPercentageAboveBaseCapacity: !If [ SpotInstance, 0, 100 ]
@@ -629,6 +690,67 @@ Resources:
       - Key: Name
         PropagateAtLaunch: True
         Value: !Sub "${AWS::StackName}-Flashlight"
+  # Alert emails (AlertEmail). Senders: install-finish on the instance (an install after a replacement failed,
+  # or worked after failures; the subscription check), UserData when install-finish is missing, and the
+  # NoInstanceAlarm. Maintenance mode keeps the topic and the subscriptions, but not the alarm (no group).
+  AlertTopic:
+    Type: AWS::SNS::Topic
+    Condition: Alerts
+    Properties:
+      # the sender's name in the emails (at most 100 characters, so not the stack name; the subjects name the server)
+      DisplayName: Flashlight alerts
+  # Subscriptions follow the position in AlertEmail: removing the first address re-creates the ones after it,
+  # which then need a new confirmation
+  AlertSubscription1:
+    Type: AWS::SNS::Subscription
+    Condition: Alerts
+    Properties:
+      TopicArn: !Ref AlertTopic
+      Protocol: email
+      Endpoint: !Select [ 0, !Split [ ',', !Ref AlertEmail ] ]
+  AlertSubscription2:
+    Type: AWS::SNS::Subscription
+    Condition: AlertEmail2
+    Properties:
+      TopicArn: !Ref AlertTopic
+      Protocol: email
+      Endpoint: !Select [ 1, !Split [ ',', !Ref AlertEmail ] ]
+  AlertSubscription3:
+    Type: AWS::SNS::Subscription
+    Condition: AlertEmail3
+    Properties:
+      TopicArn: !Ref AlertTopic
+      Protocol: email
+      Endpoint: !Select [ 2, !Split [ ',', !Ref AlertEmail ] ]
+  # No running instance for 15 minutes: AWS can't start one (no free capacity for the instance types, Spot or
+  # On-Demand). A normal replacement leaves the group empty for a few minutes only. One email when it starts
+  # (ALARM), one when an instance runs again (OK).
+  NoInstanceAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Condition: Alerts
+    Properties:
+      AlarmName: !Sub "${AWS::StackName}-no-mail-server-instance"
+      AlarmDescription: !Sub >-
+        Flashlight ${AWS::StackName}: the mail server has had no running instance for 15 minutes; AWS can't
+        start one. The reason is in the EC2 console, Auto Scaling groups, the group ${AWS::StackName}-..., Activity
+        tab (for example "no Spot capacity" or "insufficient capacity" for the instance types). The group keeps
+        trying. To get a server sooner, update the stack with InstanceLifecycle = On-Demand, or with
+        InstanceType2 set (a second instance type).
+      Namespace: AWS/AutoScaling
+      MetricName: GroupInServiceInstances
+      Dimensions:
+      - Name: AutoScalingGroupName
+        Value: !Ref AutoScalingGroup
+      Statistic: Maximum
+      Period: 60
+      EvaluationPeriods: 15
+      DatapointsToAlarm: 15
+      Threshold: 1
+      ComparisonOperator: LessThanThreshold
+      # no data yet (a new group): not an alarm
+      TreatMissingData: notBreaching
+      AlarmActions: [ !Ref AlertTopic ]
+      OKActions: [ !Ref AlertTopic ]
   MailStorageSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:

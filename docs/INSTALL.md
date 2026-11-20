@@ -68,6 +68,7 @@ Its **Outputs** tab shows what it did: the address (`Eip`), the config bucket (`
 |---|---|---|
 | DnsPreset | MailServerDnsPreset | The name of your stage 1 stack |
 | AdminEmail | | Your e-mail address. It becomes the PostfixAdmin login, receives the Let's Encrypt notices and Flashlight's warnings. Use an address outside the new server, so the warnings reach you when the server has problems |
+| AlertEmail | empty | Optional: up to 3 addresses, separated by commas without spaces, that get an email when the server can't come back after a replacement. Use addresses on another mail service, never on this server. See [Alert emails](#alert-emails) |
 | TimeZone | America/Chicago | The server's time zone ([list](https://www.php.net/manual/en/timezones.php)) |
 | CertificateMode | production | `production`: a trusted Let's Encrypt certificate. `staging`: an untrusted test certificate, for test installs; Let's Encrypt allows only a few production certificates for the same names per week. A test install can be switched to production later with a stack update |
 | KeyName | | Your EC2 key pair |
@@ -123,6 +124,42 @@ to CloudFormation and the stack becomes **CREATE_COMPLETE**, usually 10 to 15 mi
 
 If the installation fails, the stack rolls back within a few minutes. The install log is then in the config
 bucket, in `install-logs/` (see [Troubleshooting](#troubleshooting)).
+
+With AlertEmail, each address gets an email from **AWS Notifications** ("Subscription Confirmation") a minute
+after the stack starts. Click its link within 48 hours; look in the spam folder if it isn't there.
+
+### Alert emails
+
+The server runs unattended: AWS replaces its instance after a Spot interruption, for the scheduled rebuild or
+after a failure, and the new instance installs itself. With AlertEmail you get an email when that doesn't work:
+
+| Email | When |
+|---|---|
+| server install failed on a new instance, retrying | The install on a new instance failed; another one tries in 5 minutes |
+| server is DOWN, install failed 3 times | Three installs in a row failed; no more attempts. The last instance stays up so you can look at it |
+| server is up again | An install worked after failed ones |
+| the install can't start on a new instance | The new instance can't even begin the install (the AWS CLI or the config bucket isn't available). It repeats about every 35 minutes until an install works. No "up again" email follows here: the instance can't record the failure anywhere, so when these emails stop, check that mail works |
+| ALARM: "...-no-mail-server-instance" | For 15 minutes AWS couldn't start any instance: no free capacity of the instance types. AWS keeps trying; for a server sooner, update the stack with On-Demand or a second instance type |
+| OK: "...-no-mail-server-instance" | An instance runs again (the install itself is reported by the emails above). One OK email also comes right after the alarm is made: when you first set AlertEmail on a running server and when you switch maintenance off. It only shows the emails arrive |
+
+A failed stack create or update sends no email: the stack rolls back, and you see it in the console.
+
+- **Use outside addresses.** When the server is down, it can't receive mail, so an address on one of its own
+  domains would never get the alert. AdminEmail stays as it is; AlertEmail can be the same outside address or
+  others.
+- **Confirm each address.** Every address gets its own confirmation email; until its link is clicked, it gets
+  no alerts. AWS drops an address that isn't confirmed within 48 hours. After each install the server checks
+  the addresses and writes a `WARN` line to `instance.log` for every address that isn't confirmed or subscribed.
+- **Changing the addresses.** Update the stack with the new AlertEmail; this doesn't touch the server. The
+  subscriptions follow the order of the list: a changed address gets a new confirmation email, and so do the
+  addresses after one you remove; click its link like the first time. Adding the first address or clearing
+  the field replaces the server like any other change of its settings.
+- **Getting an address back.** If an address was dropped (not confirmed in time) or someone clicked
+  "Unsubscribe" in an alert, the stack doesn't know: update it once without that address and once with it
+  again, and a new confirmation email comes.
+
+The emails cost nothing in practice (AWS SNS: the first 1000 emails a month are free; the alarm is within
+CloudWatch's 10 free alarms).
 
 ## Choosing the instance type
 
