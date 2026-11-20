@@ -303,10 +303,10 @@ systemctl enable --now mariadb
 /usr/local/sbin/upgrade-data run
 #
 # Installing phpMyAdmin and postfixadmin (pinned releases from the config bucket)
+pfa_tar=postfixadmin-v4.0.7-php74.tar.gz
+pma_tar=phpMyAdmin-5.2.3-all-languages.tar.gz
 if [ ! -f $flag ]; then
   cd ~
-  pfa_tar=postfixadmin-v4.0.6-php74.tar.gz
-  pma_tar=phpMyAdmin-5.2.3-all-languages.tar.gz
   mkdir /mnt/mailserver/www/admin
   webadmpass="$(pwgen 16 1)"
   htpasswd -bcB /mnt/mailserver/www/admin/.htpasswd admin $webadmpass
@@ -346,6 +346,11 @@ if [ ! -f $flag ]; then
   /usr/local/sbin/secrets set pma_blowfish_secret $blowfishsecret
   printf "MariaDB\n   login: pma\n   password: $pmapassword\n\n" >> /root/credentials
   printf "MariaDB\n   login: roundcube\n   password: $roundcubepassword\n\n" >> /root/credentials
+else
+  # Existing data with an older package of an application: updated by its recipe in upgrade-data (with a backup,
+  # restored on a failure), before our configs below are written into the application's folder
+  /usr/local/sbin/upgrade-data app postfixadmin $pfa_tar
+  /usr/local/sbin/upgrade-data app phpmyadmin $pma_tar
 fi
 #
 # Our configs of PostfixAdmin and phpMyAdmin, rebuilt at every boot from the release with the values from the
@@ -599,10 +604,10 @@ start_after dovecot mariadb.service
 systemctl enable dovecot
 #
 # Installing Roundcube (webmail) with the optional Larry skin (users pick it in their settings)
+rc_tar=roundcubemail-1.7.6-complete.tar.gz
+larry_tar=roundcube-larry-03ccd35.tar.gz
 if [ ! -f $flag ]; then
   cd ~
-  rc_tar=roundcubemail-1.7.6-complete.tar.gz
-  larry_tar=roundcube-larry-03ccd35.tar.gz
   aws s3 cp s3://$BUCKET_CONFIG/$rc_tar .
   aws s3 cp s3://$BUCKET_CONFIG/$larry_tar .
   mkdir /var/www/webmail
@@ -617,6 +622,10 @@ if [ ! -f $flag ]; then
   chown -R apache: /var/www/webmail/temp /var/www/webmail/logs
   /usr/local/sbin/secrets set roundcube_des_key "$(pwgen 32 1)"
   mysql roundcube < /var/www/webmail/SQL/mysql.initial.sql
+else
+  # an older package on existing data: updated by its recipe in upgrade-data, as PostfixAdmin above
+  /usr/local/sbin/upgrade-data app roundcube $rc_tar
+  /usr/local/sbin/upgrade-data app larry $larry_tar
 fi
 # Our Roundcube config, rebuilt at every boot from the release with the values from the secrets file; it ends by
 # including the admin's own settings from EFS (custom.inc.php), so those win
@@ -778,6 +787,8 @@ if [ "$ANTISPAM" = 'ENABLED' ]; then
   # package, for one, stopped creating Rspamd's user and failed every install). Its packages are checked with the Rspamd signing key that comes
   # with the release. The repository is a single server: if it can't be reached, dnf skips it (also for later
   # updates), and the Rspamd package that came with this release is installed instead, after its signature check.
+  # The same when it is too slow: a download below 100 KB/s for 30 seconds is dropped (dnf's default waits at any
+  # speed above 1 KB/s; the 8.5 MB package once took over 20 minutes at 6 KB/s).
   rspamd_rpm=rspamd-4.3.0-1.el10.x86_64.rpm
   aws s3 cp s3://$BUCKET_CONFIG/rspamd.asc /etc/pki/rpm-gpg/RPM-GPG-KEY-rspamd
   rpm --import /etc/pki/rpm-gpg/RPM-GPG-KEY-rspamd
@@ -792,6 +803,8 @@ repo_gpgcheck=1
 gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-rspamd
 includepkgs=rspamd-4.3.*
 skip_if_unavailable=1
+minrate=100k
+timeout=30
 EOF
   dnf install -y valkey unbound
   # Rspamd's user and group, made the way its packages up to 4.2 did: the 4.3.0 package no longer creates them

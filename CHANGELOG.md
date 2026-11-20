@@ -16,6 +16,14 @@ folder is frozen.
   15 minutes (no free capacity of the instance types), with a second email once an instance runs again. Each
   address is confirmed once with the link in an email from AWS Notifications; the server reports addresses that
   aren't confirmed in its event log.
+- Web applications are updated at upgrades: when a release brings a newer PostfixAdmin (later also Roundcube or
+  phpMyAdmin), the server installs it with the application's own upgrade steps, after a backup of its database and
+  files, and puts the old version back if anything fails.
+
+### Security
+
+- PostfixAdmin 4.0.7: fixes a cross-site scripting hole in the alias lists (CVE-2026-127178), and a domain admin
+  can no longer list the logins of all admins. A server installed with 1.0 gets it at the upgrade.
 
 ### Fixed
 
@@ -43,6 +51,9 @@ folder is frozen.
 
 ### Changed
 
+- An install that hangs (a download that never finishes, for example) is stopped after 60 minutes and counts as a
+  failed install: after an instance replacement it is retried on a new instance, with the alert emails. Before, the
+  server stayed down until someone noticed.
 - Stage 2 waits up to 30 minutes for the install instead of 20: an install can take 12 minutes on a slower
   instance type or region.
 - When a new instance can't even begin the install (the AWS CLI can't be installed or the config bucket can't be

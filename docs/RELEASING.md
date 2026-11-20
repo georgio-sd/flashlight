@@ -68,10 +68,27 @@ Web application packages are pinned: the tarball is in `s3bucket/packages/`, nam
 `base.sh` (`pfa_tar`, `pma_tar`, `rc_tar`, `larry_tar`). The installed package of each application is recorded
 in `/mnt/mailserver/versions` (`roundcube=`, `larry=`, `postfixadmin=`, `phpmyadmin=`).
 
-Currently the applications are installed only on the first install. The first release that bumps one of them
-must also add the update step: at every boot, compare the recorded package with the release's one, and if they
-differ, install the new one and run the application's own upgrade steps from its upgrade notes (database
-schema, config changes). Only then is the new name recorded.
+An application is installed on the first install. On existing data, every install runs
+`upgrade-data app NAME PACKAGE` for each application. When the recorded package isn't the release's one, it:
+1. dumps the application's database and moves its folder into `backup/upgrade-NAME-<date>/`;
+2. runs the application's recipe `update_NAME` in `upgrade-data`: the new package goes into an empty folder,
+   followed by the application's own upgrade steps (database schema, for example);
+3. records the new package. If the recipe fails, it puts the old folder and database back, writes `FAILED` and
+   stops the install.
+
+It never installs an older package than the recorded one (`WARN`, kept). An application without a recipe stops
+the install with `FAILED ... no update recipe` as soon as its package changes. The recipes exist for: PostfixAdmin.
+
+To bump an application:
+1. Read its release notes and upgrade notes. Compare its default config with the old one: a new setting that
+   Flashlight must set goes into our config in `s3bucket/`.
+2. Check the download against the checksum of the project (GitHub shows a `sha256:` digest for release files).
+3. Upload the tarball to `packages/` in the public bucket, and change its name in the `Files` list and in `base.sh`.
+4. Without a recipe yet, write `update_NAME` with `app_dir` and `app_db` in `upgrade-data`, from the
+   application's upgrade notes. A one-off step that isn't part of every update goes into a migration instead.
+5. On the stand: replace the instance on data with the old package (an `UPGRADE NAME ... now at ...` line, the
+   application works), replace it once more (nothing to do), and make the recipe fail once (the old package is
+   restored).
 
 Old package files stay in the public bucket folder of the release that used them.
 

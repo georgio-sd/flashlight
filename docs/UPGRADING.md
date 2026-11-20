@@ -113,6 +113,12 @@ The new instance mounts EFS and compares the release of the data with its own re
 - **Newer data** (an older release installed over data of a newer one): it stops before changing anything and
   writes a `FAILED` line.
 
+Then it compares the web applications on EFS (PostfixAdmin, phpMyAdmin, Roundcube) with the release's versions.
+An older one is updated: its database and folder go to `/mnt/mailserver/backup/upgrade-<application>-<date>`
+(kept 90 days), the new version is installed with the application's own upgrade steps, and the event log shows
+`UPGRADE postfixadmin ... now at ...`. If that fails, the old version and its database are put back, a `FAILED`
+line is written and the install stops. Your settings files for the applications are not touched.
+
 ## If the upgrade fails
 
 When the new instance fails to install, step 3 fails within a few minutes and CloudFormation rolls the stage 2

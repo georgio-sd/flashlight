@@ -568,11 +568,14 @@ Resources:
             aws s3 cp s3://${bucketconfig}/install-finish /usr/local/sbin/
             chmod 700 /usr/local/sbin/install-finish
             #
-            # Deploying base software
+            # Deploying base software. A hung install (a download that never ends, for example) is stopped after
+            # 60 minutes and fails like any other, so install-finish retries it and sends the alerts (a normal
+            # install takes 8-15 minutes)
             aws s3 cp s3://${bucketconfig}/base.sh /root
             chmod 744 /root/base.sh
-            /root/base.sh >> /var/log/flashlight-install.log 2>&1
+            timeout -k 1m 60m /root/base.sh >> /var/log/flashlight-install.log 2>&1
             base_rc=$?
+            [ $base_rc -eq 124 ] && echo "base.sh stopped: still running after 60 minutes" | tee -a /var/log/flashlight-install.log
             echo "base.sh finished with code $base_rc (details: /var/log/flashlight-install.log)"
             rm /root/base.sh
             #

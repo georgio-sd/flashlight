@@ -183,7 +183,11 @@ case "$1" in
       chmod 700 /etc/cron.once/install-ready
     else
       # only the command's name: its arguments may hold generated passwords
-      failed "base.sh exit $base_rc at command '$(grep '^+ ' $log | tail -1 | awk '{print $2}')'"
+      cmd=$(grep '^+ ' $log | tail -1 | awk '{print $2}')
+      # 124: UserData's timeout stopped a hung install
+      if [ "$base_rc" = 124 ]; then failed "base.sh still running after 60 minutes, stopped at command '$cmd'"
+      else failed "base.sh exit $base_rc at command '$cmd'"
+      fi
     fi ;;
   ready)
     # services may still be starting: wait up to 2 minutes

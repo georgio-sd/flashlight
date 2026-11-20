@@ -78,6 +78,8 @@ upgrades and for changing the domain list.
      extra IPs and network interfaces from the instance metadata, while the server has one interface with one IP);
    - creates swap, quiets known harmless warnings, installs the packages;
    - starts MariaDB and, if the data are from an older release, upgrades them (see [UPGRADING](UPGRADING.md));
+   - on existing data, updates a web application whose installed package (in `versions`) is older than the
+     release's, with its own upgrade steps, a backup, and a restore on a failure;
    - rebuilds every configuration file from the release, then applies the admin's own settings files;
    - on the first install only: creates the databases, the passwords, the certificates;
    - adds new domains of the stack to PostfixAdmin, creates DKIM keys and DNS records;
@@ -97,7 +99,8 @@ downloaded.
 ### When an install fails
 
 `install-finish` keeps the install log in the config bucket (`install-logs/`), which survives even when the stack
-rolls back and deletes the EFS, and writes a `FAILED` line naming the command that failed. Then:
+rolls back and deletes the EFS, and writes a `FAILED` line naming the command that failed. An install still
+running after 60 minutes (hung on a download, for example) is stopped and fails the same way. Then:
 
 - **during a stack create or update:** it signals FAILURE at once, so the rollback starts in a minute instead of
   after the 30-minute timeout. No retry: the person running the update takes over.
@@ -467,13 +470,15 @@ Logs on the instance's own disk are lost when the instance is replaced; the ones
   locking, so mail keeps flowing.
 - **Everything:** with MailStorageBackupPolicy, AWS Backup backs up the whole EFS every day.
 - **Upgrades:** before a data upgrade, the new instance backs up the databases and the `etc`, `www`, `root` and
-  `automation` folders, and restores them if the upgrade fails ([UPGRADING](UPGRADING.md)).
+  `automation` folders, and restores them if the upgrade fails ([UPGRADING](UPGRADING.md)). Before a web
+  application update, the same for the application's database and folder.
 
 ## Releases and upgrades
 
 A release is the three templates plus the installer files in the public bucket under its version
 (`mail-server-bundles/vX.Y/`). Stage 1 copies them into the config bucket, and every instance installs from
-there. Data changes between releases are migrations, run in order by the new instance. How to upgrade:
+there. Data changes between releases are migrations, run in order by the new instance; the web applications
+are updated by their version instead, whenever the release brings a newer one. How to upgrade:
 [UPGRADING](UPGRADING.md). How a release is made: [RELEASING](RELEASING.md).
 
 ## Software

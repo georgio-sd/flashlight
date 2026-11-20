@@ -195,7 +195,7 @@ Resources:
       - 'rspamd/olefy.py'
       - 'rspamd/olefy-requirements.txt'
       - 'packages/amazon-efs-utils-3.3.5-1.el10.x86_64.rpm'
-      - 'packages/postfixadmin-v4.0.6-php74.tar.gz'
+      - 'packages/postfixadmin-v4.0.7-php74.tar.gz'
       - 'packages/phpMyAdmin-5.2.3-all-languages.tar.gz'
       - 'packages/roundcubemail-1.7.6-complete.tar.gz'
       - 'packages/roundcube-larry-03ccd35.tar.gz'
