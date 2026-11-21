@@ -524,7 +524,10 @@ Resources:
             export ADMIN_EMAIL=${AdminEmail}
             export FAIL2BAN=${Fail2ban}
             export ANTISPAM=${Antispam}
+            # (untraced: the key would land in the console output)
+            { set +x; } 2> /dev/null
             export DQS_KEY=${SpamhausDQSKey}
+            set -x
             export ATTACHMENT_POLICY=${AttachmentPolicy}
             export ANTIVIRUS=${Antivirus}
             export CERT_MODE=${CertificateMode}

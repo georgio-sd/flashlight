@@ -23,9 +23,12 @@ updates (a changed domain list, the `Updater` switch). A fix is a new release.
 
 The instances start from a Flashlight image (AMI) owned by account 112904279782 in us-west-2, with the description
 `Mailserver:img_b`. It is not part of a release folder: stage 1 of every release takes the newest image with that
-description and copies it into the user's region. A new image therefore reaches the users of all releases at their
-next stage 1 update, so it must work with all of them. Most releases don't need a new one: the instance updates
-its operating system at every install anyway.
+description and copies it into the user's region. It does so when stage 1 is created, updated to a new release, or
+updated with the `Updater` switch; CloudFormation doesn't run it on an update that changes nothing it is given.
+A new image therefore reaches the users of all releases at their next upgrade or `Updater` switch, so it must work
+with all of them. The instance updates its operating system at every install
+anyway, but an image on the current AlmaLinux minor release (10.3 after 10.2) has less to update and installs
+faster: a release brings a new image when AlmaLinux has a newer minor release (checklist, step 7).
 
 Other accounts can copy the image only if both the image and the snapshot of its disk are public. A public image
 alone isn't enough: the copy fails with "You do not have permission to access the storage of this ami", and so
@@ -129,7 +132,8 @@ starts, the code names `X.Y` everywhere, so a stand installed from `develop` is 
 
 1. In `s3bucket/system/upgrade-data`, set `this_release=X.Y` and append `X.Y` to `releases` (oldest first, every
    release listed). The flag file on EFS and the `versions` file take the number from there.
-2. In `1-dns-preset.yaml`, point `BaseUrl` to `.../vX.Y`.
+2. In `1-dns-preset.yaml`, point `BaseUrl` under `Mappings` to `.../vX.Y` (the one place it is set; DnsPreset
+   gets it too, so an upgrade also takes the newest server image).
 3. In `CHANGELOG.md`, open an `[Unreleased]` section for the changes of `X.Y`.
 4. Create the bucket folder `vX.Y/` and add it to the public bucket's policy. Until the release it holds the
    work in progress and is updated from `develop`; test stands install from it.
@@ -137,7 +141,7 @@ starts, the code names `X.Y` everywhere, so a stand installed from `develop` is 
 A stand installed from `develop` marks its data as `X.Y` at its next install. If a migration to `X.Y` is added
 later, the stand's data won't run it. To test it there, set the data back with
 `upgrade-data set flashlight <previous>` and replace the instance, or use a stand installed from the previous
-release (checklist, step 8).
+release (checklist, step 9).
 
 ## Release checklist
 
@@ -173,20 +177,16 @@ The release fixes what was done on `develop` and builds the bridge from the prev
    (https://github.com/HeinleinSupport/olefy), and regenerate `olefy-requirements.txt` from the newest oletools:
    in a Python 3.12 environment, `pip download --only-binary=:all: oletools colorclass python-magic`, then one line
    `name==version --hash=sha256:...` per downloaded file.
-7. **Test a fresh install** on a test stand with `CertificateMode=staging`: install READY, mail between the
-   stand's own domains, webmail, admin pages, DKIM, DNS records.
-8. **Test the upgrade** on a stand installed from the previous release, following UPGRADING.md step by step:
-   `UPGRADE` lines in the event log, `flashlight=X.Y` in `versions`, the admin's settings files unchanged, mail
-   still there. If the release has a migration, also test a release skip (from two releases back) if one exists,
-   and a failing migration. A failing migration is tested on the instance with `MIGRATIONS_DIR`, `RELEASES` and
-   `THIS_RELEASE`, which `upgrade-data` reads instead of its built-in values.
-9. **Publish the files.** Upload `s3bucket/` to `s3://mail-server-bundles/vX.Y/` once more, keeping the layout,
-   so the folder matches the release, and check that every path of the `Files` list is there. From now on the
-   folder is frozen.
-   **New server image** (only if the release has one): make the image and the snapshot of its disk public, then
-   check both:
+7. **Server image.** Look up the newest official AlmaLinux image (owner `764336703387`, name
+   `AlmaLinux OS 10.* x86_64`). If its minor release is newer than our image's, copy it, unencrypted, with the name
+   `AlmaLinux <X.Y> prep_01` and the description `Mailserver:img_b`, then make the image and the snapshot of its
+   disk public and check both:
 
    ```
+   aws ec2 describe-images --region us-west-2 --owners 764336703387 \
+     --filters "Name=name,Values=AlmaLinux OS 10*x86_64*" --query 'reverse(sort_by(Images,&CreationDate))[:3].[ImageId,Name]'
+   aws ec2 copy-image --region us-west-2 --source-region us-west-2 --source-image-id ami-... \
+     --name "AlmaLinux X.Y prep_01" --description Mailserver:img_b
    aws ec2 modify-image-attribute --region us-west-2 --image-id ami-... --launch-permission "Add=[{Group=all}]"
    aws ec2 modify-snapshot-attribute --region us-west-2 --snapshot-id snap-... \
      --attribute createVolumePermission --operation-type add --group-names all
@@ -194,9 +194,20 @@ The release fixes what was done on `develop` and builds the bridge from the prev
    aws ec2 describe-snapshot-attribute --region us-west-2 --snapshot-id snap-... --attribute createVolumePermission
    ```
 
-   The snapshot ID is in the image's block device mapping (`aws ec2 describe-images --image-ids ami-...`). The
-   real test is stage 1 in another AWS account: it copies the image and waits until the copy is available.
-10. **Publish the code.** In `CHANGELOG.md`, turn `[Unreleased]` into `[X.Y] - <date>`. Merge into `main`, tag
+   The snapshot ID is in the image's block device mapping (`aws ec2 describe-images --image-ids ami-...`). Do this
+   before the tests, so they run on the new image. The real test of the sharing is stage 1 in another AWS account:
+   it copies the image and waits until the copy is available.
+8. **Test a fresh install** on a test stand with `CertificateMode=staging`: install READY, mail between the
+   stand's own domains, webmail, admin pages, DKIM, DNS records.
+9. **Test the upgrade** on a stand installed from the previous release, following UPGRADING.md step by step:
+   `UPGRADE` lines in the event log, `flashlight=X.Y` in `versions`, the admin's settings files unchanged, mail
+   still there. If the release has a migration, also test a release skip (from two releases back) if one exists,
+   and a failing migration. A failing migration is tested on the instance with `MIGRATIONS_DIR`, `RELEASES` and
+   `THIS_RELEASE`, which `upgrade-data` reads instead of its built-in values.
+10. **Publish the files.** Upload `s3bucket/` to `s3://mail-server-bundles/vX.Y/` once more, keeping the layout,
+   so the folder matches the release, and check that every path of the `Files` list is there. From now on the
+   folder is frozen.
+11. **Publish the code.** In `CHANGELOG.md`, turn `[Unreleased]` into `[X.Y] - <date>`. Merge into `main`, tag
    `vX.Y`, and write the release notes: what changed, whether the release changes the data, and any action the
    user must take. Then start the next version on `develop` (see above).
 

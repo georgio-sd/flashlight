@@ -64,11 +64,13 @@ Run the three stack updates in this order, in the CloudFormation console, choosi
 template** each time. Wait for each update to finish before starting the next one.
 
 1. **Stage 2 into maintenance mode.** Update the stage 2 stack with `x-maintenance.yaml` of the new release.
-   Keep the parameters as they are. The server instance is shut down; EFS with all the data stays.
+   Keep the parameters as they are, except those that the section "Upgrading from <your release>" of the new
+   release in [CHANGELOG.md](../CHANGELOG.md) asks to change: the maintenance template already has the new
+   release's parameters. The server instance is shut down; EFS with all the data stays.
 2. **Stage 1.** Update the stage 1 stack with the new `1-dns-preset.yaml`. Keep the parameters as they are.
    This copies the new release's installer files into your config bucket.
 3. **Stage 2 back to service.** Update the stage 2 stack with the new `2-deployment.yaml`. Keep the parameters
-   as they are; new parameters, if the release adds any, come with sensible defaults. A new instance is
+   as they are after step 1; new parameters, if the release adds any, come with sensible defaults. A new instance is
    installed from the new release. The update finishes when the server reports that it is ready, usually
    after 6 to 10 minutes.
 
@@ -120,6 +122,11 @@ An older one is updated: its database and folder go to `/mnt/mailserver/backup/u
 line is written and the install stops. Your settings files for the applications are not touched.
 
 ## If the upgrade fails
+
+**A parameter value is no longer allowed.** CloudFormation refuses the update at once with
+`Parameter '...' must be one of AllowedValues`, or starts it and rolls it back within a minute with
+`Parameter validation failed: assertion error: ...`, which says what to choose. Nothing changed: choose the value
+(see "Upgrading from <your release>" in the CHANGELOG) and run the same step again.
 
 When the new instance fails to install, step 3 fails within a few minutes and CloudFormation rolls the stage 2
 stack back to maintenance mode. The server stays down until you act. To find the cause:

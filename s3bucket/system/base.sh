@@ -64,6 +64,11 @@ custom_file() {
   printf '%s\n' "$@" > "$file"
 }
 #
+# Steps that handle passwords and keys run untraced: set -x would write them into the install log, which is also
+# kept in the config bucket. "secret_step what it does" names the step in the log (install-finish names it when
+# the install fails there) and turns the trace off; "set -x" turns it back on. Errors still reach the log.
+secret_step() { { set +x; } 2> /dev/null; }
+#
 # Setting up system settings
 timedatectl set-timezone $TIMEZONE
 hostnamectl set-hostname $MAIL_DOMAIN
@@ -308,13 +313,6 @@ pma_tar=phpMyAdmin-5.2.3-all-languages.tar.gz
 if [ ! -f $flag ]; then
   cd ~
   mkdir /mnt/mailserver/www/admin
-  webadmpass="$(pwgen 16 1)"
-  htpasswd -bcB /mnt/mailserver/www/admin/.htpasswd admin $webadmpass
-  printf "Admin web access\n   Link: https://$ADMIN_DOMAIN\n" >> /root/credentials
-  printf "   login: admin\n   password: $webadmpass\n\n" >> /root/credentials
-  postfixadminpassword="$(pwgen 16 1)"
-  printf "PostfixAdmin superadmin\n   Link: https://$ADMIN_DOMAIN/padmin\n" >> /root/credentials
-  printf "   login: $ADMIN_EMAIL\n   password: $postfixadminpassword\n\n" >> /root/credentials
   #
   # The release tarball already contains vendor/ (no composer needed); the php74 build runs on PHP 7.4+
   aws s3 cp s3://$BUCKET_CONFIG/$pfa_tar .
@@ -323,13 +321,6 @@ if [ ! -f $flag ]; then
   /usr/local/sbin/upgrade-data set postfixadmin $pfa_tar
   rm $pfa_tar
   chown -R apache: /mnt/mailserver/www/admin/padmin/templates_c
-  setuppassword="$(pwgen 16 1)"
-  setuphash=$(php -r 'echo password_hash($argv[1], PASSWORD_DEFAULT);' "$setuppassword")
-  /usr/local/sbin/secrets set padmin_setup_hash "$setuphash"
-  printf "PostfixAdmin setup password\n   password: $setuppassword\n\n" >> /root/credentials
-  db_postfix_password="$(pwgen 16 1)"
-  /usr/local/sbin/secrets set postfix_db_password $db_postfix_password
-  printf "MariaDB\n   login: postfix\n   password: $db_postfix_password\n\n" >> /root/credentials
   #
   aws s3 cp s3://$BUCKET_CONFIG/$pma_tar .
   mkdir /mnt/mailserver/www/admin/phpmyadmin
@@ -338,6 +329,26 @@ if [ ! -f $flag ]; then
   rm $pma_tar
   mkdir /mnt/mailserver/www/admin/phpmyadmin/tmp
   chown -R apache: /mnt/mailserver/www/admin/phpmyadmin/tmp
+  #
+  # The passwords of the admin site, PostfixAdmin and the databases: in /root/credentials for the admin, and in the
+  # secrets file for our configs
+  secret_step generate the passwords of the admin site, PostfixAdmin and the databases
+  webadmpass="$(pwgen 16 1)"
+  htpasswd -bcB /mnt/mailserver/www/admin/.htpasswd admin $webadmpass
+  printf "Admin web access\n   Link: https://$ADMIN_DOMAIN\n" >> /root/credentials
+  printf "   login: admin\n   password: $webadmpass\n\n" >> /root/credentials
+  # PostfixAdmin refuses a password with fewer than 2 digits; pwgen promises only one (1 password in 4 has fewer)
+  postfixadminpassword="$(pwgen 16 1)"
+  until [[ $postfixadminpassword =~ [0-9].*[0-9] ]]; do postfixadminpassword="$(pwgen 16 1)"; done
+  printf "PostfixAdmin superadmin\n   Link: https://$ADMIN_DOMAIN/padmin\n" >> /root/credentials
+  printf "   login: $ADMIN_EMAIL\n   password: $postfixadminpassword\n\n" >> /root/credentials
+  setuppassword="$(pwgen 16 1)"
+  setuphash=$(php -r 'echo password_hash($argv[1], PASSWORD_DEFAULT);' "$setuppassword")
+  /usr/local/sbin/secrets set padmin_setup_hash "$setuphash"
+  printf "PostfixAdmin setup password\n   password: $setuppassword\n\n" >> /root/credentials
+  db_postfix_password="$(pwgen 16 1)"
+  /usr/local/sbin/secrets set postfix_db_password $db_postfix_password
+  printf "MariaDB\n   login: postfix\n   password: $db_postfix_password\n\n" >> /root/credentials
   pmapassword="$(pwgen 16 1)"
   roundcubepassword="$(pwgen 16 1)"
   blowfishsecret="$(pwgen 32 1)"
@@ -346,6 +357,7 @@ if [ ! -f $flag ]; then
   /usr/local/sbin/secrets set pma_blowfish_secret $blowfishsecret
   printf "MariaDB\n   login: pma\n   password: $pmapassword\n\n" >> /root/credentials
   printf "MariaDB\n   login: roundcube\n   password: $roundcubepassword\n\n" >> /root/credentials
+  set -x
 else
   # Existing data with an older package of an application: updated by its recipe in upgrade-data (with a backup,
   # restored on a failure), before our configs below are written into the application's folder
@@ -357,17 +369,19 @@ fi
 # secrets file. Each ends by including the admin's own settings from EFS (custom.php), so those win.
 # (the values are read in separate assignments, so a missing secret stops the install)
 padmin_conf=/mnt/mailserver/www/admin/padmin/config.local.php
+pma_conf=/mnt/mailserver/www/admin/phpmyadmin/config.inc.php
+aws s3 cp s3://$BUCKET_CONFIG/config.local.php $padmin_conf
+aws s3 cp s3://$BUCKET_CONFIG/config.inc.php $pma_conf
+secret_step write the passwords into the PostfixAdmin and phpMyAdmin configs
 padmin_db_password=$(/usr/local/sbin/secrets get postfix_db_password)
 padmin_setup_hash=$(/usr/local/sbin/secrets get padmin_setup_hash)
-aws s3 cp s3://$BUCKET_CONFIG/config.local.php $padmin_conf
 # '|' as the sed delimiter: the bcrypt setup hash can contain '/'
 sed -i "s|{database_password}|$padmin_db_password|; s|{admin_email}|$ADMIN_EMAIL|g; \
   s|{admindomain}|$ADMIN_DOMAIN|g; s|{setup_password}|$padmin_setup_hash|" $padmin_conf
-pma_conf=/mnt/mailserver/www/admin/phpmyadmin/config.inc.php
 pma_db_password=$(/usr/local/sbin/secrets get pma_db_password)
 pma_blowfish_secret=$(/usr/local/sbin/secrets get pma_blowfish_secret)
-aws s3 cp s3://$BUCKET_CONFIG/config.inc.php $pma_conf
 sed -i "s/{pmapassword}/$pma_db_password/; s/{blowfish_secret}/$pma_blowfish_secret/" $pma_conf
+set -x
 custom_file /mnt/mailserver/etc/postfixadmin/custom.php "<?php" \
   "// Your PostfixAdmin settings. Flashlight's config.local.php includes this file at its end, so the values set" \
   "// here win; Flashlight upgrades never change this file. Example:" "//   \$CONF['page_size'] = '50';"
@@ -383,15 +397,19 @@ if [ ! -f $flag ]; then
   mysql -u root < /mnt/mailserver/www/admin/phpmyadmin/sql/create_tables.sql
   mysql -u root -e "CREATE DATABASE postfix CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
   mysql -u root -e "CREATE DATABASE roundcube CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
+  secret_step create the database users with their passwords
   mysql -u root -e "GRANT ALL PRIVILEGES ON postfix.* TO 'postfix'@'localhost' identified by '$db_postfix_password';"
   mysql -u root -e "GRANT ALL PRIVILEGES ON phpmyadmin.* TO 'pma'@'localhost' identified by '$pmapassword';"
   mysql -u root -e "GRANT ALL PRIVILEGES ON roundcube.* TO 'roundcube'@'localhost' identified by '$roundcubepassword';"
+  set -x
   mysql -u root -e "FLUSH PRIVILEGES;"
   #
   # creating postfix db
   php /mnt/mailserver/www/admin/padmin/public/upgrade.php
+  secret_step create the PostfixAdmin superadmin
   /mnt/mailserver/www/admin/padmin/scripts/postfixadmin-cli admin add $ADMIN_EMAIL --superadmin 1 --active 1 \
     --password $postfixadminpassword --password2 $postfixadminpassword
+  set -x
 fi
 rm -r /var/www
 ln -s /mnt/mailserver/www /var/www
@@ -509,13 +527,15 @@ sed -i "s/{MainDomain}/$(echo "$DOMAIN_NAMES" | cut -d',' -f 1)/; s/{MailDomain}
   s/{SmtpdMilters}/$milters/" /etc/postfix/main.cf
 # lookups in the PostfixAdmin database; the files hold its password: root and the postfix group only
 # (the password is read in a separate assignment, so a missing secret stops the install)
-postfix_db_password=$(/usr/local/sbin/secrets get postfix_db_password)
 mkdir -p /etc/postfix/mysql
 for map in virtual_mailbox_domains virtual_mailbox_maps virtual_alias_domain_mailbox_maps virtual_alias_maps \
     virtual_alias_domain_maps virtual_alias_domain_catchall_maps relay_domains sender_login_maps; do
   aws s3 cp s3://$BUCKET_CONFIG/$map.cf /etc/postfix/mysql/
 done
+secret_step write the database password into the Postfix lookups
+postfix_db_password=$(/usr/local/sbin/secrets get postfix_db_password)
 sed -i "s/{database_password}/$postfix_db_password/" /etc/postfix/mysql/*.cf
+set -x
 chown root:postfix /etc/postfix/mysql/*.cf
 chmod 640 /etc/postfix/mysql/*.cf
 # the admin's own settings, applied over ours one by one (a continuation line, starting with a space, belongs
@@ -586,8 +606,10 @@ sed -i "s/{MainDomain}/$(echo "$DOMAIN_NAMES" | cut -d',' -f 1)/; s/{MailDomain}
   /etc/dovecot/dovecot.conf
 sed -i "s/{ImapProcessLimit}/$imap_limit/; s/{ServiceClientLimit}/$(( imap_limit + 1000 ))/g" /etc/dovecot/dovecot.conf
 # (a separate assignment, so a missing secret stops the install instead of leaving an empty password)
+secret_step write the database password into the Dovecot lookups
 postfix_db_password=$(/usr/local/sbin/secrets get postfix_db_password)
 sed -i "s/{database_password}/$postfix_db_password/" /etc/dovecot/dovecot-mysql.conf
+set -x
 # the lookup file holds the database password: root and Dovecot only
 chown root:dovecot /etc/dovecot/dovecot-mysql.conf
 chmod 640 /etc/dovecot/dovecot-mysql.conf
@@ -620,7 +642,9 @@ if [ ! -f $flag ]; then
   # the web installer isn't needed: the database and the config are prepared here
   rm -rf /var/www/webmail/installer /var/www/webmail/public_html/installer.php
   chown -R apache: /var/www/webmail/temp /var/www/webmail/logs
+  secret_step generate the Roundcube encryption key
   /usr/local/sbin/secrets set roundcube_des_key "$(pwgen 32 1)"
+  set -x
   mysql roundcube < /var/www/webmail/SQL/mysql.initial.sql
 else
   # an older package on existing data: updated by its recipe in upgrade-data, as PostfixAdmin above
@@ -630,12 +654,14 @@ fi
 # Our Roundcube config, rebuilt at every boot from the release with the values from the secrets file; it ends by
 # including the admin's own settings from EFS (custom.inc.php), so those win
 rc_conf=/var/www/webmail/config/config.inc.php
-rc_db_password=$(/usr/local/sbin/secrets get roundcube_db_password)
-rc_des_key=$(/usr/local/sbin/secrets get roundcube_des_key)
 aws s3 cp s3://$BUCKET_CONFIG/config.inc.php.rc $rc_conf
 rc_antispam=""
 [ "$ANTISPAM" = 'ENABLED' ] && rc_antispam=", 'markasjunk'"
+secret_step write the database password and the encryption key into the Roundcube config
+rc_db_password=$(/usr/local/sbin/secrets get roundcube_db_password)
+rc_des_key=$(/usr/local/sbin/secrets get roundcube_des_key)
 sed -i "s|{des_key}|$rc_des_key|; s|{RoundcubePassword}|$rc_db_password|; s|{AntispamPlugins}|$rc_antispam|" $rc_conf
+set -x
 custom_file /mnt/mailserver/etc/roundcube/custom.inc.php "<?php" \
   "// Your Roundcube settings. Flashlight's config/config.inc.php includes this file at its end, so the values set" \
   "// here win; Flashlight upgrades never change this file. Example:" "//   \$config['product_name'] = 'My Mail';"
@@ -671,10 +697,12 @@ EOF
 # A fresh MariaDB 10.11 has no anonymous users or test database, so only root needs a password (for phpMyAdmin);
 # root on the server itself (shell, db-backup) keeps logging in through the unix socket without one.
 if [ ! -f $flag ]; then
+  secret_step set the MariaDB root password
   db_root_password="$(pwgen 16 1)"
   printf "MariaDB\n   Link: https://$ADMIN_DOMAIN/myadmin\n" >> /root/credentials
   printf "   login: root\n   password: $db_root_password\n\n" >> /root/credentials
   mysql -u root -e "ALTER USER root@localhost IDENTIFIED VIA unix_socket OR mysql_native_password USING PASSWORD('$db_root_password');"
+  set -x
 fi
 #
 # Configuring Apache. The package's own config (httpd.conf, ssl.conf, modules) stays on the instance, so it
@@ -985,12 +1013,14 @@ EOF
   #
   # Spamhaus through DQS with the stack's key (Spamhaus refuses queries from AWS without one)
   rm -f /etc/rspamd/local.d/rbl.conf /etc/rspamd/local.d/rbl_group.conf
-  if [ -n "$DQS_KEY" ]; then
-    dqs_key=$(printf '%s' "$DQS_KEY" | sed 's/[&|\\]/\\&/g')
+  if [ -n "${DQS_KEY:+set}" ]; then
     for f in rbl rbl_group; do
       aws s3 cp s3://$BUCKET_CONFIG/spamhaus-dqs-$f.conf /etc/rspamd/local.d/$f.conf
-      sed -i "s|your_DQS_key|$dqs_key|g" /etc/rspamd/local.d/$f.conf
     done
+    secret_step write the Spamhaus DQS key into the Rspamd config
+    dqs_key=$(printf '%s' "$DQS_KEY" | sed 's/[&|\\]/\\&/g')
+    sed -i "s|your_DQS_key|$dqs_key|g" /etc/rspamd/local.d/rbl.conf /etc/rspamd/local.d/rbl_group.conf
+    set -x
     # the key: readable by Rspamd only
     chown root:_rspamd /etc/rspamd/local.d/rbl.conf /etc/rspamd/local.d/rbl_group.conf
     chmod 640 /etc/rspamd/local.d/rbl.conf /etc/rspamd/local.d/rbl_group.conf
@@ -1016,6 +1046,7 @@ EOF
   # The web interface: https://<admin domain>/rspamd/, behind the admin site's password and Rspamd's own (in the
   # secrets file and /root/credentials). Apache passes the browser's address on (its own copy: a browser can't
   # forge it), so Rspamd asks for the password; only requests from the server itself (Dovecot's learning) don't.
+  secret_step set the password of the Rspamd web interface
   if ! rspamd_password=$(/usr/local/sbin/secrets get rspamd_password 2> /dev/null); then
     rspamd_password=$(pwgen 16 1)
     /usr/local/sbin/secrets set rspamd_password "$rspamd_password"
@@ -1025,6 +1056,7 @@ EOF
   rspamd_hash=$(rspamadm pw -p "$rspamd_password")
   rspamd_conf worker-controller.inc "allow_file_and_shm_inputs = false;" "password = \"$rspamd_hash\";" \
     "enable_password = \"$rspamd_hash\";"
+  set -x
   chown root:_rspamd /etc/rspamd/local.d/worker-controller.inc
   chmod 640 /etc/rspamd/local.d/worker-controller.inc
   cat > /etc/httpd/flashlight-rspamd.conf <<'EOF'

@@ -66,8 +66,9 @@ upgrades and for changing the domain list.
 
 1. **UserData** (in the launch template) sets up the basics: turns SELinux off, makes the AWS CLI retry
    temporary errors, updates the operating system (`dnf upgrade`), installs the AWS CLI, then downloads and runs
-   `base.sh` from the config bucket. The install log goes to the root-only `/var/log/flashlight-install.log`
-   (its trace contains generated passwords).
+   `base.sh` from the config bucket. The install log goes to the root-only `/var/log/flashlight-install.log`. It
+   traces every command, except the steps that handle passwords and keys: those show only a
+   `+ secret_step <what it does>` line, so the log, also its copy in the config bucket, holds no passwords.
 2. **`base.sh`** does the rest:
    - mounts EFS (TLS) at `/mnt/mailserver` and installs the helper scripts;
    - stops if the data on EFS belong to a newer Flashlight release;

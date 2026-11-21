@@ -41,6 +41,13 @@ Parameters:
     Description: Switch it to initiate full update without changing other parameters
     Default: Even
     AllowedValues: [ Even, Odd ]
+Mappings:
+  # The release: its installer files in the public bucket. DownloadBundles copies them from there; DnsPreset gets
+  # the same value, so an update to a new release runs DnsPreset too (CloudFormation runs a custom resource only
+  # when its properties change): it takes the newest server image then, and writes the DNS records again.
+  Release:
+    Installer:
+      BaseUrl: 'https://mail-server-bundles.s3.eu-central-1.amazonaws.com/v1.1'
 Resources:
   MSBucket:
     Type: "AWS::S3::Bucket"
@@ -149,7 +156,7 @@ Resources:
       S3BucketName: !Ref MSBucket
       ZoneIDs: !Join [ ',', !Ref ZoneIDs ]
       Updater: !Ref Updater
-      BaseUrl: 'https://mail-server-bundles.s3.eu-central-1.amazonaws.com/v1.1'
+      BaseUrl: !FindInMap [ Release, Installer, BaseUrl ]
       Files:
       - 'system/autoshutdown.service'
       - 'system/spot-instance-shutdown'
@@ -296,6 +303,8 @@ Resources:
       ElasticIP: !Ref IPAddressMS
       EipAllocationId: !GetAtt IPAddressMS.AllocationId
       Updater: !Ref Updater
+      # not used by the function: a new release changes it, so the update runs DnsPreset (see Mappings)
+      Release: !FindInMap [ Release, Installer, BaseUrl ]
   DnsPresetLambdaFunction:
     Type: 'AWS::Lambda::Function'
     Properties:

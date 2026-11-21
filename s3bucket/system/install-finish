@@ -94,7 +94,7 @@ check_subscriptions() {
     case "$state" in
       arn:*) ;;
       PendingConfirmation)
-        event WARN "alert email $addr: not confirmed yet; click the link in the email from AWS Notifications (valid for 48 hours after the stack update)" ;;
+        event WARN "alert email $addr: not confirmed yet; click the link in the email from AWS Notifications (valid for 48 hours after the stack was created or updated)" ;;
       *)
         event WARN "alert email $addr: no subscription (unsubscribed, or not confirmed within 48 hours). To subscribe it again, update the stack without it, then with it" ;;
     esac
@@ -184,6 +184,8 @@ case "$1" in
     else
       # only the command's name: its arguments may hold generated passwords
       cmd=$(grep '^+ ' $log | tail -1 | awk '{print $2}')
+      # a step that handles passwords runs untraced: its name instead (base.sh, secret_step)
+      [ "$cmd" = secret_step ] && cmd="secret step: $(grep '^+ secret_step ' $log | tail -1 | cut -d' ' -f3-)"
       # 124: UserData's timeout stopped a hung install
       if [ "$base_rc" = 124 ]; then failed "base.sh still running after 60 minutes, stopped at command '$cmd'"
       else failed "base.sh exit $base_rc at command '$cmd'"

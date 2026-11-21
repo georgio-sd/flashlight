@@ -8,6 +8,22 @@ Releases with its templates. How to move a server to a newer release: [docs/UPGR
 Changes for the next release (1.1). Its installer files are in the public bucket folder `v1.1/`; the `v1.0/`
 folder is frozen.
 
+### Upgrading from 1.0
+
+Follow [docs/UPGRADING.md](docs/UPGRADING.md). The data need no changes. Most stacks keep all their parameters;
+three settings that 1.0 allowed must change, already in step 1 (the maintenance template has the same
+parameters):
+
+| Your 1.0 stack | The update stops with | Choose instead |
+|---|---|---|
+| InstanceType `t3.large` | `Parameter 'InstanceType' must be one of AllowedValues` | `t3.medium` with `t3a.medium`; for 8 GB of memory `m7i.large` with `m6a.large`, or `t3.xlarge` with `t3a.xlarge`, both with DiskVolumeSize 12 or more |
+| Swap `DISABLED` with DiskVolumeSize `8` | `Parameter 'DiskVolumeSize' must be one of AllowedValues` | DiskVolumeSize `10` (`12` on types with 8 GB of memory or more) |
+| `t3.xlarge`, Swap `DISABLED`, DiskVolumeSize `10` | `Parameter validation failed: ... need a disk (DiskVolumeSize) of at least 12 GiB` | DiskVolumeSize `12` |
+
+The Swap parameter is gone: the console no longer shows it, and a command line update must not pass it
+(`Parameters: [Swap] do not exist in the template`). The new AlertEmail parameter is optional and empty by
+default.
+
 ### Added
 
 - Alert emails (new optional stage 2 parameter AlertEmail, up to 3 outside addresses): an email when the server
@@ -24,9 +40,15 @@ folder is frozen.
 
 - PostfixAdmin 4.0.7: fixes a cross-site scripting hole in the alias lists (CVE-2026-127178), and a domain admin
   can no longer list the logins of all admins. A server installed with 1.0 gets it at the upgrade.
+- The install log no longer contains the generated passwords and the Spamhaus DQS key, and the console output of
+  the instance no longer shows the key. Install logs written by 1.0 still contain them: on the server
+  (`/var/log/flashlight-install.log`, and `/mnt/mailserver/log/`) and, for failed installs, in `install-logs/` of
+  the config bucket (90 days). Delete them if that matters to you.
 
 ### Fixed
 
+- A new server's install failed about one time in four, at creating the PostfixAdmin administrator: its generated
+  password sometimes had fewer than the 2 digits PostfixAdmin requires.
 - A failed first creation of stage 1 no longer deletes the domain's own DNS records on its rollback. The rollback
   cleaned up every record whose value matched Flashlight's, so an existing MX to `mail.<domain>` and a DKIM key at
   `mail._domainkey` were deleted although stage 1 had never written them.
@@ -51,6 +73,8 @@ folder is frozen.
 
 ### Changed
 
+- The server image is on AlmaLinux 10.3 (it was 10.2), so an install has less to update. Updating stage 1 to a new
+  release now also takes the newest server image; before, only the Updater switch did.
 - An install that hangs (a download that never finishes, for example) is stopped after 60 minutes and counts as a
   failed install: after an instance replacement it is retried on a new instance, with the alert emails. Before, the
   server stayed down until someone noticed.
@@ -70,9 +94,10 @@ folder is frozen.
 - Instance types: c7i (with c6a as its pair) and m7i (with m6a) in large and xlarge, which have the whole CPU at all
   times with no credits; t3.large is gone (no more CPU than t3.medium, at about the price of m6a.large). InstanceType2
   must be the pair of InstanceType: t3a for t3, c6a for c7i, m6a for m7i. A stack on t3.large chooses another type
-  at the upgrade.
+  at the upgrade (see Upgrading from 1.0).
 - The swap file is always made; the Swap parameter is gone and DiskVolumeSize starts at 10 GiB (12 for 8 GB of
-  memory and more). A stack with Swap = DISABLED and an 8 GiB disk sets DiskVolumeSize to 10 at the upgrade.
+  memory and more). A stack with Swap = DISABLED and a smaller disk sets a bigger one at the upgrade (see
+  Upgrading from 1.0).
 - The database log no longer fills with "Aborted connection" notes (dozens an hour under load): Postfix ends its
   lookup connections without a goodbye, which is harmless. MariaDB logs at level 1 instead of 2; errors and real
   warnings are still logged.
