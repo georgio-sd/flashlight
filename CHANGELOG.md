@@ -1,3 +1,4 @@
+<!-- Copyright 2020-2026 Samson (https://github.com/georgio-sd). SPDX-License-Identifier: LicenseRef-PolyForm-Shield-1.0.0 (see LICENSE) -->
 # Changelog
 
 All notable changes of Flashlight Mail Server. Each release has a tag (`v1.0`, ...) and a page under GitHub
@@ -26,6 +27,10 @@ default.
 
 ### Added
 
+- A license: Flashlight is under the PolyForm Shield License 1.0.0 ([LICENSE](LICENSE)), free to use, including
+  by companies for their own mail, except for offering a competing product or service. Components from other
+  projects keep their own licenses ([THIRD-PARTY.md](THIRD-PARTY.md)). Bug reports and feature requests:
+  [CONTRIBUTING.md](CONTRIBUTING.md).
 - Alert emails (new optional stage 2 parameter AlertEmail, up to 3 outside addresses): an email when the server
   can't come back after an instance replacement (the install on the new instance failed, is retried or given up,
   or worked again after failures; or the install can't even start), and when AWS can't start any instance for

@@ -1,3 +1,4 @@
+<!-- Copyright 2020-2026 Samson (https://github.com/georgio-sd). SPDX-License-Identifier: LicenseRef-PolyForm-Shield-1.0.0 (see LICENSE) -->
 # Building amazon-efs-utils for AlmaLinux 10
 
 The mail server installs amazon-efs-utils from a prebuilt RPM in the public bucket,

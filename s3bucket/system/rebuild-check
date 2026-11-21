@@ -1,4 +1,6 @@
 #!/bin/bash
+# Copyright 2020-2026 Samson (https://github.com/georgio-sd)
+# SPDX-License-Identifier: LicenseRef-PolyForm-Shield-1.0.0 (see LICENSE)
 #
 # Scheduled rebuild: once this instance is older than DAYS, it asks the ASG to replace it, and the new
 # instance is installed from scratch on current packages. Runs from cron weekly, Sunday 03:15 (two hours after

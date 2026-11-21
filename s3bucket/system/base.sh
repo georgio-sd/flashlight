@@ -1,4 +1,6 @@
 #!/bin/bash -xe
+# Copyright 2020-2026 Samson (https://github.com/georgio-sd)
+# SPDX-License-Identifier: LicenseRef-PolyForm-Shield-1.0.0 (see LICENSE)
 #
 # The stack's variables come from UserData. Without them some steps would act on empty values (an empty
 # domain list, for example, would delete every DKIM key), so stop before touching anything.

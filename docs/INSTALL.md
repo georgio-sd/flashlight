@@ -1,3 +1,4 @@
+<!-- Copyright 2020-2026 Samson (https://github.com/georgio-sd). SPDX-License-Identifier: LicenseRef-PolyForm-Shield-1.0.0 (see LICENSE) -->
 # Installing Flashlight
 
 This guide is for the person who installs a Flashlight mail server and looks after it. It assumes you know your

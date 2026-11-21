@@ -1,3 +1,5 @@
+# Copyright 2020-2026 Samson (https://github.com/georgio-sd)
+# SPDX-License-Identifier: LicenseRef-PolyForm-Shield-1.0.0 (see LICENSE)
 # Postfix lookup in the PostfixAdmin database (domains whose mail is stored here).
 # Query from PostfixAdmin 4 DOCUMENTS/POSTFIX_CONF.txt (backup-MX variant: backup-MX domains go to relay_domains). {database_password} is filled in by base.sh.
 user = postfix

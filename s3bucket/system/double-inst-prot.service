@@ -1,3 +1,5 @@
+# Copyright 2020-2026 Samson (https://github.com/georgio-sd)
+# SPDX-License-Identifier: LicenseRef-PolyForm-Shield-1.0.0 (see LICENSE)
 [Unit]
 Description=Double instance protection: go idle when another instance takes over the EFS
 Wants=network-online.target

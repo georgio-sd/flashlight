@@ -1,3 +1,5 @@
+# Copyright 2020-2026 Samson (https://github.com/georgio-sd)
+# SPDX-License-Identifier: LicenseRef-PolyForm-Shield-1.0.0 (see LICENSE)
 # Before deploying, ask AWS to remove the email sending (port 25) limitation for your account:
 # https://console.aws.amazon.com/support/contacts?#/rdns-limits
 # Reverse DNS (PTR) of the Elastic IP is set by this stack itself (DnsPreset).

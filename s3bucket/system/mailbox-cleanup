@@ -1,4 +1,6 @@
 #!/bin/bash
+# Copyright 2020-2026 Samson (https://github.com/georgio-sd)
+# SPDX-License-Identifier: LicenseRef-PolyForm-Shield-1.0.0 (see LICENSE)
 #
 # Cleans up after mailboxes deleted in PostfixAdmin (which deletes only the database records).
 # Runs from cron every 10 minutes. For each mail folder on EFS whose mailbox no longer exists:

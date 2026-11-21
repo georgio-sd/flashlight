@@ -1,3 +1,5 @@
+# Copyright 2020-2026 Samson (https://github.com/georgio-sd)
+# SPDX-License-Identifier: LicenseRef-PolyForm-Shield-1.0.0 (see LICENSE)
 [Unit]
 Description=Log this instance's shutdown or reboot to /mnt/mailserver/log/instance.log
 Wants=network-online.target

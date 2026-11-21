@@ -1,4 +1,6 @@
 #!/bin/bash
+# Copyright 2020-2026 Samson (https://github.com/georgio-sd)
+# SPDX-License-Identifier: LicenseRef-PolyForm-Shield-1.0.0 (see LICENSE)
 #
 # Prints EC2 instance metadata through IMDSv2 (get a token, then ask with it).
 # usage: imds <path>        e.g. imds instance-id, imds spot/instance-action

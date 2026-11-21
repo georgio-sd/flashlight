@@ -1,3 +1,5 @@
+# Copyright 2020-2026 Samson (https://github.com/georgio-sd)
+# SPDX-License-Identifier: LicenseRef-PolyForm-Shield-1.0.0 (see LICENSE)
 # Postfix lookup in the PostfixAdmin database: the logins allowed to send as an address (smtpd_sender_login_maps).
 # A mailbox may send as itself and as every alias that delivers to it, also in alias domains. {database_password}
 # is filled in by base.sh.

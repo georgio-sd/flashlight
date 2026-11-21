@@ -1,4 +1,6 @@
 #!/bin/bash
+# Copyright 2020-2026 Samson (https://github.com/georgio-sd)
+# SPDX-License-Identifier: LicenseRef-PolyForm-Shield-1.0.0 (see LICENSE)
 #
 # Writes a SHUTDOWN or REBOOT line to /mnt/mailserver/log/instance.log while the instance goes down
 # (run by shutdown-log.service when systemd stops it, before EFS and the network are gone).

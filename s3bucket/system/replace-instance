@@ -1,4 +1,6 @@
 #!/bin/bash
+# Copyright 2020-2026 Samson (https://github.com/georgio-sd)
+# SPDX-License-Identifier: LicenseRef-PolyForm-Shield-1.0.0 (see LICENSE)
 #
 # Stops the mail services cleanly and asks the Auto Scaling group to replace this instance.
 # The ASG keeps its desired capacity (1) and launches the new instance by its own allocation strategy.

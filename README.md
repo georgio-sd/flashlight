@@ -1,3 +1,4 @@
+<!-- Copyright 2020-2026 Samson (https://github.com/georgio-sd). SPDX-License-Identifier: LicenseRef-PolyForm-Shield-1.0.0 (see LICENSE) -->
 # Flashlight Mail Server
 
 **Your company's own mail server in your own AWS account, installed by two CloudFormation templates.**
@@ -167,3 +168,15 @@ All components are well-known open-source programs:
 - [How the server works](docs/ARCHITECTURE.md): a detailed description of the server
 - [Upgrading to a new release](docs/UPGRADING.md)
 - [Releasing Flashlight](docs/RELEASING.md) (for developers)
+
+## License
+
+Flashlight is free to use, including by companies for their own mail, under the
+[PolyForm Shield License 1.0.0](LICENSE). You may use, change and share it for any purpose except offering a product
+or service that competes with Flashlight or with what its author offers with it: selling it, hosting it for
+others, or selling support for it, for example. Such uses are possible with the author's permission, under a
+separate agreement: contact the author through GitHub (https://github.com/georgio-sd). The source is open to
+read: Flashlight is source-available, not open source.
+
+Components from other projects keep their own licenses: see [THIRD-PARTY.md](THIRD-PARTY.md). Bug reports and
+feature requests are welcome: see [CONTRIBUTING.md](CONTRIBUTING.md).

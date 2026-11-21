@@ -1,3 +1,5 @@
+# Copyright 2020-2026 Samson (https://github.com/georgio-sd)
+# SPDX-License-Identifier: LicenseRef-PolyForm-Shield-1.0.0 (see LICENSE)
 """Builds x-maintenance.yaml from 2-deployment.yaml: same template without the instance (LaunchTemplate,
 AutoScalingGroup, and the NoInstanceAlarm that watches the group) and without the Route 53 statement that imports the stage 1 zone list.
 

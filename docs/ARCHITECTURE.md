@@ -1,3 +1,4 @@
+<!-- Copyright 2020-2026 Samson (https://github.com/georgio-sd). SPDX-License-Identifier: LicenseRef-PolyForm-Shield-1.0.0 (see LICENSE) -->
 # How the Flashlight server works
 
 This document describes how a Flashlight mail server is built and how it behaves: what the stacks create, how an
