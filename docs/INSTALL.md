@@ -129,6 +129,12 @@ bucket, in `install-logs/` (see [Troubleshooting](#troubleshooting)).
 With AlertEmail, each address gets an email from **AWS Notifications** ("Subscription Confirmation") a minute
 after the stack starts. Click its link within 48 hours; look in the spam folder if it isn't there.
 
+**Protect both stacks from deletion.** Once stage 2 is CREATE_COMPLETE, turn on termination protection for the
+stage 1 and the stage 2 stack: CloudFormation console, the stack, **Stack actions**, **Edit termination
+protection**, **Activated**. A stack can then be deleted only after the switch is turned off again, so a click on
+**Delete** by mistake does nothing. It doesn't affect updates: upgrades, maintenance mode and settings changes
+work as before. A template can't set it; it is a setting of the stack.
+
 ### Alert emails
 
 The server runs unattended: AWS replaces its instance after a Spot interruption, for the scheduled rebuild or
@@ -501,12 +507,20 @@ See [Upgrading Flashlight](UPGRADING.md).
 
 ### Deleting the server
 
-1. **Delete the stage 2 stack.** The server and its network are deleted; the mail storage stays (below).
+1. **Delete the stage 2 stack.** Turn off its termination protection first (**Stack actions**, **Edit termination
+   protection**, **Deactivated**), and the same for stage 1 before step 3. The server and its network are deleted;
+   the mail storage stays (below).
 2. **Empty the config bucket** of stage 1: S3 console, the bucket from stage 1's output `S3Bucket`, **Empty**.
    CloudFormation can't delete a bucket that has files in it, so without this the deletion of stage 1 fails.
    Empty it only after step 1: the server writes its logs and backups there while it runs.
 3. **Delete the stage 1 stack.** It removes Flashlight's DNS records, resets the reverse DNS and releases the
    Elastic IP address. (Stage 1 can't be deleted while stage 2 exists: stage 2 uses its outputs.)
+   If AWS Support once lifted the email sending limit or set the reverse DNS for this address, AWS may keep the
+   address locked to your account: the deletion then fails on `IPAddressMS` with "locked to your account". Open a
+   case in the AWS Support Center (Account and billing, free) asking to unlock the address so you can release it.
+   Meanwhile you can delete the stack without it: delete again and tick `IPAddressMS` under the resources to keep;
+   after the unlock, release the address in the EC2 console (**Elastic IPs**). Until then it is billed like any
+   unused Elastic IP.
 
 **The mail storage is not deleted with the stack.** The EFS file system with all mail and databases stays in
 your account, so a stack deleted by mistake doesn't take the mail with it. It has no deletion protection
