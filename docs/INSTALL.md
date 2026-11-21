@@ -35,7 +35,9 @@ The whole installation takes about half an hour, most of it waiting for AWS.
 ## Stage 1: address and DNS
 
 In the CloudFormation console, **Create stack** with `1-dns-preset.yaml`. The stack name is up to you;
-stage 2 refers to it, and its default there is `MailServerDnsPreset`.
+stage 2 refers to it, and its default there is `MailServerDnsPreset`. It also names the whole server in the
+billing (see [What the server costs](#what-the-server-costs)), so a name after the main domain is the most
+useful, with dashes for the dots (a stack name can't have dots): `example-com`.
 
 | Parameter | What to enter |
 |---|---|
@@ -61,7 +63,14 @@ Its **Outputs** tab shows what it did: the address (`Eip`), the config bucket (`
 
 ## Stage 2: the server
 
-**Create stack** with `2-deployment.yaml`. Name it as you like (`MailServer`, for example).
+**Create stack** with `2-deployment.yaml`. Name it as you like; the stage 1 name with `-server` tells best
+which server it is (`example-com-server`). With several Flashlight servers in one account, such names keep
+their resources and their costs apart:
+
+| Server | Stage 1 | Stage 2 |
+|---|---|---|
+| A | `example-com` | `example-com-server` |
+| B | `example-org` | `example-org-server` |
 
 ### Basic settings
 
@@ -167,6 +176,41 @@ A failed stack create or update sends no email: the stack rolls back, and you se
 
 The emails cost nothing in practice (AWS SNS: the first 1000 emails a month are free; the alarm is within
 CloudWatch's 10 free alarms).
+
+## What the server costs
+
+Every resource of the server that AWS can tag has two tags:
+
+| Tag | Value | Use |
+|---|---|---|
+| `Name` | `<stack name>-Flashlight` | Which stack made it, in the AWS consoles |
+| `flashlight:installation` | The stage 1 stack name, on the resources of both stacks | The whole server, in the billing |
+
+The server image copy is the exception: one copy serves every Flashlight server in the region, so its
+`flashlight:installation` is `shared` (its `Name` is `Flashlight <image name>`). Its snapshot costs about
+0.5 USD a month.
+
+**Turn the tag on for the billing, once per account.** AWS shows costs by a tag only after it is activated:
+Billing and Cost Management console, **Cost allocation tags**, find `flashlight:installation` (it appears up to
+a day after the first install), **Activate**. Costs are split by it from then on; the costs before the
+activation stay untagged.
+
+**See the costs.** Billing and Cost Management console, **Cost Explorer**: **Group by** Tag
+`flashlight:installation` shows each server and `shared` side by side. To see one server with its share of
+the image, **Filter** Tag `flashlight:installation` with both values, the server's and `shared`.
+
+**Several servers in one region** share one image copy. To split its cost between them automatically: Billing
+and Cost Management console, **Cost Categories**, **Create cost category**:
+
+1. A rule of the type **Inherited value**, dimension **Cost allocation tag**, tag key `flashlight:installation`:
+   every server's costs get its stack name as their value, the image copy gets `shared`.
+2. **Split charges**: source `shared`, targets the servers' values, allocation **Proportional** (by each
+   server's own costs) or **Even**.
+
+Cost Explorer then shows each server with its part of the image under that cost category.
+
+Not in the server's costs: the Route 53 hosted zones (they belong to your domains, and Flashlight doesn't tag
+them) and the AWS Support plan.
 
 ## Choosing the instance type
 

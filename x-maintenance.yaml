@@ -230,6 +230,8 @@ Conditions:
   AlertEmail2: !Not [ !Equals [ !Select [ 1, !Split [ ',', !Join [ '', [ !Ref AlertEmail, ',,' ] ] ] ], '' ] ]
   AlertEmail3: !Not [ !Equals [ !Select [ 2, !Split [ ',', !Join [ '', [ !Ref AlertEmail, ',,' ] ] ] ], '' ] ]
 Resources:
+  # Tags: Name tells the stack, flashlight:installation the whole server: the stage 1 stack name (DnsPreset), the
+  # same value as on the stage 1 resources, for the billing
   MailServerVPC:
     Type: AWS::EC2::VPC
     Properties:
@@ -240,12 +242,16 @@ Resources:
       Tags:
       - Key: Name
         Value: !Sub "${AWS::StackName}-Flashlight"
+      - Key: 'flashlight:installation'
+        Value: !Ref DnsPreset
   MailServerInternetGateway:
     Type: AWS::EC2::InternetGateway
     Properties:
       Tags:
       - Key: Name
         Value: !Sub "${AWS::StackName}-Flashlight"
+      - Key: 'flashlight:installation'
+        Value: !Ref DnsPreset
   AttachGateway:
     Type: AWS::EC2::VPCGatewayAttachment
     Properties:
@@ -261,6 +267,8 @@ Resources:
       Tags:
       - Key: Name
         Value: !Sub "${AWS::StackName}-Flashlight"
+      - Key: 'flashlight:installation'
+        Value: !Ref DnsPreset
   PubSubnetB:
     Type: AWS::EC2::Subnet
     Properties:
@@ -271,6 +279,8 @@ Resources:
       Tags:
       - Key: Name
         Value: !Sub "${AWS::StackName}-Flashlight"
+      - Key: 'flashlight:installation'
+        Value: !Ref DnsPreset
   PubSubnetC:
     Type: AWS::EC2::Subnet
     Condition: ThreeAZoneConf
@@ -282,6 +292,8 @@ Resources:
       Tags:
       - Key: Name
         Value: !Sub "${AWS::StackName}-Flashlight"
+      - Key: 'flashlight:installation'
+        Value: !Ref DnsPreset
   PublicRouteTable:
     Type: AWS::EC2::RouteTable
     Properties:
@@ -289,6 +301,8 @@ Resources:
       Tags:
       - Key: Name
         Value: !Sub "${AWS::StackName}-Flashlight"
+      - Key: 'flashlight:installation'
+        Value: !Ref DnsPreset
   PublicRoute:
     Type: AWS::EC2::Route
     DependsOn: AttachGateway
@@ -320,6 +334,8 @@ Resources:
       Tags:
       - Key: Name
         Value: !Sub "${AWS::StackName}-Flashlight"
+      - Key: 'flashlight:installation'
+        Value: !Ref DnsPreset
       SecurityGroupIngress:
       - IpProtocol: tcp
         FromPort: 22
@@ -376,6 +392,8 @@ Resources:
       Tags:
       - Key: Name
         Value: !Sub "${AWS::StackName}-Flashlight"
+      - Key: 'flashlight:installation'
+        Value: !Ref DnsPreset
       Policies:
       - PolicyName: MailServerInstance
         PolicyDocument:
@@ -464,6 +482,11 @@ Resources:
     Properties:
       # the sender's name in the emails (at most 100 characters, so not the stack name; the subjects name the server)
       DisplayName: Flashlight alerts
+      Tags:
+      - Key: Name
+        Value: !Sub "${AWS::StackName}-Flashlight"
+      - Key: 'flashlight:installation'
+        Value: !Ref DnsPreset
   # Subscriptions follow the position in AlertEmail: removing the first address re-creates the ones after it,
   # which then need a new confirmation
   AlertSubscription1:
@@ -498,6 +521,8 @@ Resources:
       Tags:
       - Key: Name
         Value: !Sub "${AWS::StackName}-Flashlight"
+      - Key: 'flashlight:installation'
+        Value: !Ref DnsPreset
       SecurityGroupIngress:
       - IpProtocol: tcp
         FromPort: 2049
@@ -534,6 +559,8 @@ Resources:
       FileSystemTags:
       - Key: Name
         Value: !Sub "${AWS::StackName}-Flashlight"
+      - Key: 'flashlight:installation'
+        Value: !Ref DnsPreset
       Encrypted: True
       PerformanceMode: generalPurpose
       ThroughputMode: !Ref MailStorageThroughputMode

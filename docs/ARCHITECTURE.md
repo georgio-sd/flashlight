@@ -61,6 +61,20 @@ group, generated from it by `build/make-maintenance.py`. Updating stage 2 to it 
 everything else: the network, EFS, the IAM role, the alert topic with its confirmed subscriptions. It's used for
 upgrades and for changing the domain list.
 
+### Tags
+
+Every resource of both stacks that can be tagged has `Name` = `<stack name>-Flashlight` and
+`flashlight:installation` = the stage 1 stack name (stage 2 takes it from its DnsPreset parameter), so the two
+stacks of one server have one value for the billing. The instance gets both from the Auto Scaling group
+(PropagateAtLaunch); its disk and network interface get them from the launch template (TagSpecifications), as
+does the launch template itself. The instance also has `flashlight:instance-types` and `flashlight:lifecycle`
+(see above). DnsPreset tags the image copy it makes and its snapshot with `Name` = `Flashlight <image name>` and
+`flashlight:installation` = `shared`: one copy serves every stack in the region. Its role may tag only as it
+copies (`ec2:CreateAction` = `CopyImage`), so a copy made before tags existed stays untagged until the next
+image. Not tagged: what can't carry tags (the instance profile, the EFS mount targets, routes and
+associations, SNS subscriptions), short-lived Spot requests, and the network objects the VPC makes by itself
+(main route table, default network ACL and security group).
+
 ## The life of an instance
 
 ### Install
