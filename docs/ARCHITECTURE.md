@@ -67,7 +67,8 @@ Every resource of both stacks that can be tagged has `Name` = `<stack name>-Flas
 `flashlight:installation` = the stage 1 stack name (stage 2 takes it from its DnsPreset parameter), so the two
 stacks of one server have one value for the billing. The instance gets both from the Auto Scaling group
 (PropagateAtLaunch); its disk and network interface get them from the launch template (TagSpecifications), as
-does the launch template itself. The instance also has `flashlight:instance-types` and `flashlight:lifecycle`
+does the launch template itself. The EFS backups (AWS Backup recovery points) get the file system's tags from
+AWS Backup. The instance also has `flashlight:instance-types` and `flashlight:lifecycle`
 (see above). DnsPreset tags the image copy it makes and its snapshot with `Name` = `Flashlight <image name>` and
 `flashlight:installation` = `shared`: one copy serves every stack in the region. Its role may tag only as it
 copies (`ec2:CreateAction` = `CopyImage`), so a copy made before tags existed stays untagged until the next

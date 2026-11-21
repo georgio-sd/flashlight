@@ -186,14 +186,24 @@ Every resource of the server that AWS can tag has two tags:
 | `Name` | `<stack name>-Flashlight` | Which stack made it, in the AWS consoles |
 | `flashlight:installation` | The stage 1 stack name, on the resources of both stacks | The whole server, in the billing |
 
+The mail storage backups (MailStorageBackupPolicy) get the tags of the file system, so their cost counts for the
+server too.
+
 The server image copy is the exception: one copy serves every Flashlight server in the region, so its
 `flashlight:installation` is `shared` (its `Name` is `Flashlight <image name>`). Its snapshot costs about
 0.5 USD a month.
 
-**Turn the tag on for the billing, once per account.** AWS shows costs by a tag only after it is activated:
-Billing and Cost Management console, **Cost allocation tags**, find `flashlight:installation` (it appears up to
-a day after the first install), **Activate**. Costs are split by it from then on; the costs before the
-activation stay untagged.
+**Turn the tag on for the billing, once per account.** AWS shows costs by a tag only after it is activated. Do it
+as the root user or an IAM user with access to the billing; in an AWS Organization, in its management account.
+
+1. Billing and Cost Management console, **Cost allocation tags** (under Cost Organization). One table lists all
+   tags of the account, AWS's own (`aws:...`) and yours.
+2. Type `flashlight:installation` in **Find cost allocation tags**. The tag shows up in the table only up to a
+   day after the first install; until then it isn't there, come back later.
+3. Tick it and click **Activate**. Its status turns from Inactive to Active.
+
+Costs are split by the tag from then on; it takes up to a day before Cost Explorer shows them. **Backfill tags**
+(top right) applies it to the costs of earlier months too.
 
 **See the costs.** Billing and Cost Management console, **Cost Explorer**: **Group by** Tag
 `flashlight:installation` shows each server and `shared` side by side. To see one server with its share of
