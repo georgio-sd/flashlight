@@ -190,8 +190,7 @@ The mail storage backups (MailStorageBackupPolicy) get the tags of the file syst
 server too.
 
 The server image copy is the exception: one copy serves every Flashlight server in the region, so its
-`flashlight:installation` is `shared` (its `Name` is `Flashlight <image name>`). Its snapshot costs about
-0.5 USD a month.
+`flashlight:installation` is `shared` (its `Name` is `Flashlight <image name>`).
 
 **Turn the tag on for the billing, once per account.** AWS shows costs by a tag only after it is activated. Do it
 as the root user or an IAM user with access to the billing; in an AWS Organization, in its management account.
