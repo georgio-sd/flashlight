@@ -163,15 +163,15 @@ Don't change the network settings after the install.
 | Parameter | Default | What it does |
 |---|---|---|
 | InstanceType | t3.small | Main instance type: t3.small, t3.medium, t3.xlarge, c7i.large, c7i.xlarge, m7i.large or m7i.xlarge. t3.small (2 GB) is enough for a small company with the spam filter; t3.medium (4 GB) or larger for the antivirus. See [Choosing the instance type](#choosing-the-instance-type) |
-| InstanceType2 | t3a.small | The pair of InstanceType, of the same size and memory: t3a for t3, c6a for c7i, m6a for m7i (t3.medium with t3a.medium; the template checks it). With Spot it gives the Auto Scaling group more capacity pools to choose from: a single type is sometimes unavailable on Spot for a while. With On-Demand the server runs on InstanceType, and on this one only when AWS has no capacity of the first. Keep it set also with a Reserved Instance: for that rare while you pay the On-Demand price of the second type, but the server stays up; with `None` it would wait without a server until capacity returns. A Compute Savings Plan covers both types. `None`: only InstanceType |
+| InstanceType2 | t3a.small | The pair of InstanceType, of the same size and memory: t3a for t3, c6a for c7i, m6a for m7i (t3.medium with t3a.medium; the template checks it). With Spot it gives the Auto Scaling group more capacity pools to choose from: a single type is sometimes unavailable on Spot for a while. With On-Demand the server runs on InstanceType, and on this one only when AWS has no capacity of the first. `None`: only InstanceType; when AWS has no capacity of it, the server waits without an instance until capacity returns |
 | InstanceLifecycle | Spot | `Spot` costs much less, but AWS may take the instance back when it needs the capacity, with a two-minute notice. The server watches for that notice: it stops its services cleanly and asks for a new instance, which installs itself and continues with the same mail storage (EFS). Mail is down for about 5 to 10 minutes; other mail servers deliver what they couldn't meanwhile, and no mail or data are lost. A weekly price check also moves the server to a cheaper Spot pool when its own has become expensive. `On-Demand` costs more and is never taken back |
 | RebuildAfterDays | 30 | The server is rebuilt from scratch on current packages once it is this old, on the next Saturday-to-Sunday night at 03:15 (about 4 minutes without mail). This is how it gets security fixes and updates: the operating system, and the programs installed from its repositories (Postfix, Dovecot, Rspamd, ClamAV and others). The web applications (Roundcube, PostfixAdmin, phpMyAdmin) come with the Flashlight release and are updated by [upgrades](UPGRADING.md). 0 turns it off |
 | DiskVolumeSize | 10 | The server's disk in GiB: the system plus a swap file for short memory peaks, sized automatically (half the memory, at most 4 GB). 10 for types with 2-4 GB of memory, at least 12 for 8 GB and more |
 
-**Lower prices without Spot.** A 1- or 3-year Reserved Instance or Savings Plan for your instance type, bought in
-the AWS console, lowers the On-Demand price close to the Spot level. Set InstanceLifecycle to On-Demand and keep
-InstanceType2: the server runs on the reserved type and moves to the second one only when AWS has no capacity
-of the first, at the On-Demand price for that while.
+**Lower prices without Spot.** A 1- or 3-year Reserved Instance or Savings Plan, bought in the AWS console,
+lowers the On-Demand price close to the Spot level. Set InstanceLifecycle to On-Demand and keep InstanceType2:
+in the rare hours when AWS has no capacity of the reserved type, the server runs on the second one at its
+On-Demand price instead of waiting without an instance. A Compute Savings Plan covers both types.
 
 ### Mail storage (EFS)
 
