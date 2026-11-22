@@ -43,36 +43,38 @@ exchange takes two or three days.
 1. Sign in to the AWS account where the server will run and open the form **Request to remove email sending
    limitations**: <https://console.aws.amazon.com/support/contacts#/rdns-limits>.
 2. **Email address**: where AWS should answer.
-3. **Use case description**: the text below fits a Flashlight server; replace the parts in angle brackets and
-   remove what isn't true for you. Keep the region in it: the form has no field for the region, and AWS lifts
-   the limit only where you ask.
+3. **Use case description**: copy the text below, written for a Flashlight server; replace the parts in angle
+   brackets and remove what isn't true for you. Keep the region in it: the form has no field for the region, and
+   AWS lifts the limit only where you ask.
 4. **Elastic IPs information** is optional: leave it empty. Before stage 1 the address doesn't exist yet, and
    Flashlight sets its reverse DNS itself.
 5. Submit the form.
 
-> Please remove the email sending limitations for our account <account ID> in the region <region>.
->
-> We plan to run our self-hosted mail server for our organization on Amazon EC2: Postfix and Dovecot with
-> Roundcube webmail on AlmaLinux 10, installed with CloudFormation. We prefer it to a hosted mail service
-> because we want to keep our mail data and the mail server's logs under our own control, and by our estimate
-> it costs us less. The server will send and receive the everyday email of our users at <domain, other
-> domains>: person-to-person correspondence with customers, partners and suppliers. We will send no
-> newsletters, marketing or other bulk mail, and will use no purchased or collected address lists.
->
-> The server will not be an open relay. Mail from other servers will be accepted only for our own domains, and
-> mail to other domains will be relayed only for our own users after they log in; the server will not forward
-> mail it receives from one outside server to another.
->
-> Sending will be limited and protected: users will have to log in (ports 587 and 465, TLS only) and will be
-> able to send only as their own addresses, at most 30 messages an hour, 300 a day and 20 recipients per
-> message; a mailbox over the limits will be reported to the administrator as possibly compromised. All
-> outgoing mail will be signed with DKIM, our domains will publish SPF (-all) and DMARC (p=reject) records, and
-> a spam filter (Rspamd) will check incoming and outgoing mail. We will set the reverse DNS of the server's
-> Elastic IP ourselves, to mail.<main domain>, the name the server uses in SMTP and which resolves back to the
-> same address.
->
-> Undeliverable mail will return to its sender. Complaints and abuse reports will reach the administrator at
-> <admin email>.
+```text
+Please remove the email sending limitations for our account <account ID> in the region <region>.
+
+We plan to run our self-hosted mail server for our organization on Amazon EC2: Postfix and Dovecot with
+Roundcube webmail on AlmaLinux 10, installed with CloudFormation. We prefer it to a hosted mail service
+because we want to keep our mail data and the mail server's logs under our own control, and by our estimate
+it costs us less. The server will send and receive the everyday email of our users at <domain, other
+domains>: person-to-person correspondence with customers, partners and suppliers. We will send no
+newsletters, marketing or other bulk mail, and will use no purchased or collected address lists.
+
+The server will not be an open relay. Mail from other servers will be accepted only for our own domains, and
+mail to other domains will be relayed only for our own users after they log in; the server will not forward
+mail it receives from one outside server to another.
+
+Sending will be limited and protected: users will have to log in (ports 587 and 465, TLS only) and will be
+able to send only as their own addresses, at most 30 messages an hour, 300 a day and 20 recipients per
+message; a mailbox over the limits will be reported to the administrator as possibly compromised. All
+outgoing mail will be signed with DKIM, our domains will publish SPF (-all) and DMARC (p=reject) records, and
+a spam filter (Rspamd) will check incoming and outgoing mail. We will set the reverse DNS of the server's
+Elastic IP ourselves, to mail.<main domain>, the name the server uses in SMTP and which resolves back to the
+same address.
+
+Undeliverable mail will return to its sender. Complaints and abuse reports will reach the administrator at
+<admin email>.
+```
 
 AWS answers by email, at the address you gave in the form. Keep an eye on that mailbox, its spam folder
 included, until the request is approved: AWS may ask for more details about how you will use mail, and the
