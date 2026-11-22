@@ -145,7 +145,7 @@ resources and costs are easy to tell apart:
 | Antispam | ENABLED | The spam filter (Rspamd). Spam goes to the Junk folder, obvious spam is refused. Also turns on the limits for outgoing mail and the warnings about compromised mailboxes |
 | SpamhausDQSKey | empty | Your Spamhaus DQS key (hidden in the console). With it, the spam filter checks each message's sending server, domains and links against the Spamhaus blocklists, the most widely used lists of known spam sources. Spamhaus answers servers in AWS only with a key; without one these checks are skipped. Needs Antispam |
 | AttachmentPolicy | Score | Attachments of risky file types. `Score`: they only add to the spam score. `Gmail`: mail with a file type Gmail blocks (exe, js, bat, iso, lnk...) is refused, also inside archives; encrypted archives go to Junk. `Strict`: Gmail plus more Windows file types from Outlook's blocked list (reg, url, inf, vhdx, PowerShell...) |
-| Antivirus | DISABLED | Virus scanning (ClamAV): mail with a virus is refused. Needs Antispam and a medium or larger instance type (about 1 GB of memory, 2 GB for a few seconds while new signatures load) |
+| Antivirus | DISABLED | Virus scanning (ClamAV): mail with a virus is refused. Needs Antispam and a medium or larger instance type: the virus scanner needs about 1 GB of memory on top of what the other services use, and about 2 GB for a few seconds while it loads new signatures (several times a day) |
 
 ### Network
 
