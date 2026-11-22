@@ -475,8 +475,9 @@ one that has the same data; mail is down for a few minutes. If the new server fa
 back and the old one goes on working.
 
 **Lower prices without Spot.** A 1- or 3-year Reserved Instance or Savings Plan for your instance type, bought in
-the AWS console, lowers the On-Demand price close to the Spot level. Set InstanceLifecycle to On-Demand and
-InstanceType2 to None, so the server always runs on the reserved type.
+the AWS console, lowers the On-Demand price close to the Spot level. Set InstanceLifecycle to On-Demand and keep
+InstanceType2: the server runs on the reserved type and moves to the second one only when AWS has no capacity
+of the first, at the On-Demand price for that while.
 
 ### fail2ban
 

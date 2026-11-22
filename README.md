@@ -104,8 +104,8 @@ need to buy capacity in advance "for growth":
   compares Spot prices and moves to a cheaper option when that saves enough. On-Demand is one setting away.
 - **Reserved pricing for On-Demand.** A 1- or 3-year Reserved Instance or Savings Plan, bought in the AWS
   console, lowers the On-Demand price to about the Spot level (a 3-year t3.small reservation comes to about $6
-  a month), with no Spot interruptions. Nothing changes in the stacks. With a reservation, set the second
-  instance type (InstanceType2) to None, so the server always runs on the reserved type.
+  a month), with no Spot interruptions. Nothing changes in the stacks: keep the second instance type
+  (InstanceType2), so the server stays up even when AWS is short of the reserved type.
 - **The server size is a setting.** When the company grows, choose a larger instance type in a stack update:
   the server is replaced by a bigger one with the same data, without reinstalling anything. If the load drops,
   go back to a smaller one the same way. Which size fits how many users, measured with load tests:
