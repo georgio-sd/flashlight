@@ -53,7 +53,7 @@ exchange takes two or three days.
 ```text
 Please remove the email sending limitations for our account <account ID> in the region <region>.
 
-We plan to run our self-hosted mail server for our organization on Amazon EC2: Postfix and Dovecot with
+We plan to run our self-managed mail server for our organization on Amazon EC2: Postfix and Dovecot with
 Roundcube webmail on AlmaLinux 10, installed with CloudFormation. We prefer it to a hosted mail service
 because we want to keep our mail data and the mail server's logs under our own control, and by our estimate
 it costs us less. The server will send and receive the everyday email of our users at <domain, other
