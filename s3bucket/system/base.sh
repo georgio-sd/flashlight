@@ -101,6 +101,16 @@ if systemctl list-unit-files fwupd.service > /dev/null 2>&1; then
   systemctl mask fwupd.service fwupd-refresh.service
 fi
 #
+# Disabling what the server doesn't use, all in the AlmaLinux image: the dnf metadata cache refresh (packages are
+# installed only at an install), SSSD (LDAP, Active Directory and Kerberos logins) and gssproxy (NFS with
+# Kerberos; EFS is mounted over TLS without it). Masked, so nothing starts them.
+for unit in dnf-makecache.timer sssd.service sssd-kcm.socket gssproxy.service; do
+  if systemctl list-unit-files $unit > /dev/null 2>&1; then
+    systemctl disable --now $unit
+    systemctl mask $unit
+  fi
+done
+#
 # Installing amazon-efs-utils (prebuilt RPM, see build/efs-utils.md) and mounting EFS
 cd ~
 efs_rpm=amazon-efs-utils-3.3.5-1.el10.x86_64.rpm
@@ -1148,6 +1158,8 @@ EOF
   # Unbound and Rspamd need the network up (Rspamd loads its lists from the internet when it starts); Rspamd also
   # uses Valkey and Unbound. Its workers listen on 127.0.0.1 ("localhost" gave each socket twice here).
   start_after unbound network-online.target
+  # IPv4 only: IPv6 is off, and Unbound would try it (a warning at every start, wasted queries to IPv6 servers)
+  printf '%s\n' 'server:' '    do-ip6: no' > /etc/unbound/conf.d/flashlight.conf
   start_after rspamd valkey.service unbound.service network-online.target$rspamd_after
   # Rspamd counts as started once its controller answers (up to a minute, never a failure: see clamd above), and
   # Postfix starts after it (see Postfix), so no mail comes in before it is checked ("$$": systemd's own "$")
