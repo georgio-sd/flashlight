@@ -131,7 +131,7 @@ resources and costs are easy to tell apart:
 | Parameter | Default | What it does |
 |---|---|---|
 | DnsPreset | MailServerDnsPreset | The name of your stage 1 stack (`example-com` in the example above) |
-| AdminEmail | | Your e-mail address. It becomes the PostfixAdmin login, receives the Let's Encrypt notices and Flashlight's warnings. Use an address outside the new server, so the warnings reach you when the server has problems |
+| AdminEmail | | Your e-mail address. It becomes the PostfixAdmin login and receives the mail to `postmaster@` and `abuse@` of your domains, and, with Antispam, a warning about a mailbox that may have been taken over (one that hits the sending limits or sends spam). Use an address outside the new server, so this mail reaches you when the server has problems |
 | AlertEmail | empty | Optional: up to 3 addresses, separated by commas without spaces, that get an email when the server can't come back after a replacement. Use addresses on another mail service, never on this server. See [Alert emails](#alert-emails) |
 | TimeZone | America/Chicago | The server's time zone ([list](https://www.php.net/manual/en/timezones.php)) |
 | CertificateMode | production | `production`: a trusted Let's Encrypt certificate. `staging`: an untrusted test certificate, for test installs; Let's Encrypt allows only a few production certificates for the same names per week. A test install can be switched to production later with a stack update |
