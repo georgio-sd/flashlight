@@ -112,6 +112,7 @@ default.
   domain uses `mail.<main domain>`, what is supported and what isn't, and the usual cause when sending fails.
 - INSTALL: choosing the instance type, from load tests: how many webmail users and mail program connections each
   type carries, why mailboxes are not active users, and how the t3 CPU credits work.
+- INSTALL: deleting old server images safely, and what to keep in mind with several servers in one region.
 - Instance types: c7i (with c6a as its pair) and m7i (with m6a) in large and xlarge, which have the whole CPU at all
   times with no credits; t3.large is gone (no more CPU than t3.medium, at about the price of m6a.large). InstanceType2
   must be the pair of InstanceType: t3a for t3, c6a for c7i, m6a for m7i. A stack on t3.large chooses another type

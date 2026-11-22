@@ -254,8 +254,7 @@ The mail storage backups (MailStorageBackupPolicy) get the tags of the file syst
 server too.
 
 The server image copy in your region (its `Name` is `Flashlight <image name>`) counts for the server whose
-stage 1 copied it. Other servers in the same region use the same copy, and it stays after that stack is deleted;
-it costs a few cents a month.
+stage 1 copied it; it costs a few cents a month. See [Old server images](#old-server-images).
 
 **Turn the tag on for the billing, once per account.** AWS shows costs by a tag only after it is activated. Do it
 as the root user or an IAM user with access to the billing; in an AWS Organization, in its management account.
@@ -616,6 +615,41 @@ sudo aws s3 cp /mnt/mailserver/backup/some-file s3://<config bucket>/upload/
 ### Upgrades
 
 See [Upgrading Flashlight](UPGRADING.md).
+
+### Old server images
+
+Stage 1 copies the Flashlight server image into your region when it is created, and again when it is updated
+to a release with a newer image (EC2 console, AMIs: `Flashlight <image name>`). If the region already has a copy
+of that image, stage 1 uses it instead of copying again. The server starts its instances from the image in the
+`ImageId` output of its stage 1. That output is set when stage 1 is created or updated and doesn't change on its
+own. Old copies stay: Flashlight never deletes them, and each costs a few cents a month.
+
+#### One server
+
+After an upgrade the server uses the new copy, and the old one is no longer needed. Check that the `ImageId`
+output of stage 1 shows the new copy's ID, then delete the old one: EC2 console, AMIs, the old copy,
+**Deregister AMI**, then its snapshot (EC2 console, Snapshots, the same `Name`).
+
+Don't delete the copy in `ImageId`. The server keeps running without it, but it can't start a new instance at
+its next replacement (a Spot interruption, the weekly price check, the scheduled rebuild). It then stays without
+mail until stage 1 is updated again.
+
+#### Several servers in one region
+
+Servers in one region share the image copy: the stage 1 that comes later finds the copy already there and
+uses it. Each server is upgraded on its own, so after an upgrade of one server the others still use the old copy
+until they are upgraded too. Delete an old copy only when no stage 1 stack in the region has its ID in
+`ImageId`. The steps are the same as for one server.
+
+For the billing, a copy counts for the server whose stage 1 copied it, even while other servers use it. It stays
+after that stack is deleted.
+
+Two more things to keep in mind:
+
+- Each server needs its own main domain: two stage 1 stacks on the same hosted zone overwrite each other's
+  records.
+- AWS limits each region to 5 VPCs and 5 Elastic IPs by default, so about 5 servers per region; for more, ask
+  for a higher quota (Service Quotas console).
 
 ### Deleting the server
 
