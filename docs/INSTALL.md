@@ -253,8 +253,9 @@ Every resource of the server that AWS can tag has two tags:
 The mail storage backups (MailStorageBackupPolicy) get the tags of the file system, so their cost counts for the
 server too.
 
-The server image copy is the exception: one copy serves every Flashlight server in the region, so its
-`flashlight:installation` is `shared` (its `Name` is `Flashlight <image name>`).
+The server image copy in your region (its `Name` is `Flashlight <image name>`) counts for the server whose
+stage 1 copied it. Other servers in the same region use the same copy, and it stays after that stack is deleted;
+it costs a few cents a month.
 
 **Turn the tag on for the billing, once per account.** AWS shows costs by a tag only after it is activated. Do it
 as the root user or an IAM user with access to the billing; in an AWS Organization, in its management account.
@@ -269,18 +270,8 @@ Costs are split by the tag from then on; it takes up to a day before Cost Explor
 (top right) applies it to the costs of earlier months too.
 
 **See the costs.** Billing and Cost Management console, **Cost Explorer**: **Group by** Tag
-`flashlight:installation` shows each server and `shared` side by side. To see one server with its share of
-the image, **Filter** Tag `flashlight:installation` with both values, the server's and `shared`.
-
-**Several servers in one region** share one image copy. To split its cost between them automatically: Billing
-and Cost Management console, **Cost Categories**, **Create cost category**:
-
-1. A rule of the type **Inherited value**, dimension **Cost allocation tag**, tag key `flashlight:installation`:
-   every server's costs get its stack name as their value, the image copy gets `shared`.
-2. **Split charges**: source `shared`, targets the servers' values, allocation **Proportional** (by each
-   server's own costs) or **Even**.
-
-Cost Explorer then shows each server with its part of the image under that cost category.
+`flashlight:installation` shows each server side by side; **Filter** Tag `flashlight:installation` with one
+server's value shows that server alone.
 
 Not in the server's costs: the Route 53 hosted zones (they belong to your domains, and Flashlight doesn't tag
 them) and the AWS Support plan.
