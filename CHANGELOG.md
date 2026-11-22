@@ -100,6 +100,8 @@ default.
   install; switching it on again downloads it again.
 - INSTALL: deleting the server step by step, including emptying the config bucket before deleting stage 1, and
   what to do when AWS keeps the Elastic IP locked to the account.
+- INSTALL: asking AWS to allow outgoing mail on port 25 step by step, with a ready request text; the limit is
+  lifted per region.
 - INSTALL: turning on termination protection for both stacks after the install, so they can't be deleted by
   mistake (updates and upgrades are not affected).
 - INSTALL: setting up mail programs step by step: where to add the account in the common programs, why every
