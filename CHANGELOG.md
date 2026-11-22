@@ -73,6 +73,10 @@ default.
 - After a server start, mail is taken only once the spam filter (and the virus scanner, with Antivirus) answer.
   Before, Postfix could take mail while they were still starting, and with Antivirus the mail of the first
   half-minute or so passed without the virus scan. A crashed virus scanner now restarts by itself.
+- After a server start, the spam filter's first DNS lookups no longer fail now and then. With an empty cache,
+  the burst of lookups for the mail queued during a replacement raced to fetch the DNSSEC keys, and some of them
+  (blocklists, SPF of other domains) failed for the first messages. Unbound now fetches the keys of the root and
+  of net, com and org first.
 - The database (MariaDB) restarts by itself after it stops on an error, like the mail services. Before, it came
   back only after a crash, and an exit on an error (a short outage of the mail storage, for example) left the
   server without logins until someone started it.

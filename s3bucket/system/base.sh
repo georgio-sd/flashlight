@@ -1163,6 +1163,15 @@ EOF
   start_after unbound network-online.target
   # IPv4 only: IPv6 is off, and Unbound would try it (a warning at every start, wasted queries to IPv6 servers)
   printf '%s\n' 'server:' '    do-ip6: no' > /etc/unbound/conf.d/flashlight.conf
+  # Warm-up: with an empty cache, many queries at once (Rspamd when the mail queued during a replacement arrives)
+  # race to build the DNSSEC chain of trust, and a share of them fail (SERVFAIL, "validation failure ... no DS").
+  # The keys (DNSKEY) of the root and of net, com and org, where most blocklists live, are fetched one at a time
+  # first: they check the answers of those zones, also the proofs that a zone under them is unsigned. Unbound
+  # counts as started after that (well under a second), and Rspamd starts after Unbound. "-": without the
+  # internet Unbound still starts.
+  printf '%s\n' '[Service]' \
+    "ExecStartPost=-/bin/sh -c 'for q in . net. com. org.; do dig +time=3 +tries=2 @127.0.0.1 \$\$q DNSKEY > /dev/null; done'" \
+    > /etc/systemd/system/unbound.service.d/warmup.conf
   start_after rspamd valkey.service unbound.service network-online.target$rspamd_after
   # Rspamd counts as started once its controller answers (up to a minute, never a failure: see clamd above), and
   # Postfix starts after it (see Postfix), so no mail comes in before it is checked ("$$": systemd's own "$")
