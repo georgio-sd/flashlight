@@ -646,11 +646,8 @@ your account, so a stack deleted by mistake doesn't take the mail with it. It ha
 switch to turn off: the stack simply leaves it behind. It keeps costing its storage price until you delete it
 yourself: EFS console, the file system named `<stage 2 stack name>-Flashlight`, **Delete**. Do that only when
 you are sure you no longer need the data, or have copied them; there is no way back. With
-MailStorageBackupPolicy, its daily AWS Backup copies stay after that until they expire (35 days).
-
-A file system created before Flashlight 1.1 gets its name only when its stack is updated to 1.1. Otherwise note
-its ID before deleting stage 2: the stack's **Resources** tab, `MailStorage`. (If the very first creation of the
-stack fails, its empty file system is cleaned up automatically.)
+MailStorageBackupPolicy, its daily AWS Backup copies stay after that until they expire (35 days). If the very
+first creation of the stack fails, its empty file system is cleaned up automatically.
 
 ## Troubleshooting
 
