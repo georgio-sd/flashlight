@@ -168,6 +168,11 @@ Don't change the network settings after the install.
 | RebuildAfterDays | 30 | The server is rebuilt from scratch on current packages once it is this old, on the next Saturday-to-Sunday night at 03:15 (about 4 minutes without mail). This is how it gets security fixes and updates: the operating system, and the programs installed from its repositories (Postfix, Dovecot, Rspamd, ClamAV and others). The web applications (Roundcube, PostfixAdmin, phpMyAdmin) come with the Flashlight release and are updated by [upgrades](UPGRADING.md). 0 turns it off |
 | DiskVolumeSize | 10 | The server's disk in GiB: the system plus a swap file for short memory peaks, sized automatically (half the memory, at most 4 GB). 10 for types with 2-4 GB of memory, at least 12 for 8 GB and more |
 
+**Lower prices without Spot.** A 1- or 3-year Reserved Instance or Savings Plan for your instance type, bought in
+the AWS console, lowers the On-Demand price close to the Spot level. Set InstanceLifecycle to On-Demand and keep
+InstanceType2: the server runs on the reserved type and moves to the second one only when AWS has no capacity
+of the first, at the On-Demand price for that while.
+
 ### Mail storage (EFS)
 
 | Parameter | Default | What it does |
@@ -484,11 +489,6 @@ Most stage 2 parameters can be changed with a stack update (**Use current templa
 Spot or On-Demand, the spam filter, the antivirus and the others. The update replaces the server with a new
 one that has the same data; mail is down for a few minutes. If the new server fails to install, the stack rolls
 back and the old one goes on working.
-
-**Lower prices without Spot.** A 1- or 3-year Reserved Instance or Savings Plan for your instance type, bought in
-the AWS console, lowers the On-Demand price close to the Spot level. Set InstanceLifecycle to On-Demand and keep
-InstanceType2: the server runs on the reserved type and moves to the second one only when AWS has no capacity
-of the first, at the On-Demand price for that while.
 
 ### fail2ban
 
