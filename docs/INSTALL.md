@@ -83,10 +83,11 @@ only recently.
 
 ## Stage 1: address and DNS
 
-In the CloudFormation console, **Create stack** with `1-dns-preset.yaml`. The stack name is up to you;
-stage 2 refers to it, and its default there is `MailServerDnsPreset`. It also names the whole server in the
-billing (see [What the server costs](#what-the-server-costs)), so a name after the main domain is the most
-useful, with dashes for the dots (a stack name can't have dots): `example-com`.
+In the CloudFormation console, **Create stack** with `1-dns-preset.yaml`. We recommend naming the stack after
+your main domain, with dashes for the dots (a stack name can't have dots): `example-com`. Such a name tells at
+once which server the resources belong to, and it is also the name the billing shows for the whole server
+(see [What the server costs](#what-the-server-costs)). Stage 2 refers to it in its DnsPreset parameter.
+CloudFormation can't rename a stack later.
 
 | Parameter | What to enter |
 |---|---|
@@ -112,9 +113,13 @@ Its **Outputs** tab shows what it did: the address (`Eip`), the config bucket (`
 
 ## Stage 2: the server
 
-**Create stack** with `2-deployment.yaml`. Name it as you like; the stage 1 name with `-server` tells best
-which server it is (`example-com-server`). With several Flashlight servers in one account, such names keep
-their resources and their costs apart:
+**Create stack** with `2-deployment.yaml`. We recommend naming it like the stage 1 stack, with the suffix
+`-server`: if stage 1 is `example-com`, stage 2 is `example-com-server`.
+
+The first parameter below, DnsPreset, is the name of the stage 1 stack: `example-com`.
+
+If you have several Flashlight servers in one account, name all of them this way. Then each server's
+resources and costs are easy to tell apart:
 
 | Server | Stage 1 | Stage 2 |
 |---|---|---|
@@ -125,7 +130,7 @@ their resources and their costs apart:
 
 | Parameter | Default | What it does |
 |---|---|---|
-| DnsPreset | MailServerDnsPreset | The name of your stage 1 stack |
+| DnsPreset | MailServerDnsPreset | The name of your stage 1 stack (`example-com` in the example above) |
 | AdminEmail | | Your e-mail address. It becomes the PostfixAdmin login, receives the Let's Encrypt notices and Flashlight's warnings. Use an address outside the new server, so the warnings reach you when the server has problems |
 | AlertEmail | empty | Optional: up to 3 addresses, separated by commas without spaces, that get an email when the server can't come back after a replacement. Use addresses on another mail service, never on this server. See [Alert emails](#alert-emails) |
 | TimeZone | America/Chicago | The server's time zone ([list](https://www.php.net/manual/en/timezones.php)) |
