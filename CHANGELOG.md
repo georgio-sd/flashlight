@@ -120,6 +120,8 @@ default.
   warnings are still logged.
 - The network helper nm-cloud-setup is off: the server has one network interface and nothing for it to set up.
   It polled the instance metadata every 5 minutes and logged "code=killed, status=15/TERM" at every boot.
+- Valkey listens on 127.0.0.1 only (IPv6 is off), so it no longer logs a bind warning at every start; fwupd
+  (firmware updates, of which an EC2 instance has none) is off and no longer downloads its catalogue twice a day.
 - The number of mail program connections grows with the server's memory: about 2350 on 8 GB with the antivirus,
   6350 on 16 GB (1024, Dovecot's default, on 2-4 GB servers).
 

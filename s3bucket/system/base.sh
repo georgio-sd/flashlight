@@ -93,6 +93,14 @@ if systemctl list-unit-files nm-cloud-setup.service > /dev/null 2>&1; then
   systemctl mask nm-cloud-setup.service
 fi
 #
+# Disabling fwupd: it updates the firmware of the hardware, and an EC2 instance has none it can update; its timer
+# only downloads the firmware catalogue twice a day. The package stays (shim-x64, the UEFI boot loader, needs it
+# through dbxtool); masked, so D-Bus can't start the daemon either.
+if systemctl list-unit-files fwupd.service > /dev/null 2>&1; then
+  systemctl disable --now fwupd-refresh.timer
+  systemctl mask fwupd.service fwupd-refresh.service
+fi
+#
 # Installing amazon-efs-utils (prebuilt RPM, see build/efs-utils.md) and mounting EFS
 cd ~
 efs_rpm=amazon-efs-utils-3.3.5-1.el10.x86_64.rpm
