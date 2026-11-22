@@ -33,6 +33,7 @@ records, recovery after failures and upgrades.
   limits or sends spam
 - Optional virus scanning of incoming mail (ClamAV) on medium or larger servers
 - Protection against password guessing (fail2ban)
+- Optional alert emails when the server is down and can't recover by itself
 - Daily database backups, and optional backups of all data with AWS Backup
 
 ## How it works
