@@ -122,7 +122,8 @@ default.
   It polled the instance metadata every 5 minutes and logged "code=killed, status=15/TERM" at every boot.
 - Valkey and Unbound use IPv4 only (IPv6 is off): no more warnings at every start, and no DNS queries wasted on
   IPv6 servers; ManageSieve (webmail filters) listens only on 127.0.0.1. Services the server doesn't use are off:
-  fwupd (firmware updates, of which an EC2 instance has none), the dnf metadata refresh, SSSD and gssproxy.
+  fwupd (firmware updates, of which an EC2 instance has none), the dnf metadata refresh, SSSD and gssproxy;
+  tuned applies its profile at boot and exits instead of staying in memory.
 - The number of mail program connections grows with the server's memory: about 2350 on 8 GB with the antivirus,
   6350 on 16 GB (1024, Dovecot's default, on 2-4 GB servers).
 

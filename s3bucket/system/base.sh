@@ -110,6 +110,9 @@ for unit in dnf-makecache.timer sssd.service sssd-kcm.socket gssproxy.service; d
     systemctl mask $unit
   fi
 done
+# tuned applies its profile (virtual-guest) at boot and then exits: its dynamic tuning is off, so the daemon would
+# only keep about 27 MB of memory
+sed -i 's/^daemon = 1/daemon = 0/' /etc/tuned/tuned-main.conf
 #
 # Installing amazon-efs-utils (prebuilt RPM, see build/efs-utils.md) and mounting EFS
 cd ~
