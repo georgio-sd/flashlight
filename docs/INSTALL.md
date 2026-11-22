@@ -151,8 +151,8 @@ resources and costs are easy to tell apart:
 
 | Parameter | Default | What it does |
 |---|---|---|
-| VpcCidr | 10.0.0.0/16 | Address range of the server's network. Change it only if you plan to connect it to another network with the same range |
-| SubnetMask | 8 | Subnet size: 8 = /24 |
+| VpcCidr | 10.0.0.0/16 | Address range of the server's VPC: `10.0.0.0/16`, `172.16.0.0/16` or `192.168.0.0/16`. Change it only if you plan to connect this VPC to another one (VPC peering or a VPN) that already uses the same range: connected VPCs must not overlap |
+| SubnetMask | 8 | Size of each subnet: `8` = /24 (256 addresses), `10` = /22, `12` = /20, `14` = /18. The server needs only a few addresses, so the default is enough |
 | AZoneNames | | Three Availability Zones of the region (two with TwoAZoneConf) |
 | TwoAZoneConf | DISABLED | ENABLED only in regions with two zones |
 
