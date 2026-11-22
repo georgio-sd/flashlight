@@ -288,7 +288,7 @@ The server's load comes from three things, and each needs something different:
 | **Mail programs and phones** (Outlook, Thunderbird, Apple Mail, phone mail apps) | Memory | about 1.5 MB per open connection; a desktop program keeps 1-3 connections, a phone 1-2 |
 | **Incoming mail, spam and virus checks** | Little CPU; the antivirus takes about 1 GB of memory | about 1000 messages an hour add 3% CPU |
 
-**Mailboxes are not users.** The numbers below are about what the server does **at the same moment**, not about
+**Mailboxes are not active users.** The numbers below are about what the server does **at the same moment**, not about
 how many mailboxes it holds:
 
 - **Active users** are the people working in webmail at the same time, each with an action every 15-45 seconds
