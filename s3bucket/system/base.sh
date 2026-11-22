@@ -261,7 +261,8 @@ printf '#!/bin/bash\n#\nfor script in `find /etc/cron.once -type f`; do $script;
   > /usr/bin/cron-boot-runner
 chmod 744 /usr/bin/cron-boot-runner
 #
-# Credentials file creating (the install trace with passwords goes to the root-only flashlight-install.log)
+# Credentials file creating (the install trace goes to the root-only flashlight-install.log; the passwords
+# themselves are untraced, see secret_step)
 if [ ! -f $flag ]; then
   chmod 700 /mnt/mailserver/root
   touch /mnt/mailserver/root/credentials

@@ -654,7 +654,7 @@ first creation of the stack fails, its empty file system is cleaned up automatic
 | Where | What is there |
 |---|---|
 | `/mnt/mailserver/log/instance.log` | The server's events, one line each: `BOOT`, `READY`, `REPLACE`, `SHUTDOWN`, `ALERT`, `WARN`, `FAILED` and others. Kept across replacements |
-| `/mnt/mailserver/log/install/` | The install log of every server, kept 90 days (root only: it contains passwords) |
+| `/mnt/mailserver/log/install/` | The install log of every server, kept 90 days (root only) |
 | `install-logs/` in the config bucket | The install log of a failed install, also when the stack rolled back and the storage is gone |
 | `/var/log/flashlight-install.log` | The install log of the running server |
 | `/var/log/maillog` | Postfix and Dovecot |
