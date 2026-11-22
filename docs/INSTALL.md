@@ -475,7 +475,8 @@ deleted in PostfixAdmin but still in the stack's list comes back, empty, at the 
   mail programs and DNS records point to them.
 - **The network settings** of stage 2 (VpcCidr, SubnetMask, AZoneNames, TwoAZoneConf).
 
-To change any of these, install a new server and move the data to it.
+To change any of these, install a new server and move the data to it (the mail, the PostfixAdmin and Roundcube
+databases). This guide doesn't cover such a move.
 
 ### Changing the server's settings
 
