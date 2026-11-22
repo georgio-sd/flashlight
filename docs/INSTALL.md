@@ -436,9 +436,16 @@ from one address, so a computer and a phone behind the same office router both f
 
 ### Checking that it works
 
-1. Send a message from a new mailbox to an outside address (Gmail, for example) and back.
+1. Send a message from a new mailbox to an outside address (Gmail, for example) and back. Gmail often puts the
+   first messages from a newly installed server into Spam, short test messages especially, even when the
+   server is set up correctly: its address has no reputation with Gmail yet. That is normal: mark them **Not
+   spam**, and after a while Gmail stops doing it.
 2. In Gmail, **Show original** of the received message should show SPF, DKIM and DMARC as PASS.
-3. `sudo tail /mnt/mailserver/log/instance.log` shows the server's events; the last one after the install is
+3. Check the server's setup at [mail-tester.com](https://www.mail-tester.com/): send a message from one of the
+   server's mailboxes to the address the page shows, then open the result. It rates the message out of 10 and
+   explains each point: DNS records, signatures, blocklists, content. Write a few real sentences: an empty or
+   one-word message costs points by itself.
+4. `sudo tail /mnt/mailserver/log/instance.log` shows the server's events; the last one after the install is
    `READY`.
 
 ## Everyday tasks
