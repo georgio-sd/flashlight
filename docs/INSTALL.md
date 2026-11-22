@@ -233,6 +233,9 @@ CloudWatch's 10 free alarms).
 
 ## What the server costs
 
+AWS bills all the services of an account together. Flashlight tags its resources so that you can pick the mail
+server's own costs out of that bill, and, with several servers, see each one apart.
+
 Every resource of the server that AWS can tag has two tags:
 
 | Tag | Value | Use |
