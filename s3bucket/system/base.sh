@@ -855,6 +855,8 @@ EOF
   install -d -m 750 /mnt/mailserver/valkey
   chown -R valkey:valkey /mnt/mailserver/valkey
   sed -i 's|^dir .*|dir /mnt/mailserver/valkey|' /etc/valkey/valkey.conf
+  # IPv4 only: IPv6 is off, and the package's optional ::1 logs a bind warning at every start
+  sed -i 's|^bind .*|bind 127.0.0.1|' /etc/valkey/valkey.conf
   printf '%s\n' "# Flashlight: memory cap; Rspamd's learned data expire by themselves" "maxmemory 256mb" \
     "maxmemory-policy volatile-ttl" "# written to disk at most 5 minutes after a change, and when it stops" \
     "save 300 1 60 10000" >> /etc/valkey/valkey.conf
