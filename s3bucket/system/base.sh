@@ -526,7 +526,7 @@ crontab=/mnt/mailserver/etc/crontab
   # scheduled rebuild (stack parameter RebuildAfterDays, 0 = off), two hours after the price check
   [ "$REBUILD_AFTER_DAYS" -gt 0 ] && echo "15   3  *  *  0 root /mnt/mailserver/automation/rebuild-check $REBUILD_AFTER_DAYS"
   # spam filter: warns the admin about mailboxes that may have been taken over (sending limits, outgoing spam)
-  [ "$ANTISPAM" = 'ENABLED' ] && echo "*/10 *  *  *  * root /mnt/mailserver/automation/outbound-alert $ADMIN_EMAIL $(echo "$DOMAIN_NAMES" | cut -d',' -f 1)"
+  [ "$ANTISPAM" = 'ENABLED' ] && echo "*/10 *  *  *  * root /mnt/mailserver/automation/outbound-alert $ADMIN_EMAIL $(echo "$DOMAIN_NAMES" | cut -d',' -f 1) $ADMIN_DOMAIN"
   echo '# Flashlight end'
 } > $crontab.new
 mv $crontab.new $crontab

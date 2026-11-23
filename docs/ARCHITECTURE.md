@@ -408,9 +408,10 @@ Settings changed in the web interface, statistics and graphs are on EFS.
 ### Outgoing mail and compromised mailboxes
 
 A stolen password is the most common way a small mail server ends up on blocklists. Besides the limits above,
-`outbound-alert` runs every 10 minutes: it reads Rspamd's log for refused messages of logged-in users (over the
-limits, or as spam, a virus or a blocked attachment) and e-mails the admin about each such user at most every 6
-hours, with an `ALERT` line in the event log. The limits can be changed by the admin
+`outbound-alert` runs every 10 minutes: it counts the refused messages of logged-in users in the last 6 hours of
+Rspamd's log and e-mails the admin about a user who went over the limits even once, or had 5 messages refused as
+spam, a virus or a blocked attachment (fewer are usually the user's own mistake), at most every 6 hours per user,
+with an `ALERT` line in the event log. The limits can be changed by the admin
 ([how](INSTALL.md#limits-on-outgoing-mail)).
 
 ## DNS and certificates

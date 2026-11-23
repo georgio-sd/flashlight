@@ -95,6 +95,9 @@ default.
   new Rspamd comes only with a Flashlight release, after testing (its bug-fix releases had changed what the server
   relies on). The settings changed in the Rspamd web interface move to its new format at the upgrade and stay on
   the mail storage.
+- The warning about a mailbox that may have been taken over comes for going over the sending limits, as before,
+  but for mail refused as spam, a virus or a blocked attachment only from 5 such messages in 6 hours (one is
+  usually the user's own mistake). Its subject and text say what happened and link to the spam filter's history.
 - The server image is on AlmaLinux 10.3 (it was 10.2), so an install has less to update. Updating stage 1 to a new
   release now also takes the newest server image; before, only the Updater switch did.
 - An install that hangs (a download that never finishes, for example) is stopped after 60 minutes and counts as a

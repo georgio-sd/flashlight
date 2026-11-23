@@ -2,76 +2,92 @@
 # Copyright 2020-2026 Samson (https://github.com/georgio-sd)
 # SPDX-License-Identifier: LicenseRef-PolyForm-Shield-1.0.0 (see LICENSE)
 #
-# Warns the admin by e-mail about mailboxes that may have been taken over (a stolen password): a logged-in user
-# whose mail the spam filter refused, over the sending limits (Rspamd ratelimit) or as spam, a virus or a blocked
-# attachment. A spam bot on a stolen mailbox runs into these first, so the admin hears of it before the server's
-# address lands on blocklists.
-# Runs from cron every 10 minutes (with the spam filter, stack parameter Antispam) and reads Rspamd's log since
-# its last run. One e-mail per user at most every 6 hours, and an ALERT line in /mnt/mailserver/log/instance.log.
+# Warns the admin by e-mail about mailboxes that may have been taken over (a stolen password) or misused: a
+# logged-in user whose mail the spam filter refused. Going over the sending limits (Rspamd ratelimit) once is
+# enough, since a spam bot on a stolen mailbox runs into them first. Mail refused as spam, a virus or a blocked
+# attachment counts from 5 messages on: one or two are usually the user's own mistake (an infected file, a blocked
+# file type).
+# Runs from cron every 10 minutes (with the spam filter, stack parameter Antispam) and counts the refused messages
+# of the last 6 hours in Rspamd's log. One e-mail per user at most every 6 hours, and an ALERT line in
+# /mnt/mailserver/log/instance.log.
 #
-# usage: outbound-alert ADMIN_EMAIL MAIN_DOMAIN
+# usage: outbound-alert ADMIN_EMAIL MAIN_DOMAIN ADMIN_DOMAIN
 #
 # imds and instance-log live in /usr/local/sbin, which is not in cron's PATH
 export PATH=/usr/local/sbin:$PATH
 admin=$1
 domain=$2
-[ -n "$admin" ] && [ -n "$domain" ] || { echo "usage: outbound-alert ADMIN_EMAIL MAIN_DOMAIN"; exit 2; }
-# last=<time of the last run>, then "<user> <time of the last e-mail about them>" lines (times in seconds)
+admin_site=$3
+[ -n "$admin" ] && [ -n "$domain" ] && [ -n "$admin_site" ] ||
+  { echo "usage: outbound-alert ADMIN_EMAIL MAIN_DOMAIN ADMIN_DOMAIN"; exit 2; }
+# "<user> <time of the last e-mail about them>" lines (times in seconds)
 state=/mnt/mailserver/log/outbound-alert.state
-repeat=$((6 * 3600))
+window=$((6 * 3600))
+min_refused=5
 
 # one run at a time
 exec 9> /run/outbound-alert.lock
 flock -n 9 || exit 0
 
 now=$(date +%s)
-# first run: from one cron interval ago (mail refused right after an install isn't missed)
-[ -f $state ] || echo "last=$((now - 600))" > $state
-last=$(sed -n 's/^last=//p' $state)
-since=$(date -d "@${last:-$now}" '+%Y-%m-%d %H:%M:%S')
+since=$(date -d "@$((now - window))" '+%Y-%m-%d %H:%M:%S')
+touch $state
 
-# Rspamd's log lines of refused messages from logged-in users since the last run: "soft reject" is a sending limit,
+# Rspamd's log lines of refused messages from logged-in users in the last 6 hours: "soft reject" is a sending limit,
 # "reject" spam, a virus or a blocked attachment. The log is rotated daily, and the old one compressed.
 events=$(for f in $(ls -tr /var/log/rspamd/rspamd.log* 2> /dev/null); do
-           [ "$(stat -c %Y "$f")" -ge "${last:-$now}" ] || continue
+           [ "$(stat -c %Y "$f")" -ge $((now - window)) ] || continue
            case "$f" in *.gz) zcat "$f" ;; *) cat "$f" ;; esac
          done | awk -v since="$since" 'substr($0, 1, 19) > since && /rspamd_task_write_log/' |
          sed -nE 's/.* user: ([^,]+),.*\(default: [TF] \((soft reject|reject)\).*/\1 \2/p' | sed 's/ soft reject$/ limit/')
 
 # the users, with how many of their messages were refused for each reason
-new_state="last=$now"
+new_state=""
 for user in $(cut -d' ' -f1 <<< "$events" | sort -u); do
   limit=$(grep -cxF "$user limit" <<< "$events")
-  rejected=$(grep -cxF "$user reject" <<< "$events")
+  refused=$(grep -cxF "$user reject" <<< "$events")
   alerted=$(awk -v u="$user" '$1 == u {print $2}' $state)
-  if [ -n "$alerted" ] && [ $((now - alerted)) -lt $repeat ]; then
-    new_state="$new_state"$'\n'"$user $alerted"
+  if [ -n "$alerted" ] && [ $((now - alerted)) -lt $window ]; then
+    new_state="$new_state$user $alerted"$'\n'
     continue
   fi
-  instance-log ALERT "$user: $limit messages over the sending limits, $rejected rejected as spam/virus/blocked attachment; e-mail to $admin"
+  [ "$limit" -gt 0 ] || [ "$refused" -ge $min_refused ] || continue
+  instance-log ALERT "$user: $limit messages over the sending limits, $refused refused as spam/virus/blocked attachment in 6 hours; e-mail to $admin"
+  if [ "$limit" -gt 0 ]; then
+    subject="$user went over the sending limits"
+    advice="Going over the sending limits usually means that someone else sends mail from this mailbox:
+its password may have been stolen. Ask the user whether they sent that much mail. If not,
+change the password in PostfixAdmin now: otherwise other mail servers may start refusing
+mail from your whole server."
+  else
+    subject="Mail from $user was refused $refused times"
+    advice="This may be the user's mistake (an infected file, a blocked file type) or a sign that the
+mailbox is misused. If the user can't explain it, change the password in PostfixAdmin."
+  fi
+  counts=""
+  [ "$limit" -gt 0 ] && counts="$counts  - over the sending limits (30 messages an hour, 300 a day by default): $limit times"$'\n'
+  [ "$refused" -gt 0 ] && counts="$counts  - as spam, a virus or a blocked attachment: $refused times"$'\n'
   /usr/sbin/sendmail -t -f "postmaster@$domain" <<EOF
 From: Flashlight mail server <postmaster@$domain>
 To: $admin
-Subject: [Flashlight] The mailbox $user may be compromised
+Subject: [Flashlight] $subject
 Content-Type: text/plain; charset=utf-8
 
-The mail server refused mail that the user $user sent:
-  - over the sending limits (by default 30 messages an hour, 300 a day): $limit times
-  - as spam, a virus or a blocked attachment: $rejected times
+The mail server refused mail that $user sent in the last 6 hours:
+$counts
+$advice
 
-If this user didn't send that much mail, their password has most likely been stolen and a spam bot uses
-the mailbox. Change the password in PostfixAdmin right away, before the server's address lands on blocklists
-and other mail servers stop accepting your company's mail.
+Each refused message, with the reason, is in the History of the spam filter:
+https://$admin_site/rspamd/
 
-Each refused message, with the reason, is in the History of the Rspamd web interface (/rspamd/ on the admin
-site). You get this warning at most every 6 hours per user.
+You get this message at most every 6 hours per mailbox.
 EOF
-  new_state="$new_state"$'\n'"$user $now"
+  new_state="$new_state$user $now"$'\n'
 done
-# the users of earlier e-mails stay in the state while their 6 hours run
+# the users of earlier e-mails stay in the state while their 6 hours run (a "last=" line of older versions goes)
 while read -r user alerted; do
-  [ "$user" = "${user#last=}" ] || continue
+  [ -n "$alerted" ] && [ "$user" = "${user#last=}" ] || continue
   grep -qF "$user " <<< "$new_state" && continue
-  [ $((now - alerted)) -lt $repeat ] && new_state="$new_state"$'\n'"$user $alerted"
+  [ $((now - alerted)) -lt $window ] && new_state="$new_state$user $alerted"$'\n'
 done < $state
-printf '%s\n' "$new_state" > $state
+printf '%s' "$new_state" > $state

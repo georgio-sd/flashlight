@@ -529,10 +529,12 @@ about 60 messages in its first hour and 600 in its first day, then 30 an hour an
 
 A user also can send only as their own address or as an alias that delivers to their mailbox.
 
-When a user runs into these limits, or their mail is refused as spam or for a virus, you get an e-mail at the
-AdminEmail address, at most every 6 hours per user, and an `ALERT` line appears in
-`/mnt/mailserver/log/instance.log`. If the user didn't send that much mail, change their password in
-PostfixAdmin right away.
+When a user runs into these limits, or 5 of their messages in 6 hours are refused as spam, for a virus or for
+a blocked attachment, you get an e-mail at the AdminEmail address, at most every 6 hours per user, and an
+`ALERT` line appears in `/mnt/mailserver/log/instance.log`. One or two refused messages are usually the
+user's own mistake and don't count. If the user didn't send that much mail, change their password in
+PostfixAdmin right away. The e-mail comes from `postmaster@<main domain>`; while your domain is new, your mail
+service may put it in spam, so mark it as not spam or add the sender to your contacts.
 
 **Changing the number of messages.** Your own Rspamd settings go to `/mnt/mailserver/etc/rspamd/override.d/`.
 A file there replaces the whole section of the same name, so start from a copy of Flashlight's:
