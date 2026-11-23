@@ -47,6 +47,8 @@ default.
   INSTALL: naming the stacks after the main domain (`example-com`, `example-com-server`), turning the tag on in
   the billing and seeing each server's costs in Cost Explorer. At the upgrade from 1.0 the resources get the
   tags; an image copy made by 1.0 stays untagged until the next image.
+- A start page in the admin site: `https://admin.<main domain>/` now opens links to PostfixAdmin, phpMyAdmin
+  and the spam filter instead of Apache's test page.
 
 ### Security
 

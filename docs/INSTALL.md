@@ -368,7 +368,7 @@ sudo cat /root/credentials
 
 | Entry | Where it is used |
 |---|---|
-| Admin web access | The admin site `https://admin.<main domain>/`: user `admin` and its password. The browser asks for it before any of the admin tools |
+| Admin web access | The admin site `https://admin.<main domain>/`: user `admin` and its password. The browser asks for it before any of the admin tools; the site then opens a page with links to them |
 | PostfixAdmin superadmin | `https://admin.<main domain>/padmin`: login is your AdminEmail |
 | PostfixAdmin setup password | PostfixAdmin's setup page, rarely needed |
 | MariaDB | phpMyAdmin, `https://admin.<main domain>/myadmin` |

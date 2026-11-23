@@ -738,6 +738,12 @@ rm -f /etc/httpd/conf.d/sites.conf
 aws s3 cp s3://$BUCKET_CONFIG/sites.conf /etc/httpd/conf.d/sites.conf
 sed -i "s/{AdminEmail}/$ADMIN_EMAIL/g; s/{AdminDomain}/$ADMIN_DOMAIN/g; s/{MailDomain}/$MAIL_DOMAIN/g" \
   /etc/httpd/conf.d/sites.conf
+# The admin site's start page (behind the site password): links to the admin tools, Rspamd only with Antispam.
+# Without it, the bare address shows Apache's test page.
+aws s3 cp s3://$BUCKET_CONFIG/admin-index.html /var/www/admin/index.html
+sed -i "s/{MailDomain}/$MAIL_DOMAIN/g; s/{Version}/$(/usr/local/sbin/upgrade-data release)/g" /var/www/admin/index.html
+[ "$ANTISPAM" = 'ENABLED' ] || sed -i '/<!-- rspamd -->/,/<!-- \/rspamd -->/d' /var/www/admin/index.html
+chmod 644 /var/www/admin/index.html
 # a self-signed certificate for "localhost", for the catch-all HTTPS site of sites.conf that refuses requests to
 # other names (with our real certificate, Apache warns that it doesn't match "localhost")
 openssl req -x509 -newkey rsa:2048 -nodes -days 3650 -subj /CN=localhost -addext subjectAltName=DNS:localhost \

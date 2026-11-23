@@ -209,7 +209,7 @@ already upgraded to a newer release.
 | `etc/postfix/dkim/` | DKIM keys and OpenDKIM's config |
 | `etc/crontab` | The system crontab: Flashlight's block and the admin's own lines |
 | `etc/<program>/` | The admin's own settings files |
-| `www/admin/` | PostfixAdmin and phpMyAdmin with their configs, the admin site's password file |
+| `www/admin/` | PostfixAdmin and phpMyAdmin with their configs, the admin site's password file, its start page (`index.html`, rewritten at every boot from `apache/admin-index.html`) |
 | `www/webmail/` | Roundcube's logs |
 | `rspamd/` | The spam filter's web interface settings, statistics, graphs, whitelist |
 | `valkey/` | What the spam filter has learned |
