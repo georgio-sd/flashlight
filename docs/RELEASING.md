@@ -29,7 +29,7 @@ updated with the `Updater` switch; CloudFormation doesn't run it on an update th
 A new image therefore reaches the users of all releases at their next upgrade or `Updater` switch, so it must work
 with all of them. The instance updates its operating system at every install
 anyway, but an image on the current AlmaLinux minor release (10.3 after 10.2) has less to update and installs
-faster: a release brings a new image when AlmaLinux has a newer minor release (checklist, step 7).
+faster: a release brings a new image when AlmaLinux has a newer minor release (checklist, step 9).
 
 Other accounts can copy the image only if both the image and the snapshot of its disk are public. A public image
 alone isn't enough: the copy fails with "You do not have permission to access the storage of this ami", and so
@@ -142,7 +142,7 @@ starts, the code names `X.Y` everywhere, so a stand installed from `develop` is 
 A stand installed from `develop` marks its data as `X.Y` at its next install. If a migration to `X.Y` is added
 later, the stand's data won't run it. To test it there, set the data back with
 `upgrade-data set flashlight <previous>` and replace the instance, or use a stand installed from the previous
-release (checklist, step 9).
+release (checklist, step 11).
 
 ## Release checklist
 
@@ -180,7 +180,19 @@ The release fixes what was done on `develop` and builds the bridge from the prev
    (https://github.com/HeinleinSupport/olefy), and regenerate `olefy-requirements.txt` from the newest oletools:
    in a Python 3.12 environment, `pip download --only-binary=:all: oletools colorclass python-magic`, then one line
    `name==version --hash=sha256:...` per downloaded file.
-7. **Server image.** Look up the newest official AlmaLinux image (owner `764336703387`, name
+7. **efs-utils package.** Look at the efs-utils releases (https://github.com/aws/efs-utils/releases) newer than
+   ours (`efs_rpm` in `base.sh`) and read what they change. Rebuild only for a security fix or a fix that matters
+   to Flashlight (mounting, TLS, efs-proxy, the watchdog), as in [build/efs-utils.md](../build/efs-utils.md):
+   upload the package to `packages/`, update its name in `base.sh` (`efs_rpm`) and in the stage 1 `Files` list,
+   update the version, date and SHA-256 in build/efs-utils.md, and test a fresh install and an instance
+   replacement with it.
+8. **Valkey.** It comes from AlmaLinux (AppStream), unpinned, and follows it at every install; Red Hat moves it
+   to a newer version within RHEL 10 now and then (8.0 to 8.1 in 2026). Compare `dnf repoquery valkey` on an
+   instance with the version in the table of [ARCHITECTURE](ARCHITECTURE.md). If its minor or major version is
+   newer, check on a stand with learned data that a `dump.rdb` written by the older Valkey loads after an
+   instance replacement (`/var/log/valkey/valkey.log`: "DB loaded from disk", no RDB version error; the data
+   are only Rspamd's learning, so a failure costs relearning, not mail), and update the version in the table.
+9. **Server image.** Look up the newest official AlmaLinux image (owner `764336703387`, name
    `AlmaLinux OS 10.* x86_64`). If its minor release is newer than our image's, copy it, unencrypted, with the name
    `Flashlight ` + its full name (`Flashlight AlmaLinux OS 10.3.20261116.0 x86_64`: unique, and it tells the build
    it was made from) and the description `Mailserver:img_b`, and with the tags `Name` = the same name and
@@ -204,17 +216,17 @@ The release fixes what was done on `develop` and builds the bridge from the prev
    The snapshot ID is in the image's block device mapping (`aws ec2 describe-images --image-ids ami-...`). Do this
    before the tests, so they run on the new image. The real test of the sharing is stage 1 in another AWS account:
    it copies the image and waits until the copy is available.
-8. **Test a fresh install** on a test stand with `CertificateMode=staging`: install READY, mail between the
+10. **Test a fresh install** on a test stand with `CertificateMode=staging`: install READY, mail between the
    stand's own domains, webmail, admin pages, DKIM, DNS records.
-9. **Test the upgrade** on a stand installed from the previous release, following UPGRADING.md step by step:
+11. **Test the upgrade** on a stand installed from the previous release, following UPGRADING.md step by step:
    `UPGRADE` lines in the event log, `flashlight=X.Y` in `versions`, the admin's settings files unchanged, mail
    still there. If the release has a migration, also test a release skip (from two releases back) if one exists,
    and a failing migration. A failing migration is tested on the instance with `MIGRATIONS_DIR`, `RELEASES` and
    `THIS_RELEASE`, which `upgrade-data` reads instead of its built-in values.
-10. **Publish the files.** Upload `s3bucket/` to `s3://mail-server-bundles/vX.Y/` once more, keeping the layout,
+12. **Publish the files.** Upload `s3bucket/` to `s3://mail-server-bundles/vX.Y/` once more, keeping the layout,
    so the folder matches the release, and check that every path of the `Files` list is there. From now on the
    folder is frozen.
-11. **Publish the code.** In `CHANGELOG.md`, turn `[Unreleased]` into `[X.Y] - <date>`. Merge into `main`, tag
+13. **Publish the code.** In `CHANGELOG.md`, turn `[Unreleased]` into `[X.Y] - <date>`. Merge into `main`, tag
    `vX.Y`, and write the release notes: what changed, whether the release changes the data, and any action the
    user must take. Then start the next version on `develop` (see above).
 
