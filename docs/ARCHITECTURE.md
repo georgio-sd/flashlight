@@ -219,7 +219,7 @@ already upgraded to a newer release.
 | `automation/` | The cron scripts |
 | `backup/` | Database dumps (28 days) and upgrade backups (90 days) |
 | `log/` | `instance.log`, install logs (90 days), the cron scripts' logs |
-| `versions` | The Flashlight release of the data, and what the instance runs |
+| `versions` | The Flashlight release of the data, and what the last instance ran: its image and OS, the web applications, and the packages that work with the data (MariaDB, Dovecot, Rspamd, Valkey) |
 | `flag`, `flag-ec2id-<id>` | The first install is done; the instance that owns the EFS now |
 
 The file system outlives the stack (`DeletionPolicy: RetainExceptOnCreate`): deleting the stage 2 stack leaves it

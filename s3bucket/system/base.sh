@@ -1196,6 +1196,19 @@ if [ "$FAIL2BAN" = 'ENABLED' ]; then
   systemctl enable fail2ban
 fi
 #
+# The packages that work with the data on EFS and whose version isn't fixed by the data (information only, like
+# image= and os=): which versions last used the data. MariaDB, Dovecot and Valkey follow AlmaLinux; Rspamd comes
+# with the release, but a new one has changed its data before (4.3.1).
+/usr/local/sbin/upgrade-data set mariadb "$(rpm -q mariadb-server)"
+/usr/local/sbin/upgrade-data set dovecot "$(rpm -q dovecot)"
+if [ "$ANTISPAM" = 'ENABLED' ]; then
+  /usr/local/sbin/upgrade-data set rspamd "$(rpm -q rspamd)"
+  /usr/local/sbin/upgrade-data set valkey "$(rpm -q valkey)"
+else
+  /usr/local/sbin/upgrade-data set rspamd off
+  /usr/local/sbin/upgrade-data set valkey off
+fi
+#
 # The services this instance runs, in one place for the helpers (they depend on the stack's parameters, and on
 # what really got installed: olefy only if pip worked). running: must be up after the install (install-finish).
 # efs: they write to the EFS, so they are stopped together when another instance takes over (services-shutdown)
