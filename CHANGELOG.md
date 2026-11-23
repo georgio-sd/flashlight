@@ -91,6 +91,10 @@ default.
 
 ### Changed
 
+- Rspamd 4.3.1, the exact package that comes with the release: Rspamd's own repository is no longer used, so a
+  new Rspamd comes only with a Flashlight release, after testing (its bug-fix releases had changed what the server
+  relies on). The settings changed in the Rspamd web interface move to its new format at the upgrade and stay on
+  the mail storage.
 - The server image is on AlmaLinux 10.3 (it was 10.2), so an install has less to update. Updating stage 1 to a new
   release now also takes the newest server image; before, only the Updater switch did.
 - An install that hangs (a download that never finishes, for example) is stopped after 60 minutes and counts as a

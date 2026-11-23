@@ -840,42 +840,19 @@ systemctl enable opendkim
 # come through the big shared resolvers, AWS's included). Our settings in /etc/rspamd/local.d are rewritten at
 # every boot; the admin's own live on EFS in /mnt/mailserver/etc/rspamd/override.d.
 if [ "$ANTISPAM" = 'ENABLED' ]; then
-  # Rspamd comes from its own repository (it isn't in AlmaLinux or EPEL), version 4.3 only: its bug-fix releases
-  # (4.3.x) come by themselves, a new version (4.4, 5.0) comes with a Flashlight release, after testing (the 4.3.0
-  # package, for one, stopped creating Rspamd's user and failed every install). Its packages are checked with the Rspamd signing key that comes
-  # with the release. The repository is a single server: if it can't be reached, dnf skips it (also for later
-  # updates), and the Rspamd package that came with this release is installed instead, after its signature check.
-  # The same when it is too slow: a download below 100 KB/s for 30 seconds is dropped (dnf's default waits at any
-  # speed above 1 KB/s; the 8.5 MB package once took over 20 minutes at 6 KB/s).
-  rspamd_rpm=rspamd-4.3.0-1.el10.x86_64.rpm
+  # Rspamd (it isn't in AlmaLinux or EPEL): the exact package that comes with this Flashlight release, installed
+  # after a check of its signature with the Rspamd signing key of the release; its dependencies come from AlmaLinux
+  # and EPEL. Rspamd's own repository isn't used: it keeps only its newest package, its bug-fix releases have
+  # changed what Flashlight relies on (the 4.3.0 package didn't create Rspamd's user, 4.3.1 moved the settings of
+  # the web interface), and it is a single slow server. A newer Rspamd comes with a Flashlight release, after testing.
+  rspamd_rpm=rspamd-4.3.1-1.el10.x86_64.rpm
   aws s3 cp s3://$BUCKET_CONFIG/rspamd.asc /etc/pki/rpm-gpg/RPM-GPG-KEY-rspamd
   rpm --import /etc/pki/rpm-gpg/RPM-GPG-KEY-rspamd
-  os_major=$(. /etc/os-release && echo "${VERSION_ID%%.*}")
-  cat > /etc/yum.repos.d/rspamd.repo <<EOF
-[rspamd]
-name=Rspamd stable repository
-baseurl=https://rspamd.com/rpm-stable/centos-$os_major/\$basearch
-enabled=1
-gpgcheck=1
-repo_gpgcheck=1
-gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-rspamd
-includepkgs=rspamd-4.3.*
-skip_if_unavailable=1
-minrate=100k
-timeout=30
-EOF
   dnf install -y valkey unbound
-  # Rspamd's user and group, made the way its packages up to 4.2 did: the 4.3.0 package no longer creates them
-  # (its files then belong to root, and Rspamd has no user to run as)
-  getent group _rspamd > /dev/null || groupadd -r _rspamd
-  id _rspamd > /dev/null 2>&1 || useradd -g _rspamd -c "Rspamd user" -s /bin/false -r -d /var/lib/rspamd _rspamd
-  if ! dnf install -y rspamd; then
-    /usr/local/sbin/instance-log WARN "Rspamd repository unreachable: installing the release's copy ($rspamd_rpm)"
-    aws s3 cp s3://$BUCKET_CONFIG/$rspamd_rpm /root/
-    rpm -K /root/$rspamd_rpm | grep -q 'digests signatures OK'
-    dnf install -y /root/$rspamd_rpm
-    rm /root/$rspamd_rpm
-  fi
+  aws s3 cp s3://$BUCKET_CONFIG/$rspamd_rpm /root/
+  rpm -K /root/$rspamd_rpm | grep -q 'digests signatures OK'
+  dnf install -y /root/$rspamd_rpm
+  rm /root/$rspamd_rpm
   #
   # Valkey: data on EFS, so learned spam survives instance replacements. The valkey user's ID may differ on each
   # new instance, hence the chown at every boot.
@@ -901,6 +878,9 @@ EOF
   rspamd_conf options.inc 'dns { nameserver = ["127.0.0.1:53"]; }' "task_timeout = 60s;" \
     'dynamic_conf = "/mnt/mailserver/rspamd/rspamd_dynamic";' 'rrd = "/mnt/mailserver/rspamd/rspamd.rrd";' \
     'stats_file = "/mnt/mailserver/rspamd/stats.ucl";'
+  # The settings changed in the web interface (dynconf, from Rspamd 4.3.1; its default file is on the instance's
+  # disk). The older file above (dynamic_conf) is imported into it once and renamed to rspamd_dynamic.imported.
+  rspamd_conf dynconf.conf 'path = "/mnt/mailserver/rspamd/rspamd_dynconf.json";'
   rspamd_conf redis.conf 'servers = "127.0.0.1:6379";'
   # no greylisting: it delays legitimate mail by minutes or hours (the sender retries later)
   rspamd_conf actions.conf "reject = 15;" "add_header = 6;" "greylist = null;"

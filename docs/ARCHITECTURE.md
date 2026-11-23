@@ -194,7 +194,7 @@ already upgraded to a newer release.
 | BACKUP | The daily database dump |
 | ALERT | A mailbox that may be compromised |
 | CHECK, ERROR | The weekly Spot price check: its decision with the prices, or why it couldn't compare |
-| WARN | Something worked with a fallback (swap made smaller, the Rspamd repository unreachable...), or an AlertEmail address isn't confirmed |
+| WARN | Something worked with a fallback (swap made smaller...), or an AlertEmail address isn't confirmed |
 | USER | The admin's user-script.sh failed |
 
 ## Data on EFS
@@ -364,9 +364,10 @@ PostfixAdmin, the alerts) is only signed. Undeliverable mail is retried for five
 
 With Antispam (the default), the spam filter is Rspamd 4.3 with its own helpers:
 
-- **Rspamd** comes from its official repository, pinned to version 4.3 (its bug-fix releases come by themselves; a newer version comes with a Flashlight release, after testing) and checked with the signing key that
-  comes with the release. If the repository is unreachable, the copy of the package in the release is installed
-  after a signature check (`WARN` line).
+- **Rspamd** is the exact package that comes with the release (4.3.1), installed after a check of its signature
+  with the Rspamd signing key of the release; its dependencies come from AlmaLinux and EPEL. Rspamd's own
+  repository isn't used: it keeps only its newest package, and its bug-fix releases have changed what Flashlight
+  relies on. A newer Rspamd comes with a Flashlight release, after testing.
 - **Valkey** (a Redis fork) keeps the Bayes statistics, fuzzy hashes and rate limit counters, on EFS, written
   at most 5 minutes after a change. Memory is capped at 256 MB; the data expire by themselves.
 - **Unbound** is Rspamd's own DNS resolver: blocklists refuse queries that come through big shared resolvers,
@@ -514,7 +515,7 @@ are updated by their version instead, whenever the release brings a newer one. H
 | PostfixAdmin | 4.0 | The release (pinned) |
 | phpMyAdmin | 5.2 | The release (pinned) |
 | Certbot with the Route 53 plugin | | EPEL |
-| Rspamd | 4.3 | Rspamd's repository, or the release's copy |
+| Rspamd | 4.3.1 | The release (pinned) |
 | Valkey, Unbound | | AlmaLinux |
 | oletools (olefy) | 0.60.2 | PyPI with pinned hashes; olefy.py in the release |
 | ClamAV | 1.4 | EPEL |

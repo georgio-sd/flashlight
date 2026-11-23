@@ -167,13 +167,15 @@ The release fixes what was done on `develop` and builds the bridge from the prev
 5. **Attachment lists.** Compare `s3bucket/rspamd/attachments-gmail.map` with Google's list of blocked file types
    (https://support.google.com/mail/answer/6590) and `attachments-strict.map` with Microsoft's list of attachments
    Outlook blocks; update them and the date in their headers.
-6. **Rspamd package.** The release carries a copy of the Rspamd package, used when rspamd.com can't be reached.
-   On an AlmaLinux instance with the Rspamd repository, download the newest package of the pinned version (`dnf download rspamd`), check it with
-   `rpm -K` (key `rspamd/rspamd.asc`), upload it to `packages/`, and update its name in `base.sh` (`rspamd_rpm`)
-   and in the stage 1 `Files` list.
-   Instances install only the pinned version (`includepkgs=rspamd-4.3.*` in `base.sh`). To move to a newer one
-   (4.4, 5.0), change the pin, take that version's package as the copy, and test a fresh install with it: a new
-   version can change the package itself, as 4.3.0 did.
+6. **Rspamd package.** Instances install only the Rspamd package that comes with the release (`packages/`), never
+   from Rspamd's repository: the repository keeps only its newest package, and bug-fix releases have changed what
+   Flashlight relies on (4.3.0 stopped creating Rspamd's user, 4.3.1 moved the web interface settings). Keep the
+   package unless a newer one fixes something that matters; to take a newer one, read its release notes
+   (https://github.com/rspamd/rspamd/releases), download it from
+   `https://rspamd.com/rpm-stable/centos-10/x86_64/` (compare its SHA-256 with the repository's `primary.xml`),
+   check it with `rpm -K` (key `rspamd/rspamd.asc`) on an instance, upload it to `packages/`, update its name in
+   `base.sh` (`rspamd_rpm`) and in the stage 1 `Files` list, and test a fresh install and an instance replacement
+   with it, including the settings changed in the web interface.
    The macro check: compare `s3bucket/rspamd/olefy.py` with the newest olefy
    (https://github.com/HeinleinSupport/olefy), and regenerate `olefy-requirements.txt` from the newest oletools:
    in a Python 3.12 environment, `pip download --only-binary=:all: oletools colorclass python-magic`, then one line
