@@ -43,7 +43,7 @@ default.
 - The costs of each server in the billing: every resource of both stacks has the tag `flashlight:installation`
   with the stage 1 stack name, the server image copy too (it counts for the server that copied it). The
   `Name` tag (`<stack name>-Flashlight`) is now also on the instance's disk and network interface, the launch
-  template, the log groups, the alert topic and alarm, and on the image copy (`Flashlight <image name>`).
+  template, the log groups, the alert topic and alarm, and on the image copy (its image name, `Flashlight AlmaLinux …`).
   INSTALL: naming the stacks after the main domain (`example-com`, `example-com-server`), turning the tag on in
   the billing and seeing each server's costs in Cost Explorer. At the upgrade from 1.0 the resources get the
   tags; an image copy made by 1.0 stays untagged until the next image.

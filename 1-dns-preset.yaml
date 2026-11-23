@@ -409,9 +409,11 @@ Resources:
                   if local:
                       return local[0]['ImageId']
                   try:
-                      # Name: whose image it is (only the characters every AWS service takes in a tag);
+                      # Name: the image name, which tells whose image it is ("Flashlight " in front of an older
+                      # name without it; only the characters every AWS service takes in a tag);
                       # flashlight:installation: the stack that copied it, for the billing
-                      name = re.sub(r'[^\w .:/=+@-]', '-', 'Flashlight ' + latest['Name'])[:256]
+                      name = latest['Name'] if latest['Name'].startswith('Flashlight ') else 'Flashlight ' + latest['Name']
+                      name = re.sub(r'[^\w .:/=+@-]', '-', name)[:256]
                       tags = [{'Key': 'Name', 'Value': name}, {'Key': 'flashlight:installation', 'Value': stack}]
                       copy = ec2.copy_image(Name=latest['Name'], Description=IMAGE_TAG,
                                             SourceImageId=latest['ImageId'], SourceRegion=SOURCE_REGION,

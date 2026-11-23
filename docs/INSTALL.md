@@ -253,7 +253,7 @@ Every resource of the server that AWS can tag has two tags:
 The mail storage backups (MailStorageBackupPolicy) get the tags of the file system, so their cost counts for the
 server too.
 
-The server image copy in your region (its `Name` is `Flashlight <image name>`) counts for the server whose
+The server image copy in your region (its `Name` starts with `Flashlight AlmaLinux`) counts for the server whose
 stage 1 copied it; it costs a few cents a month. See [Old server images](#old-server-images).
 
 **Turn the tag on for the billing, once per account.** AWS shows costs by a tag only after it is activated. Do it
@@ -619,7 +619,7 @@ See [Upgrading Flashlight](UPGRADING.md).
 ### Old server images
 
 Stage 1 copies the Flashlight server image into your region when it is created, and again when it is updated
-to a release with a newer image (EC2 console, AMIs: `Flashlight <image name>`). If the region already has a copy
+to a release with a newer image (EC2 console, AMIs: `Flashlight AlmaLinux …`). If the region already has a copy
 of that image, stage 1 uses it instead of copying again. The server starts its instances from the image in the
 `ImageId` output of its stage 1. That output is set when stage 1 is created or updated and doesn't change on its
 own. Old copies stay: Flashlight never deletes them, and each costs a few cents a month.
