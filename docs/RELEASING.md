@@ -81,7 +81,7 @@ An application is installed on the first install. On existing data, every instal
    stops the install.
 
 It never installs an older package than the recorded one (`WARN`, kept). An application without a recipe stops
-the install with `FAILED ... no update recipe` as soon as its package changes. The recipes exist for: PostfixAdmin.
+the install with `FAILED ... no update recipe` as soon as its package changes. The recipes exist for: PostfixAdmin, Roundcube.
 
 To bump an application:
 1. Read its release notes and upgrade notes. Compare its default config with the old one: a new setting that

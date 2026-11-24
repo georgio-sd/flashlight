@@ -97,8 +97,8 @@ restore() {
 # the new package $pkg into the empty folder $dest (the old one is in $old), following the application's own
 # upgrade notes. An application without a recipe here stops the install when its package changes: write its
 # recipe in the release that first bumps it.
-app_dir() { case $1 in postfixadmin) echo $efs/www/admin/padmin ;; esac; }
-app_db() { case $1 in postfixadmin) echo postfix ;; esac; }
+app_dir() { case $1 in postfixadmin) echo $efs/www/admin/padmin ;; roundcube) echo $efs/www/webmail ;; esac; }
+app_db() { case $1 in postfixadmin) echo postfix ;; roundcube) echo roundcube ;; esac; }
 update_postfixadmin() {
   # The release tarball contains vendor/ (no composer). config.local.php is ours (base.sh rewrites it right after
   # this), upgrade.php needs it. upgrade.php brings the database schema to the new version and exits with 0 even when
@@ -108,6 +108,25 @@ update_postfixadmin() {
     chown -R apache: $dest/templates_c &&
     php $dest/public/upgrade.php &&
     php $dest/public/upgrade.php | grep -q 'all database updates are applied'
+}
+update_roundcube() {
+  # Roundcube's manual update (docs/UPGRADING.md) into the empty folder: the new package, then from the old folder
+  # config.inc.php (ours; base.sh rewrites it right after this, bin/update.sh needs it), whatever plugins/ and
+  # skins/ have that the package doesn't (the Larry skin, the admin's own plugins and their config files; the
+  # package's files win, as with Roundcube's installto.sh) and the logs. The web installer goes, as on a first
+  # install. bin/update.sh brings the database schema to the new version and fails if that fails; with no input it
+  # leaves the config alone. It runs as root, so the owner of temp/ and logs/ is set after it.
+  local from
+  from=$(sed -n "s/.*define('RCMAIL_VERSION', '\([^']*\)').*/\1/p" $old/program/include/iniset.php)
+  [ -n "$from" ] &&
+    tar xzf $pkg -C $dest --strip-components=1 --no-same-owner &&
+    cp -p $old/config/config.inc.php $dest/config/ &&
+    cp -a --update=none $old/plugins/. $dest/plugins/ &&
+    cp -a --update=none $old/skins/. $dest/skins/ &&
+    cp -a $old/logs/. $dest/logs/ &&
+    rm -rf $dest/installer $dest/public_html/installer.php &&
+    php $dest/bin/update.sh --version=$from < /dev/null &&
+    chown -R apache: $dest/temp $dest/logs
 }
 
 case "$1" in

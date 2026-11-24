@@ -37,7 +37,7 @@ default.
   15 minutes (no free capacity of the instance types), with a second email once an instance runs again. Each
   address is confirmed once with the link in an email from AWS Notifications; the server reports addresses that
   aren't confirmed in its event log.
-- Web applications are updated at upgrades: when a release brings a newer PostfixAdmin (later also Roundcube or
+- Web applications are updated at upgrades: when a release brings a newer PostfixAdmin or Roundcube (later also
   phpMyAdmin), the server installs it with the application's own upgrade steps, after a backup of its database and
   files, and puts the old version back if anything fails.
 - The costs of each server in the billing: every resource of both stacks has the tag `flashlight:installation`
@@ -54,6 +54,12 @@ default.
 
 - PostfixAdmin 4.0.7: fixes a cross-site scripting hole in the alias lists (CVE-2026-127178), and a domain admin
   can no longer list the logins of all admins. A server installed with 1.0 gets it at the upgrade.
+- Roundcube 1.7.7 (webmail), a security update: fixes ways around the blocking of remote content in messages,
+  script injection into mail filters, a fallback to an unencrypted connection to the mail server, a denial of
+  service with TNEF attachments and other holes. A server installed with 1.0 gets it at the upgrade (the webmail's
+  folder and database are backed up first).
+- amazon-efs-utils 3.4.0 (mounts the mail storage): the local end of the encrypted connection to EFS accepts only
+  the system's own NFS client, no other program on the server.
 - The install log no longer contains the generated passwords and the Spamhaus DQS key, and the console output of
   the instance no longer shows the key. Install logs written by 1.0 still contain them: on the server
   (`/var/log/flashlight-install.log`, and `/mnt/mailserver/log/`) and, for failed installs, in `install-logs/` of

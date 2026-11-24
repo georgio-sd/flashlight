@@ -123,7 +123,7 @@ sed -i 's/^daemon = 1/daemon = 0/' /etc/tuned/tuned-main.conf
 #
 # Installing amazon-efs-utils (prebuilt RPM, see build/efs-utils.md) and mounting EFS
 cd ~
-efs_rpm=amazon-efs-utils-3.3.5-1.el10.x86_64.rpm
+efs_rpm=amazon-efs-utils-3.4.0-1.el10.x86_64.rpm
 aws s3 cp s3://$BUCKET_CONFIG/$efs_rpm .
 dnf install -y ./$efs_rpm
 rm $efs_rpm
@@ -659,7 +659,7 @@ start_after dovecot mariadb.service
 systemctl enable dovecot
 #
 # Installing Roundcube (webmail) with the optional Larry skin (users pick it in their settings)
-rc_tar=roundcubemail-1.7.6-complete.tar.gz
+rc_tar=roundcubemail-1.7.7-complete.tar.gz
 larry_tar=roundcube-larry-03ccd35.tar.gz
 if [ ! -f $flag ]; then
   cd ~
