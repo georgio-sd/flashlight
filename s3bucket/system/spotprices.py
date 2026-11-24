@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+# Copyright 2020-2026 Samson (https://github.com/georgio-sd)
+# SPDX-License-Identifier: LicenseRef-PolyForm-Shield-1.0.0 (see LICENSE)
 ################################################################################################
 # Weekly spot price check (cron, Saturday->Sunday night).
 # Compares the 7-day average price of this instance's pool (instance type + zone) with every pool

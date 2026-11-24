@@ -1,4 +1,6 @@
 #!/bin/bash
+# Copyright 2020-2026 Samson (https://github.com/georgio-sd)
+# SPDX-License-Identifier: LicenseRef-PolyForm-Shield-1.0.0 (see LICENSE)
 #
 # Flashlight data version on EFS and data upgrades between releases.
 #
@@ -6,6 +8,8 @@
 #   flashlight=   release the data were last brought to (changed only by migrations below)
 #   image=, os=   image and OS of the last installed instance (information only)
 #   roundcube=, larry=, postfixadmin=, phpmyadmin=   installed package of each web application
+#   mariadb=, dovecot=, rspamd=, valkey=   packages of the last installed instance that work with the data on EFS
+#                 (information only; rspamd= and valkey= are "off" without the spam filter)
 #
 #   upgrade-data check      right after EFS is mounted, before anything changes: stop if the data belong to a
 #                           newer release (old code must not touch them); create the file if it is missing
@@ -14,16 +18,21 @@
 #                           s3bucket/migrations/ in the repository); the other steps change no data. Before the
 #                           first script everything is backed up, and restored if a script fails
 #   upgrade-data set KEY VALUE
+#   upgrade-data app NAME PACKAGE
+#                           on existing data, at every install: if the recorded package of web application NAME
+#                           isn't this release's PACKAGE, update it with the application's recipe (below), with a
+#                           backup of its folder and database, restored if the recipe fails
 #   upgrade-data newer-data succeeds if the data belong to a newer release than this one, and prints both
 #                           (services-shutdown: an older instance must not resume service on such data)
+#   upgrade-data release    prints this installer's release
 #
-# Releasing a new version: set this_release and add it to releases. Only if the data need a one-off change, ship
-# upgrade-<previous>-<new>.sh and add the step "<previous>-<new>" to migrations (configs that Flashlight owns are
-# simply replaced, web applications are updated by version). A user can skip releases: all steps from the data's
-# release up to this one run in a row.
+# Starting work on a new version: set this_release and add it to releases (the code names the version being worked
+# on). Only if the data need a one-off change, ship upgrade-<previous>-<new>.sh and add the step "<previous>-<new>"
+# to migrations (configs that Flashlight owns are simply replaced, web applications are updated by version). A user
+# can skip releases: all steps from the data's release up to this one run in a row.
 #
-this_release=1.0
-releases="1.0"
+this_release=1.1
+releases="1.0 1.1"
 # the steps that have a migration script, e.g. "1.1-1.2 1.4-1.5"
 migrations=""
 #
@@ -84,7 +93,86 @@ restore() {
   cp -p $dir/versions $file
 }
 
+# Web application recipes: the folder on EFS and the database of each application, and update_NAME, which installs
+# the new package $pkg into the empty folder $dest (the old one is in $old), following the application's own
+# upgrade notes. An application without a recipe here stops the install when its package changes: write its
+# recipe in the release that first bumps it.
+app_dir() { case $1 in postfixadmin) echo $efs/www/admin/padmin ;; roundcube) echo $efs/www/webmail ;; esac; }
+app_db() { case $1 in postfixadmin) echo postfix ;; roundcube) echo roundcube ;; esac; }
+update_postfixadmin() {
+  # The release tarball contains vendor/ (no composer). config.local.php is ours (base.sh rewrites it right after
+  # this), upgrade.php needs it. upgrade.php brings the database schema to the new version and exits with 0 even when
+  # it fails, so a second run must find nothing left to do.
+  tar xzf $pkg -C $dest --strip-components=1 --no-same-owner &&
+    cp -p $old/config.local.php $dest/ &&
+    chown -R apache: $dest/templates_c &&
+    php $dest/public/upgrade.php &&
+    php $dest/public/upgrade.php | grep -q 'all database updates are applied'
+}
+update_roundcube() {
+  # Roundcube's manual update (docs/UPGRADING.md) into the empty folder: the new package, then from the old folder
+  # config.inc.php (ours; base.sh rewrites it right after this, bin/update.sh needs it), whatever plugins/ and
+  # skins/ have that the package doesn't (the Larry skin, the admin's own plugins and their config files; the
+  # package's files win, as with Roundcube's installto.sh) and the logs. The web installer goes, as on a first
+  # install. bin/update.sh brings the database schema to the new version and fails if that fails; with no input it
+  # leaves the config alone. It runs as root, so the owner of temp/ and logs/ is set after it.
+  local from
+  from=$(sed -n "s/.*define('RCMAIL_VERSION', '\([^']*\)').*/\1/p" $old/program/include/iniset.php)
+  [ -n "$from" ] &&
+    tar xzf $pkg -C $dest --strip-components=1 --no-same-owner &&
+    cp -p $old/config/config.inc.php $dest/config/ &&
+    cp -a --update=none $old/plugins/. $dest/plugins/ &&
+    cp -a --update=none $old/skins/. $dest/skins/ &&
+    cp -a $old/logs/. $dest/logs/ &&
+    rm -rf $dest/installer $dest/public_html/installer.php &&
+    php $dest/bin/update.sh --version=$from < /dev/null &&
+    chown -R apache: $dest/temp $dest/logs
+}
+
 case "$1" in
+  app)
+    name=$2 package=$3
+    installed=$(get $name)
+    [ "$installed" = "$package" ] && exit 0
+    if [ -z "$installed" ]; then
+      instance-log FAILED "$name: no installed package recorded in ${file#$efs/}, nothing changed"
+      exit 1
+    fi
+    # never back to an older package (an older template on the stack, for example): its code may not know the schema
+    if newer "$installed" "$package"; then
+      instance-log WARN "$name: $installed is newer than this release's $package, kept"
+      exit 0
+    fi
+    dir=$(app_dir $name) db=$(app_db $name)
+    if [ -z "$dir" ] || ! declare -F update_$name > /dev/null; then
+      instance-log FAILED "$name: no update recipe for $installed -> $package, nothing changed"
+      exit 1
+    fi
+    bk=$efs/backup/upgrade-$name-$(date +%Y-%m-%d-%H-%M-%S)
+    pkg=/root/$package old=$bk/old dest=$dir
+    instance-log UPGRADE "$name $installed -> $package, backup in ${bk#$efs/}"
+    # backup: the database dump and the old folder itself (moved, not copied: the new package goes to an empty one)
+    if ! { mkdir -p $bk && chmod 700 $bk &&
+        { [ -z "$db" ] || mariadb-dump -u root --single-transaction --routines --events --databases $db > $bk/db-$db.sql; } &&
+        aws s3 cp s3://$BUCKET_CONFIG/$package $pkg --quiet && mv $dir $old; }; then
+      instance-log FAILED "$name: backup or download failed, nothing changed"
+      exit 1
+    fi
+    mkdir $dest && update_$name
+    rc=$?
+    rm -f $pkg
+    if [ $rc -ne 0 ]; then
+      # the failed state is kept next to the backup for diagnosis
+      [ -e $dest ] && mv $dest $bk/failed
+      mv $old $dest
+      [ -z "$db" ] || { mariadb -u root -e "DROP DATABASE IF EXISTS \`$db\`" && mariadb -u root < $bk/db-$db.sql; }
+      instance-log FAILED "$name: update to $package failed, $installed restored (failed state in ${bk#$efs/}/failed)"
+      exit 1
+    fi
+    set_value $name $package
+    # upgrade backups are kept for 90 days, like the install logs
+    find $efs/backup -maxdepth 1 -name 'upgrade-*' -mtime +90 -exec rm -rf {} +
+    instance-log UPGRADE "$name now at $package" ;;
   check)
     if [ ! -f $file ]; then
       if [ -f $efs/flag ]; then
@@ -157,6 +245,8 @@ case "$1" in
     data=$(get flashlight)
     echo "Flashlight $data (this instance: $this_release)"
     newer "$data" "$this_release" ;;
+  release)
+    echo "$this_release" ;;
   *)
-    echo "usage: upgrade-data check | run | set KEY VALUE | newer-data"; exit 2 ;;
+    echo "usage: upgrade-data check | run | set KEY VALUE | app NAME PACKAGE | newer-data | release"; exit 2 ;;
 esac

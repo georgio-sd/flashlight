@@ -1,6 +1,8 @@
+# Copyright 2020-2026 Samson (https://github.com/georgio-sd)
+# SPDX-License-Identifier: LicenseRef-PolyForm-Shield-1.0.0 (see LICENSE)
 # Flashlight attachment policy "Gmail" (stack parameter AttachmentPolicy): mail with an attachment of one of
 # these file types is rejected, also when the file is inside an archive.
-# Source: Google, "File types blocked in Gmail", https://support.google.com/mail/answer/6590 (checked 2026-11-13).
+# Source: Google, "File types blocked in Gmail", https://support.google.com/mail/answer/6590 (checked 2026-11-20).
 # DON'T EDIT: replaced by Flashlight releases; your own changes go to /mnt/mailserver/etc/rspamd/override.d.
 ade
 adp

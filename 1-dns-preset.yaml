@@ -1,3 +1,5 @@
+# Copyright 2020-2026 Samson (https://github.com/georgio-sd)
+# SPDX-License-Identifier: LicenseRef-PolyForm-Shield-1.0.0 (see LICENSE)
 # Before deploying, ask AWS to remove the email sending (port 25) limitation for your account:
 # https://console.aws.amazon.com/support/contacts?#/rdns-limits
 # Reverse DNS (PTR) of the Elastic IP is set by this stack itself (DnsPreset).
@@ -41,13 +43,25 @@ Parameters:
     Description: Switch it to initiate full update without changing other parameters
     Default: Even
     AllowedValues: [ Even, Odd ]
+Mappings:
+  # The release: its installer files in the public bucket. DownloadBundles copies them from there; DnsPreset gets
+  # the same value, so an update to a new release runs DnsPreset too (CloudFormation runs a custom resource only
+  # when its properties change): it takes the newest server image then, and writes the DNS records again.
+  Release:
+    Installer:
+      BaseUrl: 'https://mail-server-bundles.s3.eu-central-1.amazonaws.com/v1.1'
 Resources:
+  # Tags: Name tells the stack, flashlight:installation the whole server (this stack's name, the stage 2 stack
+  # uses the same value) for the billing. The server image copy gets this stack's flashlight:installation too, as
+  # the stack that copied it, also when other servers in the region use it later
   MSBucket:
     Type: "AWS::S3::Bucket"
     Properties:
       Tags:
       - Key: Name
         Value: !Sub "${AWS::StackName}-Flashlight"
+      - Key: 'flashlight:installation'
+        Value: !Ref AWS::StackName
       BucketName: !Join
       - "-"
       - - "flashlight-config"
@@ -74,22 +88,36 @@ Resources:
       Tags:
       - Key: Name
         Value: !Sub "${AWS::StackName}-Flashlight"
+      - Key: 'flashlight:installation'
+        Value: !Ref AWS::StackName
   DownloadBundlesLogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
       LogGroupName: !Sub "/aws/lambda/${AWS::StackName}-DownloadBundles"
       RetentionInDays: 30
+      Tags:
+      - Key: Name
+        Value: !Sub "${AWS::StackName}-Flashlight"
+      - Key: 'flashlight:installation'
+        Value: !Ref AWS::StackName
   DnsPresetLogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
       LogGroupName: !Sub "/aws/lambda/${AWS::StackName}-DnsPreset"
       RetentionInDays: 30
+      Tags:
+      - Key: Name
+        Value: !Sub "${AWS::StackName}-Flashlight"
+      - Key: 'flashlight:installation'
+        Value: !Ref AWS::StackName
   DownloadBundlesRole:
     Type: 'AWS::IAM::Role'
     Properties:
       Tags:
       - Key: Name
         Value: !Sub "${AWS::StackName}-Flashlight"
+      - Key: 'flashlight:installation'
+        Value: !Ref AWS::StackName
       AssumeRolePolicyDocument:
         Version: 2012-10-17
         Statement:
@@ -114,6 +142,8 @@ Resources:
       Tags:
       - Key: Name
         Value: !Sub "${AWS::StackName}-Flashlight"
+      - Key: 'flashlight:installation'
+        Value: !Ref AWS::StackName
       AssumeRolePolicyDocument:
         Version: 2012-10-17
         Statement:
@@ -135,6 +165,15 @@ Resources:
           - Effect: Allow
             Action: [ 'ec2:DescribeImages', 'ec2:CopyImage', 'ec2:DescribeAddressesAttribute' ]
             Resource: '*'
+          # the Name tag of the image copy and its snapshot, only as they are made
+          - Effect: Allow
+            Action: 'ec2:CreateTags'
+            Resource:
+            - !Sub "arn:${AWS::Partition}:ec2:${AWS::Region}::image/*"
+            - !Sub "arn:${AWS::Partition}:ec2:${AWS::Region}::snapshot/*"
+            Condition:
+              StringEquals:
+                'ec2:CreateAction': CopyImage
           # reverse DNS of this stack's Elastic IP; GetChange waits until the A records are applied
           - Effect: Allow
             Action: [ 'ec2:ModifyAddressAttribute', 'ec2:ResetAddressAttribute' ]
@@ -149,7 +188,7 @@ Resources:
       S3BucketName: !Ref MSBucket
       ZoneIDs: !Join [ ',', !Ref ZoneIDs ]
       Updater: !Ref Updater
-      BaseUrl: 'https://mail-server-bundles.s3.eu-central-1.amazonaws.com/v1.0'
+      BaseUrl: !FindInMap [ Release, Installer, BaseUrl ]
       Files:
       - 'system/autoshutdown.service'
       - 'system/spot-instance-shutdown'
@@ -168,10 +207,12 @@ Resources:
       - 'system/base.sh'
       - 'system/double-inst-prot.service'
       - 'system/services-shutdown'
+      - 'system/valkey-check'
       - 'mariadb/db-backup'
       - 'phpmyadmin/config.inc.php'
       - 'postfixadmin/config.local.php'
       - 'apache/sites.conf'
+      - 'apache/admin-index.html'
       - 'postfix/main.cf'
       - 'postfix/master.cf'
       - 'postfix/mysql/virtual_mailbox_domains.cf'
@@ -194,12 +235,12 @@ Resources:
       - 'rspamd/attachments-strict.map'
       - 'rspamd/olefy.py'
       - 'rspamd/olefy-requirements.txt'
-      - 'packages/amazon-efs-utils-3.3.5-1.el10.x86_64.rpm'
-      - 'packages/postfixadmin-v4.0.6-php74.tar.gz'
+      - 'packages/amazon-efs-utils-3.4.0-1.el10.x86_64.rpm'
+      - 'packages/postfixadmin-v4.0.7-php74.tar.gz'
       - 'packages/phpMyAdmin-5.2.3-all-languages.tar.gz'
-      - 'packages/roundcubemail-1.7.6-complete.tar.gz'
+      - 'packages/roundcubemail-1.7.7-complete.tar.gz'
       - 'packages/roundcube-larry-03ccd35.tar.gz'
-      - 'packages/rspamd-4.3.0-1.el10.x86_64.rpm'
+      - 'packages/rspamd-4.3.1-1.el10.x86_64.rpm'
       - 'rspamd/rspamd.asc'
   DownloadBundlesLambdaFunction:
     Type: 'AWS::Lambda::Function'
@@ -285,6 +326,8 @@ Resources:
       Tags:
       - Key: Name
         Value: !Sub "${AWS::StackName}-Flashlight"
+      - Key: 'flashlight:installation'
+        Value: !Ref AWS::StackName
   DnsPreset:
     Type: 'Custom::DnsPreset'
     Properties:
@@ -296,6 +339,8 @@ Resources:
       ElasticIP: !Ref IPAddressMS
       EipAllocationId: !GetAtt IPAddressMS.AllocationId
       Updater: !Ref Updater
+      # not used by the function: a new release changes it, so the update runs DnsPreset (see Mappings)
+      Release: !FindInMap [ Release, Installer, BaseUrl ]
   DnsPresetLambdaFunction:
     Type: 'AWS::Lambda::Function'
     Properties:
@@ -308,6 +353,7 @@ Resources:
           # When the stack is deleted, or a domain is removed from it, Flashlight's records of that domain are
           # removed too: only Flashlight's values, any other values of the same records stay.
           import json
+          import re
           import time
           import urllib.request
 
@@ -327,11 +373,17 @@ Resources:
           ec2_source = boto3.client('ec2', region_name=SOURCE_REGION, config=aws_config)
 
 
-          def send(event, context, status, data=None, reason=None):
+          # A failed first creation answers with this ID, so its rollback (a Delete with the same ID) can tell
+          # that the records it would clean up were never this stack's: they may be the domain's own records
+          # with the same values (an MX to mail.<domain>, a DKIM key at mail._domainkey), made before the install
+          FAILED_CREATE = 'DnsPreset-failed-'
+
+
+          def send(event, context, status, data=None, reason=None, physical_id=None):
               body = json.dumps({
                   'Status': status,
                   'Reason': reason or 'See CloudWatch log stream: ' + context.log_stream_name,
-                  'PhysicalResourceId': event.get('PhysicalResourceId') or 'DnsPreset-' + event['ResourceProperties']['MainZoneID'],
+                  'PhysicalResourceId': physical_id or event.get('PhysicalResourceId') or 'DnsPreset-' + event['ResourceProperties']['MainZoneID'],
                   'StackId': event['StackId'],
                   'RequestId': event['RequestId'],
                   'LogicalResourceId': event['LogicalResourceId'],
@@ -342,7 +394,7 @@ Resources:
               urllib.request.urlopen(req, timeout=30)
 
 
-          def local_image_id():
+          def local_image_id(stack):
               images = ec2_source.describe_images(Owners=[SOURCE_OWNER], Filters=[
                   {'Name': 'description', 'Values': [IMAGE_TAG]},
                   {'Name': 'state', 'Values': ['available']}])['Images']
@@ -358,8 +410,16 @@ Resources:
                   if local:
                       return local[0]['ImageId']
                   try:
+                      # Name: the image name, which tells whose image it is ("Flashlight " in front of an older
+                      # name without it; only the characters every AWS service takes in a tag);
+                      # flashlight:installation: the stack that copied it, for the billing
+                      name = latest['Name'] if latest['Name'].startswith('Flashlight ') else 'Flashlight ' + latest['Name']
+                      name = re.sub(r'[^\w .:/=+@-]', '-', name)[:256]
+                      tags = [{'Key': 'Name', 'Value': name}, {'Key': 'flashlight:installation', 'Value': stack}]
                       copy = ec2.copy_image(Name=latest['Name'], Description=IMAGE_TAG,
-                                            SourceImageId=latest['ImageId'], SourceRegion=SOURCE_REGION)
+                                            SourceImageId=latest['ImageId'], SourceRegion=SOURCE_REGION,
+                                            TagSpecifications=[{'ResourceType': 'image', 'Tags': tags},
+                                                               {'ResourceType': 'snapshot', 'Tags': tags}])
                       print('Copying image as ' + copy['ImageId'])
                       return copy['ImageId']
                   except Exception as e:
@@ -526,7 +586,8 @@ Resources:
                       admin = props['AdminSubDomain'] + '.' + domains[0]
                       mail = props['MailSubDomain'] + '.' + domains[0]
                       ip = props['ElasticIP']
-                      image_id = local_image_id()
+                      # the stack's name, from arn:...:stack/<name>/<id>
+                      image_id = local_image_id(event['StackId'].split('/')[1])
                       for i, (zone_id, domain) in enumerate(zip(zone_ids, domains)):
                           records = [(domain, 'MX', '10 ' + mail + '.')]
                           if i == 0:
@@ -545,12 +606,22 @@ Resources:
                               'ImageId': image_id, 'ReverseDNS': reverse_dns,
                               'ImageStatus': wait_for_image(image_id, context)}
                   elif event['RequestType'] == 'Delete':
-                      clean_up(our_records(event['ResourceProperties']))
+                      if event['PhysicalResourceId'].startswith(FAILED_CREATE):
+                          # rollback of a failed first creation: leave the domains' records alone (a failure
+                          # after the records were written leaves them pointing to the released address; the
+                          # next successful creation overwrites them)
+                          print('Rollback of a failed creation: DNS records left as they are')
+                      else:
+                          clean_up(our_records(event['ResourceProperties']))
+                      # the reverse DNS is always this stack's own, and blocks releasing the Elastic IP
                       remove_reverse_dns(event['ResourceProperties']['EipAllocationId'])
                   send(event, context, 'SUCCESS', data)
               except Exception as e:
                   print('ERROR: ' + repr(e))
-                  send(event, context, 'FAILED', reason=('DnsPreset: ' + str(e))[:250])
+                  failed_id = None
+                  if event['RequestType'] == 'Create':
+                      failed_id = FAILED_CREATE + event['ResourceProperties']['MainZoneID']
+                  send(event, context, 'FAILED', reason=('DnsPreset: ' + str(e))[:250], physical_id=failed_id)
       Handler: index.lambda_handler
       Role: !GetAtt DnsPresetRole.Arn
       LoggingConfig:
@@ -562,6 +633,8 @@ Resources:
       Tags:
       - Key: Name
         Value: !Sub "${AWS::StackName}-Flashlight"
+      - Key: 'flashlight:installation'
+        Value: !Ref AWS::StackName
 Outputs:
   DomainNames:
     Value: !GetAtt [ DnsPreset, DomainNames ]

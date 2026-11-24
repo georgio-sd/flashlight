@@ -1,3 +1,5 @@
+# Copyright 2020-2026 Samson (https://github.com/georgio-sd)
+# SPDX-License-Identifier: LicenseRef-PolyForm-Shield-1.0.0 (see LICENSE)
 # oletools and its dependencies for olefy (the Rspamd macro check), installed by base.sh with
 #   pip install --require-hashes --only-binary=:all: -r olefy-requirements.txt
 # into /opt/olefy: pip installs exactly these versions and files, and refuses anything with another hash.

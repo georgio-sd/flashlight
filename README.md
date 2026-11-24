@@ -1,3 +1,4 @@
+<!-- Copyright 2020-2026 Samson (https://github.com/georgio-sd). SPDX-License-Identifier: LicenseRef-PolyForm-Shield-1.0.0 (see LICENSE) -->
 # Flashlight Mail Server
 
 **Your company's own mail server in your own AWS account, installed by two CloudFormation templates.**
@@ -32,6 +33,7 @@ records, recovery after failures and upgrades.
   limits or sends spam
 - Optional virus scanning of incoming mail (ClamAV) on medium or larger servers
 - Protection against password guessing (fail2ban)
+- Optional alert emails when the server is down and can't recover by itself
 - Daily database backups, and optional backups of all data with AWS Backup
 
 ## How it works
@@ -103,11 +105,12 @@ need to buy capacity in advance "for growth":
   compares Spot prices and moves to a cheaper option when that saves enough. On-Demand is one setting away.
 - **Reserved pricing for On-Demand.** A 1- or 3-year Reserved Instance or Savings Plan, bought in the AWS
   console, lowers the On-Demand price to about the Spot level (a 3-year t3.small reservation comes to about $6
-  a month), with no Spot interruptions. Nothing changes in the stacks. With a reservation, set the second
-  instance type (InstanceType2) to None, so the server always runs on the reserved type.
+  a month), with no Spot interruptions. Nothing changes in the stacks: keep the second instance type
+  (InstanceType2), so the server stays up even when AWS is short of the reserved type.
 - **The server size is a setting.** When the company grows, choose a larger instance type in a stack update:
   the server is replaced by a bigger one with the same data, without reinstalling anything. If the load drops,
-  go back to a smaller one the same way.
+  go back to a smaller one the same way. Which size fits how many users, measured with load tests:
+  [Choosing the instance type](docs/INSTALL.md#choosing-the-instance-type).
 - **Storage grows by itself.** EFS has no fixed size: you pay for the gigabytes of mail you actually have.
   Mail that nobody has opened for a month moves automatically to a storage class that is about ten times
   cheaper, and comes back on first access.
@@ -166,3 +169,15 @@ All components are well-known open-source programs:
 - [How the server works](docs/ARCHITECTURE.md): a detailed description of the server
 - [Upgrading to a new release](docs/UPGRADING.md)
 - [Releasing Flashlight](docs/RELEASING.md) (for developers)
+
+## License
+
+Flashlight is free to use, including by companies for their own mail, under the
+[PolyForm Shield License 1.0.0](LICENSE). You may use, change and share it for any purpose except offering a product
+or service that competes with Flashlight or with what its author offers with it: selling it, hosting it for
+others, or selling support for it, for example. Such uses are possible with the author's permission, under a
+separate agreement: contact the author through GitHub (https://github.com/georgio-sd). The source is open to
+read: Flashlight is source-available, not open source.
+
+Components from other projects keep their own licenses: see [THIRD-PARTY.md](THIRD-PARTY.md). Bug reports and
+feature requests are welcome: see [CONTRIBUTING.md](CONTRIBUTING.md).

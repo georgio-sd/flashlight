@@ -1,3 +1,4 @@
+<!-- Copyright 2020-2026 Samson (https://github.com/georgio-sd). SPDX-License-Identifier: LicenseRef-PolyForm-Shield-1.0.0 (see LICENSE) -->
 # How the Flashlight server works
 
 This document describes how a Flashlight mail server is built and how it behaves: what the stacks create, how an
@@ -41,21 +42,41 @@ CloudFormation exports. That's why stage 1 can't change its domain list while st
 | IAM role and instance profile | What the instance may do in AWS (see [Security](#security)) |
 | Launch template | Image, type, encrypted root disk, UserData |
 | Auto Scaling group | Exactly one instance (min = max = 1) in any of the zones, Spot or On-Demand |
+| SNS topic, up to 3 email subscriptions, CloudWatch alarm | Alert emails, only with AlertEmail (see [Alert emails](#alert-emails)) |
 
 The Auto Scaling group uses a mixed instances policy with up to two interchangeable types (InstanceType and
-InstanceType2) and, for Spot, the `price-capacity-optimized` allocation strategy. It waits up to 20 minutes for
+InstanceType2) and, for Spot, the `price-capacity-optimized` allocation strategy. It waits up to 30 minutes for
 the instance's success signal (CreationPolicy). A stack update that changes the launch template creates a new
 Auto Scaling group (AutoScalingReplacingUpdate): the old instance runs until the new one has signalled success,
 and if the new one fails, the update rolls back and the old one stays.
 
 The template's Rules refuse combinations that can't work: a Spamhaus key or the antivirus without the spam
-filter, the antivirus on small instance types, swap on a disk that's too small.
+filter, the antivirus on small instance types, a second instance type that isn't the pair of the first (t3a for
+t3, c6a for c7i, m6a for m7i: the same size and memory), a disk too small for the swap file.
 
 ### Maintenance mode: `x-maintenance.yaml`
 
-The same template as stage 2 without the launch template and the Auto Scaling group, generated from it by
-`build/make-maintenance.py`. Updating stage 2 to it removes the instance and keeps everything else: the network,
-EFS, the IAM role. It's used for upgrades and for changing the domain list.
+The same template as stage 2 without the launch template, the Auto Scaling group and the alarm that watches the
+group, generated from it by `build/make-maintenance.py`. Updating stage 2 to it removes the instance and keeps
+everything else: the network, EFS, the IAM role, the alert topic with its confirmed subscriptions. It's used for
+upgrades and for changing the domain list.
+
+### Tags
+
+Every resource of both stacks that can be tagged has `Name` = `<stack name>-Flashlight` and
+`flashlight:installation` = the stage 1 stack name (stage 2 takes it from its DnsPreset parameter), so the two
+stacks of one server have one value for the billing. The instance gets both from the Auto Scaling group
+(PropagateAtLaunch); its disk and network interface get them from the launch template (TagSpecifications), as
+does the launch template itself. The EFS backups (AWS Backup recovery points) get the file system's tags from
+AWS Backup. The instance also has `flashlight:instance-types` and `flashlight:lifecycle`
+(see above). DnsPreset tags the image copy it makes and its snapshot with `Name` = the image name
+(`Flashlight AlmaLinux …`; an older name without `Flashlight ` gets it in front) and
+`flashlight:installation` = its own stack's name: the copy counts for the server that copied it, though other
+stacks in the region may use it too. Its role may tag only as it
+copies (`ec2:CreateAction` = `CopyImage`), so a copy made before tags existed stays untagged until the next
+image. Not tagged: what can't carry tags (the instance profile, the EFS mount targets, routes and
+associations, SNS subscriptions), short-lived Spot requests, and the network objects the VPC makes by itself
+(main route table, default network ACL and security group).
 
 ## The life of an instance
 
@@ -63,16 +84,22 @@ EFS, the IAM role. It's used for upgrades and for changing the domain list.
 
 1. **UserData** (in the launch template) sets up the basics: turns SELinux off, makes the AWS CLI retry
    temporary errors, updates the operating system (`dnf upgrade`), installs the AWS CLI, then downloads and runs
-   `base.sh` from the config bucket. The install log goes to the root-only `/var/log/flashlight-install.log`
-   (its trace contains generated passwords).
+   `base.sh` from the config bucket. The install log goes to the root-only `/var/log/flashlight-install.log`. It
+   traces every command, except the steps that handle passwords and keys: those show only a
+   `+ secret_step <what it does>` line, so the log, also its copy in the config bucket, holds no passwords.
 2. **`base.sh`** does the rest:
    - mounts EFS (TLS) at `/mnt/mailserver` and installs the helper scripts;
    - stops if the data on EFS belong to a newer Flashlight release;
    - associates the Elastic IP;
    - writes its own flag `flag-ec2id-<instance id>` on EFS, which makes any other running instance stop its
      services (see [Only one instance](#only-one-instance));
+   - turns off what the image runs but the server doesn't need (amazon-ssm-agent; EC2 Instance Connect's SSH key
+     lookup, `/etc/ssh/sshd_config.d/50-flashlight.conf`; nm-cloud-setup, which sets up
+     extra IPs and network interfaces from the instance metadata, while the server has one interface with one IP);
    - creates swap, quiets known harmless warnings, installs the packages;
    - starts MariaDB and, if the data are from an older release, upgrades them (see [UPGRADING](UPGRADING.md));
+   - on existing data, updates a web application whose installed package (in `versions`) is older than the
+     release's, with its own upgrade steps, a backup, and a restore on a failure;
    - rebuilds every configuration file from the release, then applies the admin's own settings files;
    - on the first install only: creates the databases, the passwords, the certificates;
    - adds new domains of the stack to PostfixAdmin, creates DKIM keys and DNS records;
@@ -92,17 +119,41 @@ downloaded.
 ### When an install fails
 
 `install-finish` keeps the install log in the config bucket (`install-logs/`), which survives even when the stack
-rolls back and deletes the EFS, and writes a `FAILED` line naming the command that failed. Then:
+rolls back and deletes the EFS, and writes a `FAILED` line naming the command that failed. An install still
+running after 60 minutes (hung on a download, for example) is stopped and fails the same way. Then:
 
 - **during a stack create or update:** it signals FAILURE at once, so the rollback starts in a minute instead of
-  after the 20-minute timeout. No retry: the person running the update takes over.
+  after the 30-minute timeout. No retry: the person running the update takes over.
 - **during a replacement by the Auto Scaling group** (Spot, price check, rebuild, health check): it tries a new
   instance after 5 minutes, up to 3 failed installs in 3 hours. After that the last instance stays up for
-  diagnosis.
+  diagnosis. With AlertEmail, the first failure and the last one send an alert email, and so does the first
+  working install after failures (see [Alert emails](#alert-emails)).
 
 If the install can't even start (the AWS CLI can't be installed, or the config bucket can't be read), there is no
-`install-finish` to report it: the instance turns itself off after 5 minutes, which terminates it, and the Auto
-Scaling group starts a new one.
+`install-finish` to report it. UserData then sends the alert email itself (with the AWS CLI, or without it with
+`curl` signing the request with the instance role's keys), and the instance turns itself off after 30 minutes,
+which terminates it, and the Auto Scaling group starts a new one. Until an install works, this repeats about
+every 35 minutes, with one email each time.
+
+### Alert emails
+
+Only with the AlertEmail parameter (up to 3 addresses); without it, none of this is created. Stage 2 creates an
+SNS topic with an email subscription per address; AWS sends each address a confirmation email, and an address
+that doesn't confirm within 48 hours is dropped by AWS. Subscriptions follow the position in the list: removing
+an address subscribes the ones after it again, and each gets a new confirmation email (in a test SNS kept the
+address's confirmed subscription, which AWS doesn't document, so INSTALL asks to click the link). CloudFormation doesn't notice an
+address that unsubscribed or was dropped; updating the stack without it and then with it subscribes it again.
+The server never subscribes anyone itself.
+
+| Event | Sent by | Emails |
+|---|---|---|
+| An install after a replacement failed | `install-finish` | The first failure ("retrying"), the last of 3 ("server is DOWN"), and the first working install after failures ("up again"; the newest failure log it reported is kept in `log/alert-last-failure` on EFS, so each run of failures gets one). Stack creates and updates send none: the person running them watches |
+| The install can't start | UserData | One per attempt, about every 35 minutes. No "up again" afterwards: without the bucket and EFS the instance has nowhere to record the failure |
+| No instance for 15 minutes | CloudWatch alarm `<stack>-no-mail-server-instance` on the group's `GroupInServiceInstances` metric (collected only with AlertEmail, at no cost) | ALARM once, OK when an instance runs again. AWS has no capacity for the instance types (Spot or On-Demand); a normal replacement leaves the group empty for a few minutes only. A new alarm goes from INSUFFICIENT_DATA to OK and sends one OK email: when AlertEmail is set on an existing stack and when maintenance ends (the alarm is made again). A stack update keeps the alarm and its state |
+
+At `READY`, `install-finish` also compares AlertEmail (read from the stack's parameters) with the topic's
+subscriptions and writes a `WARN` line for each address that isn't confirmed yet or has no subscription. The
+instance role may publish to the topic and list its subscriptions, nothing else in SNS.
 
 ### Replacements
 
@@ -144,7 +195,7 @@ already upgraded to a newer release.
 | BACKUP | The daily database dump |
 | ALERT | A mailbox that may be compromised |
 | CHECK, ERROR | The weekly Spot price check: its decision with the prices, or why it couldn't compare |
-| WARN | Something worked with a fallback (swap made smaller, the Rspamd repository unreachable...) |
+| WARN | Something worked with a fallback (swap made smaller...), an AlertEmail address isn't confirmed, or the spam filter's data are over 85% of Valkey's memory cap |
 | USER | The admin's user-script.sh failed |
 
 ## Data on EFS
@@ -160,21 +211,27 @@ already upgraded to a newer release.
 | `etc/postfix/dkim/` | DKIM keys and OpenDKIM's config |
 | `etc/crontab` | The system crontab: Flashlight's block and the admin's own lines |
 | `etc/<program>/` | The admin's own settings files |
-| `www/admin/` | PostfixAdmin and phpMyAdmin with their configs, the admin site's password file |
+| `www/admin/` | PostfixAdmin and phpMyAdmin with their configs, the admin site's password file, its start page (`index.html`, rewritten at every boot from `apache/admin-index.html`) |
 | `www/webmail/` | Roundcube's logs |
 | `rspamd/` | The spam filter's web interface settings, statistics, graphs, whitelist |
 | `valkey/` | What the spam filter has learned |
-| `clamav/` | The antivirus signatures |
+| `clamav/` | The antivirus signatures (only while Antivirus is enabled) |
 | `root/` | `credentials`, `secrets` (generated passwords and keys), the fail2ban note |
 | `automation/` | The cron scripts |
 | `backup/` | Database dumps (28 days) and upgrade backups (90 days) |
 | `log/` | `instance.log`, install logs (90 days), the cron scripts' logs |
-| `versions` | The Flashlight release of the data, and what the instance runs |
+| `versions` | The Flashlight release of the data, and what the last instance ran: its image and OS, the web applications, and the packages that work with the data (MariaDB, Dovecot, Rspamd, Valkey) |
 | `flag`, `flag-ec2id-<id>` | The first install is done; the instance that owns the EFS now |
 
 The file system outlives the stack (`DeletionPolicy: RetainExceptOnCreate`): deleting the stage 2 stack leaves it
-in the account, to be deleted by hand. EFS is encrypted at rest, and the instance mounts it over TLS. With MailStorageLifecyclePolicy, files not read
+in the account, to be deleted by hand; its name (`<stack>-Flashlight`) tells whose it is. EFS is encrypted at rest, and the instance mounts it over TLS. With MailStorageLifecyclePolicy, files not read
 for a while move to the Infrequent Access class.
+
+Each instance introduces itself to EFS with its own NFS client identity, the instance ID (`nfs4_unique_id`,
+set in `/etc/modprobe.d/flashlight-nfs.conf`). By default Linux uses the hostname, which the old and the new
+instance share during a replacement: EFS would take them for one client, and when one of them reconnected or
+unmounted, it would wipe the other's state, so the new server could lose its file locks (the kernel's
+`NFS: lost N locks`).
 
 ## Configuration: ours and the admin's
 
@@ -219,8 +276,21 @@ every boot; lines outside belong to the admin.
 
 Services that use EFS start only when it is mounted (`RequiresMountsFor`) and not at all if it isn't, so MariaDB
 can't start on an empty local folder. A service starts after the services it uses: Postfix, Dovecot and
-PHP-FPM after MariaDB, Apache after PHP-FPM, Rspamd after Valkey, Unbound and olefy, fail2ban after the services
-whose logs it reads. These are ordering dependencies only: restarting MariaDB doesn't restart Postfix.
+PHP-FPM after MariaDB, Apache after PHP-FPM, Rspamd after Valkey, Unbound, olefy and clamd, fail2ban after the
+services whose logs it reads. These are ordering dependencies only: restarting MariaDB doesn't restart Postfix.
+
+Mail comes in only once it can be checked: with the spam filter, Postfix starts after Rspamd, and Rspamd counts
+as started only when it answers (up to a minute); with the antivirus, Rspamd starts after clamd, which counts as
+started when it answers, after loading its database (up to 2 minutes). Neither wait ever fails or stops a
+service: if one is slow or down, the others start after the wait and mail flows unchecked meanwhile; Rspamd
+connects to clamd for every message, so the virus scan resumes by itself once clamd answers. A crashed clamd is
+restarted after 30 seconds, at most 5 times in 10 minutes (each start loads its database: about 1 GB).
+
+MariaDB, Postfix, Dovecot, Valkey, Rspamd, PHP-FPM and Apache restart after a crash every 30 seconds with no
+limit, so they come back by themselves after a short EFS outage or a lost NFS lock, for example; OpenDKIM,
+Unbound, fail2ban and crond keep their packages' own restart settings. A service stopped with `systemctl stop` (also when another instance takes
+over or this one is replaced) stays stopped. The Auto Scaling group's health check sees only the instance, not its
+services, so these restarts are what brings a crashed service back.
 
 `/usr/local/etc/flashlight-services` lists the services of this instance (they depend on the stack's
 parameters): `services_running` must be up after an install, `services_efs` write to EFS and are stopped
@@ -228,7 +298,21 @@ together when another instance takes over or this one is replaced.
 
 MariaDB is the last process the kernel stops when memory runs out (`OOMScoreAdjust=-500`): without it, logins
 and mail lookups fail, while Rspamd and the PHP workers come back by themselves. A swap file of half the memory
-(at most 4 GB) absorbs short peaks. PHP-FPM's pool is sized by memory, about 10 processes per 2 GB.
+(at most 4 GB) is always made and absorbs short peaks, such as ClamAV holding two copies of its database while
+it loads new signatures. PHP-FPM's pool is sized by memory, about 10 processes per 2 GB.
+
+MariaDB logs with `log_warnings = 1` instead of its default 2: Postfix's lookups go through proxymap, which ends
+its database connections without a goodbye when it exits (after 100 clients, like every Postfix process), and
+level 2 would log each as "Aborted connection", dozens an hour under load. Errors and real warnings are still
+logged; `log_warnings = 2` in the admin's `custom.cnf` shows these again.
+
+Dovecot's connection limits are sized by memory too, at every boot: an always-connected mail program costs
+about 1.6 MB (measured), so IMAP gets about one connection per 2 MB of what is left after the services (1.5 GB,
+2.5 GB with ClamAV) and 512 MB for the page cache, never fewer than Dovecot's default 1024: 2-4 GB servers keep
+1024, 8 GB with ClamAV gets about 2350, 16 GB about 6350. The stats, anvil and auth services, which every
+IMAP and LMTP process connects to, take that limit plus 1000. One mailbox may have up to 30 IMAP connections
+from one address, so a desktop program, a second computer and a phone behind an office's NAT address all fit. The kernel allows 8192 inotify instances per
+user (the default of 128 is used up by ~128 mail programs waiting in IDLE).
 
 ## Mail flow
 
@@ -281,11 +365,15 @@ PostfixAdmin, the alerts) is only signed. Undeliverable mail is retried for five
 
 With Antispam (the default), the spam filter is Rspamd 4.3 with its own helpers:
 
-- **Rspamd** comes from its official repository, pinned to version 4.3 (its bug-fix releases come by themselves; a newer version comes with a Flashlight release, after testing) and checked with the signing key that
-  comes with the release. If the repository is unreachable, the copy of the package in the release is installed
-  after a signature check (`WARN` line).
+- **Rspamd** is the exact package that comes with the release (4.3.1), installed after a check of its signature
+  with the Rspamd signing key of the release; its dependencies come from AlmaLinux and EPEL. Rspamd's own
+  repository isn't used: it keeps only its newest package, and its bug-fix releases have changed what Flashlight
+  relies on. A newer Rspamd comes with a Flashlight release, after testing.
 - **Valkey** (a Redis fork) keeps the Bayes statistics, fuzzy hashes and rate limit counters, on EFS, written
-  at most 5 minutes after a change. Memory is capped at 256 MB; the data expire by themselves.
+  at most 5 minutes after a change. Memory is capped at 256 MB. Bayes words get 180 days (Rspamd's
+  bayes_expiry): the ones that by then clearly mark spam or ham are kept, the others are deleted; words common
+  to spam and ham go after 10 days. At the cap Valkey drops the data that expire soonest first (rate limit
+  counters, greylisting), so `valkey-check` writes a `WARN` line to `instance.log` while it is over 85% full.
 - **Unbound** is Rspamd's own DNS resolver: blocklists refuse queries that come through big shared resolvers,
   AWS's included.
 
@@ -324,9 +412,10 @@ Settings changed in the web interface, statistics and graphs are on EFS.
 ### Outgoing mail and compromised mailboxes
 
 A stolen password is the most common way a small mail server ends up on blocklists. Besides the limits above,
-`outbound-alert` runs every 10 minutes: it reads Rspamd's log for refused messages of logged-in users (over the
-limits, or as spam, a virus or a blocked attachment) and e-mails the admin about each such user at most every 6
-hours, with an `ALERT` line in the event log. The limits can be changed by the admin
+`outbound-alert` runs every 10 minutes: it counts the refused messages of logged-in users in the last 6 hours of
+Rspamd's log and e-mails the admin about a user who went over the limits even once, or had 5 messages refused as
+spam, a virus or a blocked attachment (fewer are usually the user's own mistake), at most every 6 hours per user,
+with an `ALERT` line in the event log. The limits can be changed by the admin
 ([how](INSTALL.md#limits-on-outgoing-mail)).
 
 ## DNS and certificates
@@ -356,6 +445,7 @@ test CA; switching to `production` with a stack update replaces it on the next i
 |---|---|
 | Every 10 minutes | `mailbox-cleanup`: mail of mailboxes deleted in PostfixAdmin moves to `mail/.deleted/` (30 days), their Roundcube data are deleted |
 | Every 10 minutes | `outbound-alert` (spam filter) |
+| Daily 05:40 | `valkey-check` (spam filter): a `WARN` line while Valkey is over 85% of its memory cap |
 | Daily 22:55 | `db-backup`: dumps of all databases to `backup/`, 28 days |
 | Saturday-to-Sunday 01:15 | `spotprices.py` (Spot) |
 | Sundays 03:15 | `rebuild-check` (RebuildAfterDays > 0) |
@@ -376,7 +466,8 @@ Times are in the server's time zone (TimeZone).
   the AWS-managed key, so swap is too. Users connect with TLS 1.2 or newer; port 25 offers TLS to other servers.
 - **The instance's rights in AWS** (IAM role): associate the Elastic IP; change TXT records only, in the stack's
   zones only; replace only its own stack's instances; signal its own stack; read the config bucket, write
-  `install-logs/`, and full access to `upload/`. It can't change the installer files, so a compromised server
+  `install-logs/`, and full access to `upload/`; with AlertEmail, publish to the stack's alert topic and list
+  its subscriptions. It can't change the installer files, so a compromised server
   can't plant a modified installer for the next instances.
 - **Passwords.** Generated on the first install, kept in `root/secrets` and `root/credentials` (root only). The
   admin tools are behind the admin site's password (basic auth over HTTPS) and their own logins.
@@ -405,13 +496,15 @@ Logs on the instance's own disk are lost when the instance is replaced; the ones
   locking, so mail keeps flowing.
 - **Everything:** with MailStorageBackupPolicy, AWS Backup backs up the whole EFS every day.
 - **Upgrades:** before a data upgrade, the new instance backs up the databases and the `etc`, `www`, `root` and
-  `automation` folders, and restores them if the upgrade fails ([UPGRADING](UPGRADING.md)).
+  `automation` folders, and restores them if the upgrade fails ([UPGRADING](UPGRADING.md)). Before a web
+  application update, the same for the application's database and folder.
 
 ## Releases and upgrades
 
 A release is the three templates plus the installer files in the public bucket under its version
-(`mail-server-bundles/v1.0/`). Stage 1 copies them into the config bucket, and every instance installs from
-there. Data changes between releases are migrations, run in order by the new instance. How to upgrade:
+(`mail-server-bundles/vX.Y/`). Stage 1 copies them into the config bucket, and every instance installs from
+there. Data changes between releases are migrations, run in order by the new instance; the web applications
+are updated by their version instead, whenever the release brings a newer one. How to upgrade:
 [UPGRADING](UPGRADING.md). How a release is made: [RELEASING](RELEASING.md).
 
 ## Software
@@ -428,8 +521,9 @@ there. Data changes between releases are migrations, run in order by the new ins
 | PostfixAdmin | 4.0 | The release (pinned) |
 | phpMyAdmin | 5.2 | The release (pinned) |
 | Certbot with the Route 53 plugin | | EPEL |
-| Rspamd | 4.3 | Rspamd's repository, or the release's copy |
-| Valkey, Unbound | | AlmaLinux |
+| Rspamd | 4.3.1 | The release (pinned) |
+| Valkey | 8.1 | AlmaLinux (follows it, see RELEASING) |
+| Unbound | | AlmaLinux |
 | oletools (olefy) | 0.60.2 | PyPI with pinned hashes; olefy.py in the release |
 | ClamAV | 1.4 | EPEL |
 | fail2ban | | EPEL |

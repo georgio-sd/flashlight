@@ -1,9 +1,11 @@
 #!/bin/bash -xe
+# Copyright 2020-2026 Samson (https://github.com/georgio-sd)
+# SPDX-License-Identifier: LicenseRef-PolyForm-Shield-1.0.0 (see LICENSE)
 #
 # The stack's variables come from UserData. Without them some steps would act on empty values (an empty
 # domain list, for example, would delete every DKIM key), so stop before touching anything.
 for var in EIP_ID EIP AWS_REGION STACK MAIL_STORAGE BUCKET_CONFIG TIMEZONE ADMIN_EMAIL CERT_MODE INSTANCE_LIFECYCLE \
-    DOMAIN_NAMES DOMAIN_ZONE_IDS ADMIN_DOMAIN MAIL_DOMAIN REBUILD_AFTER_DAYS ANTISPAM SWAP ATTACHMENT_POLICY ANTIVIRUS; do
+    DOMAIN_NAMES DOMAIN_ZONE_IDS ADMIN_DOMAIN MAIL_DOMAIN REBUILD_AFTER_DAYS ANTISPAM ATTACHMENT_POLICY ANTIVIRUS; do
   [ -n "${!var}" ] || { echo "base.sh: $var is not set, nothing done"; exit 1; }
 done
 #
@@ -42,6 +44,17 @@ unit_env() {
   systemctl daemon-reload
 }
 #
+# A crashed service starts again by itself after 30 seconds, with no limit on the attempts: a short EFS outage, for
+# example, stops the services, and they come back once EFS is there again (systemd's default gives up after 5
+# quick attempts). "systemctl stop" (services-shutdown, replace-instance) and a clean exit never restart it.
+# usage: restart_unit UNIT [MODE] (MODE: on-failure, the default, or the package's own, e.g. always)
+restart_unit() {
+  mkdir -p /etc/systemd/system/$1.service.d
+  printf '%s\n' '[Unit]' 'StartLimitIntervalSec=0' '[Service]' "Restart=${2:-on-failure}" 'RestartSec=30' \
+    > /etc/systemd/system/$1.service.d/restart.conf
+  systemctl daemon-reload
+}
+#
 # The admin's own settings file of a program, on EFS: created once with an explanation, then never changed
 # (our files are rewritten at every boot; settings that must survive upgrades go to these files)
 # usage: custom_file PATH "comment line" ...
@@ -52,6 +65,11 @@ custom_file() {
   mkdir -p "${file%/*}"
   printf '%s\n' "$@" > "$file"
 }
+#
+# Steps that handle passwords and keys run untraced: set -x would write them into the install log, which is also
+# kept in the config bucket. "secret_step what it does" names the step in the log (install-finish names it when
+# the install fails there) and turns the trace off; "set -x" turns it back on. Errors still reach the log.
+secret_step() { { set +x; } 2> /dev/null; }
 #
 # Setting up system settings
 timedatectl set-timezone $TIMEZONE
@@ -66,13 +84,56 @@ sed -i "s/^udp6\(.*\)/#udp6\1/; s/^tcp6\(.*\)/#tcp6\1/" /etc/netconfig
 # Disabling amazon-ssm-agent
 systemctl disable amazon-ssm-agent
 #
+# Disabling EC2 Instance Connect: the image's package makes sshd look up temporary keys in the instance metadata at
+# every key login, as user ec2-instance-connect, which the metadata rule below refuses (root only), so it only logged
+# "failed to get IMDS token". The server is entered with the stack's key pair. sshd keeps the first value it reads
+# and reads its drop-ins in name order, so this file wins over the package's 60-ec2-instance-connect.conf, also
+# after package updates. To use Instance Connect, delete it (its lookup also needs the metadata).
+echo 'AuthorizedKeysCommand none' > /etc/ssh/sshd_config.d/50-flashlight.conf
+#
+# Disabling nm-cloud-setup: it sets up extra private IPs and network interfaces from the instance metadata, and the
+# server has one interface with one IP (AWS maps the Elastic IP itself). Left on, it polls the metadata every 5
+# minutes, and at boot NetworkManager restarts it several times a second, which logs "code=killed, status=15/TERM"
+# at every boot. Masked, so NetworkManager's dispatcher can't start it either.
+if systemctl list-unit-files nm-cloud-setup.service > /dev/null 2>&1; then
+  systemctl disable --now nm-cloud-setup.timer
+  systemctl mask nm-cloud-setup.service
+fi
+#
+# Disabling fwupd: it updates the firmware of the hardware, and an EC2 instance has none it can update; its timer
+# only downloads the firmware catalogue twice a day. The package stays (shim-x64, the UEFI boot loader, needs it
+# through dbxtool); masked, so D-Bus can't start the daemon either.
+if systemctl list-unit-files fwupd.service > /dev/null 2>&1; then
+  systemctl disable --now fwupd-refresh.timer
+  systemctl mask fwupd.service fwupd-refresh.service
+fi
+#
+# Disabling what the server doesn't use, all in the AlmaLinux image: the dnf metadata cache refresh (packages are
+# installed only at an install), SSSD (LDAP, Active Directory and Kerberos logins) and gssproxy (NFS with
+# Kerberos; EFS is mounted over TLS without it). Masked, so nothing starts them.
+for unit in dnf-makecache.timer sssd.service sssd-kcm.socket gssproxy.service; do
+  if systemctl list-unit-files $unit > /dev/null 2>&1; then
+    systemctl disable --now $unit
+    systemctl mask $unit
+  fi
+done
+# tuned applies its profile (virtual-guest) at boot and then exits: its dynamic tuning is off, so the daemon would
+# only keep about 27 MB of memory
+sed -i 's/^daemon = 1/daemon = 0/' /etc/tuned/tuned-main.conf
+#
 # Installing amazon-efs-utils (prebuilt RPM, see build/efs-utils.md) and mounting EFS
 cd ~
-efs_rpm=amazon-efs-utils-3.3.5-1.el10.x86_64.rpm
+efs_rpm=amazon-efs-utils-3.4.0-1.el10.x86_64.rpm
 aws s3 cp s3://$BUCKET_CONFIG/$efs_rpm .
 dnf install -y ./$efs_rpm
 rm $efs_rpm
 mkdir /mnt/mailserver
+# A unique NFS client identity for this instance. Without it Linux introduces itself to EFS by the hostname,
+# which the old and the new instance share during a replacement: EFS takes them for one client, and when one
+# of them reconnects or unmounts, it wipes the other's state (its file locks are lost). modprobe.d applies at
+# every boot, modprobe now to the mount below.
+echo "options nfs nfs4_unique_id=$(imds instance-id)" > /etc/modprobe.d/flashlight-nfs.conf
+modprobe nfs
 # tls: encrypt traffic to EFS (costs about 1 s of CPU per GB transferred, no visible speed loss)
 echo -e "$MAIL_STORAGE:/ /mnt/mailserver efs _netdev,tls 0 0" >> /etc/fstab
 mount -a
@@ -139,6 +200,9 @@ dnf install -y epel-release
 # in UserData, so a newer AlmaLinux release gets its matching EPEL branch.
 os_minor=$(. /etc/os-release && echo "${VERSION_ID#*.}")
 sed -i "s/-\$releasever&/-\$releasever.$os_minor\&/" /etc/yum.repos.d/epel.repo
+# Postfix 3.8.5-11 leaves its queue folder to its tmpfiles rules, which run only at the end of the install, after
+# its own install script has looked for the folder ("fatal: chdir(/var/spool/postfix)" in the mail log otherwise)
+mkdir -p /var/spool/postfix
 dnf install -y php php-cli php-fpm php-mysqlnd php-mbstring php-intl php-xml php-gd php-pecl-zip php-opcache \
   httpd httpd-tools mod_ssl mariadb mariadb-server \
   postfix postfix-mysql dovecot dovecot-mysql dovecot-pigeonhole \
@@ -156,10 +220,15 @@ sed -i 's/^#Domain = .*/Domain = localdomain/' /etc/idmapd.conf
 # - the logrotate rule of sssd-common (sssd itself isn't installed) rotates as user sssd, which can't read the
 #   root-owned log folder
 if id sssd > /dev/null 2>&1 && [ -d /var/log/sssd ]; then chown sssd:sssd /var/log/sssd; fi
-# - the tmpfiles rules of httpd and mariadb create folders where we keep links to EFS (/var/www, /var/lib/mysql):
-#   the same rules without those lines (a file in /etc/tmpfiles.d replaces the package's one of the same name)
+# - the tmpfiles rules of httpd, mariadb and postfix create folders where we keep links to EFS (/var/www,
+#   /var/lib/mysql, the mail queue /var/spool/postfix): the same rules without those lines (a file in
+#   /etc/tmpfiles.d replaces the package's one of the same name). They run before EFS is mounted, and would report
+#   the links as broken. Postfix's rules are all about its queue (since 3.8.5-11), so its file ends up empty.
 grep -vE '^d /var/www( |/)' /usr/lib/tmpfiles.d/httpd.conf > /etc/tmpfiles.d/httpd.conf
 grep -vE '^d /var/lib/mysql ' /usr/lib/tmpfiles.d/mariadb.conf > /etc/tmpfiles.d/mariadb.conf
+if [ -f /usr/lib/tmpfiles.d/postfix.conf ]; then
+  grep -vE '^[a-zA-Z] /var/spool/postfix( |/|$)' /usr/lib/tmpfiles.d/postfix.conf > /etc/tmpfiles.d/postfix.conf || true
+fi
 # - the boot image (initramfs) of the AlmaLinux cloud image has NFS support, which starts rpcbind, rpc.statd and
 #   rpc.idmapd early in the boot with their own warnings. The root file system is on EBS and EFS is mounted after
 #   the boot, so it is left out; the image of the kernel this instance boots next is rebuilt (about 45 seconds)
@@ -179,32 +248,38 @@ printf '%s\n' "# Flashlight: instance metadata for root only (base.sh). DON'T ED
 echo 'include "/etc/nftables/flashlight-imds.nft"' >> /etc/sysconfig/nftables.conf
 systemctl enable --now nftables
 #
-# Swap (stack parameter Swap): a cushion for short memory peaks, so the kernel doesn't stop a service when memory
-# runs out for a moment; the server slows down instead (if that happens often, it needs a bigger instance type).
+# Swap: a cushion for short memory peaks (ClamAV holds two copies of its database while it loads new signatures,
+# for example), so the kernel doesn't stop a service when memory runs out for a moment; the server slows down
+# instead (if that happens often, it needs a bigger instance type). Idle mail connections are what goes out first.
 # Half the memory, at most 4 GB: 2 GB of memory -> 1 GB of swap, 4 -> 2, 8 and more -> 4. Besides it the disk keeps
 # 1.5 GB free; the template's rules ask for a big enough disk, and if the swap still doesn't fit, it is made
 # smaller (or none) with a WARN line in instance.log. The disk is encrypted, so whatever goes to swap is too.
-if [ "$SWAP" = 'ENABLED' ]; then
-  mem_mb=$(awk '/^MemTotal/ {print int($2 / 1024)}' /proc/meminfo)
-  # (memory rounded to whole GB, as the instance types are sold, then halved)
-  swap_mb=$(( (mem_mb + 512) / 1024 * 512 ))
-  if [ $swap_mb -gt 4096 ]; then swap_mb=4096; fi
-  fit_mb=$(( $(df -m --output=avail / | tail -1) - 1536 ))
-  if [ $fit_mb -lt $swap_mb ]; then
-    /usr/local/sbin/instance-log WARN "swap: only $(( fit_mb > 0 ? fit_mb : 0 )) of $swap_mb MB fit on the disk, choose a bigger DiskVolumeSize"
-    swap_mb=$(( fit_mb > 0 ? fit_mb / 256 * 256 : 0 ))
-  fi
-  if [ $swap_mb -ge 256 ]; then
-    dd if=/dev/zero of=/swapfile bs=1M count=$swap_mb status=none
-    chmod 600 /swapfile
-    mkswap /swapfile
-    swapon /swapfile
-    echo '/swapfile none swap defaults 0 0' >> /etc/fstab
-  fi
-  # swap only under real memory pressure
-  echo 'vm.swappiness = 10' > /etc/sysctl.d/90-flashlight-swap.conf
-  sysctl -p /etc/sysctl.d/90-flashlight-swap.conf
+mem_mb=$(awk '/^MemTotal/ {print int($2 / 1024)}' /proc/meminfo)
+# (memory rounded to whole GB, as the instance types are sold, then halved)
+swap_mb=$(( (mem_mb + 512) / 1024 * 512 ))
+if [ $swap_mb -gt 4096 ]; then swap_mb=4096; fi
+fit_mb=$(( $(df -m --output=avail / | tail -1) - 1536 ))
+if [ $fit_mb -lt $swap_mb ]; then
+  /usr/local/sbin/instance-log WARN "swap: only $(( fit_mb > 0 ? fit_mb : 0 )) of $swap_mb MB fit on the disk, choose a bigger DiskVolumeSize"
+  swap_mb=$(( fit_mb > 0 ? fit_mb / 256 * 256 : 0 ))
 fi
+if [ $swap_mb -ge 256 ]; then
+  dd if=/dev/zero of=/swapfile bs=1M count=$swap_mb status=none
+  chmod 600 /swapfile
+  mkswap /swapfile
+  swapon /swapfile
+  echo '/swapfile none swap defaults 0 0' >> /etc/fstab
+fi
+# swap only under real memory pressure
+echo 'vm.swappiness = 10' > /etc/sysctl.d/90-flashlight-swap.conf
+sysctl -p /etc/sysctl.d/90-flashlight-swap.conf
+#
+# Every IMAP connection waiting in IDLE uses an inotify instance of the vmail user: the kernel's default of 128
+# was exceeded at ~1000 connections in load tests, and Dovecot then falls back to checking the folders by timer.
+# The kernel spends memory on these only for what is in use.
+printf '%s\n' 'fs.inotify.max_user_instances = 8192' 'fs.inotify.max_user_watches = 524288' \
+  > /etc/sysctl.d/90-flashlight-inotify.conf
+sysctl -p /etc/sysctl.d/90-flashlight-inotify.conf
 #
 # One-time jobs after the final reboot: /etc/cron.once runs once from @reboot. install-finish puts the
 # READY check there (services up -> READY and the CloudFormation signal), only after a good install.
@@ -214,7 +289,8 @@ printf '#!/bin/bash\n#\nfor script in `find /etc/cron.once -type f`; do $script;
   > /usr/bin/cron-boot-runner
 chmod 744 /usr/bin/cron-boot-runner
 #
-# Credentials file creating (the install trace with passwords goes to the root-only flashlight-install.log)
+# Credentials file creating (the install trace goes to the root-only flashlight-install.log; the passwords
+# themselves are untraced, see secret_step)
 if [ ! -f $flag ]; then
   chmod 700 /mnt/mailserver/root
   touch /mnt/mailserver/root/credentials
@@ -234,10 +310,13 @@ if [ ! -f $flag ]; then
 fi
 rm -rf /var/lib/mysql
 ln -s /mnt/mailserver/mysql /var/lib/mysql
-# all clients are local (unix socket), so don't listen on the network
+# all clients are local (unix socket), so don't listen on the network. log_warnings 1 instead of MariaDB's
+# default 2: Postfix's proxymap ends its database connections without a goodbye when it exits (after 100
+# clients, as every Postfix process), and level 2 logs each of them as "Aborted connection" (dozens an hour
+# under load). Real errors and warnings are still logged; set 2 in custom.cnf to see these again.
 printf '%s\n' "# Flashlight's MariaDB settings. DON'T EDIT: rewritten at every boot from the Flashlight release." \
   "# Your own settings go to /mnt/mailserver/etc/mariadb/custom.cnf (zz-custom.cnf here, read last)." \
-  "[mysqld]" "bind-address = 127.0.0.1" > /etc/my.cnf.d/flashlight.cnf
+  "[mysqld]" "bind-address = 127.0.0.1" "log_warnings = 1" > /etc/my.cnf.d/flashlight.cnf
 custom_file /mnt/mailserver/etc/mariadb/custom.cnf \
   "# Your MariaDB settings. MariaDB reads this file last (as /etc/my.cnf.d/zz-custom.cnf), so the values set" \
   "# here win; Flashlight upgrades never change this file. Restart MariaDB after editing it. Example:" \
@@ -251,25 +330,20 @@ unit_env mariadb "MYSQLD_OPTS= _WSREP_NEW_CLUSTER="
 # if memory runs out anyway, the kernel stops other processes first (Rspamd and the PHP workers come back by
 # themselves; without the database, logins and mail lookups fail)
 printf '[Service]\nOOMScoreAdjust=-500\n' > /etc/systemd/system/mariadb.service.d/oom.conf
-systemctl daemon-reload
+# the package restarts it only after a crash signal (on-abort); an exit on an error (a short EFS outage, a lost
+# NFS lock) left it stopped and the server without logins
+restart_unit mariadb
 systemctl enable --now mariadb
 #
 # Data from an older Flashlight release: back up, run the migrations up to this release, restore all on a failure
 /usr/local/sbin/upgrade-data run
 #
 # Installing phpMyAdmin and postfixadmin (pinned releases from the config bucket)
+pfa_tar=postfixadmin-v4.0.7-php74.tar.gz
+pma_tar=phpMyAdmin-5.2.3-all-languages.tar.gz
 if [ ! -f $flag ]; then
   cd ~
-  pfa_tar=postfixadmin-v4.0.6-php74.tar.gz
-  pma_tar=phpMyAdmin-5.2.3-all-languages.tar.gz
   mkdir /mnt/mailserver/www/admin
-  webadmpass="$(pwgen 16 1)"
-  htpasswd -bcB /mnt/mailserver/www/admin/.htpasswd admin $webadmpass
-  printf "Admin web access\n   Link: https://$ADMIN_DOMAIN\n" >> /root/credentials
-  printf "   login: admin\n   password: $webadmpass\n\n" >> /root/credentials
-  postfixadminpassword="$(pwgen 16 1)"
-  printf "PostfixAdmin superadmin\n   Link: https://$ADMIN_DOMAIN/padmin\n" >> /root/credentials
-  printf "   login: $ADMIN_EMAIL\n   password: $postfixadminpassword\n\n" >> /root/credentials
   #
   # The release tarball already contains vendor/ (no composer needed); the php74 build runs on PHP 7.4+
   aws s3 cp s3://$BUCKET_CONFIG/$pfa_tar .
@@ -278,13 +352,6 @@ if [ ! -f $flag ]; then
   /usr/local/sbin/upgrade-data set postfixadmin $pfa_tar
   rm $pfa_tar
   chown -R apache: /mnt/mailserver/www/admin/padmin/templates_c
-  setuppassword="$(pwgen 16 1)"
-  setuphash=$(php -r 'echo password_hash($argv[1], PASSWORD_DEFAULT);' "$setuppassword")
-  /usr/local/sbin/secrets set padmin_setup_hash "$setuphash"
-  printf "PostfixAdmin setup password\n   password: $setuppassword\n\n" >> /root/credentials
-  db_postfix_password="$(pwgen 16 1)"
-  /usr/local/sbin/secrets set postfix_db_password $db_postfix_password
-  printf "MariaDB\n   login: postfix\n   password: $db_postfix_password\n\n" >> /root/credentials
   #
   aws s3 cp s3://$BUCKET_CONFIG/$pma_tar .
   mkdir /mnt/mailserver/www/admin/phpmyadmin
@@ -293,6 +360,26 @@ if [ ! -f $flag ]; then
   rm $pma_tar
   mkdir /mnt/mailserver/www/admin/phpmyadmin/tmp
   chown -R apache: /mnt/mailserver/www/admin/phpmyadmin/tmp
+  #
+  # The passwords of the admin site, PostfixAdmin and the databases: in /root/credentials for the admin, and in the
+  # secrets file for our configs
+  secret_step generate the passwords of the admin site, PostfixAdmin and the databases
+  webadmpass="$(pwgen 16 1)"
+  htpasswd -bcB /mnt/mailserver/www/admin/.htpasswd admin $webadmpass
+  printf "Admin web access\n   Link: https://$ADMIN_DOMAIN\n" >> /root/credentials
+  printf "   login: admin\n   password: $webadmpass\n\n" >> /root/credentials
+  # PostfixAdmin refuses a password with fewer than 2 digits; pwgen promises only one (1 password in 4 has fewer)
+  postfixadminpassword="$(pwgen 16 1)"
+  until [[ $postfixadminpassword =~ [0-9].*[0-9] ]]; do postfixadminpassword="$(pwgen 16 1)"; done
+  printf "PostfixAdmin superadmin\n   Link: https://$ADMIN_DOMAIN/padmin\n" >> /root/credentials
+  printf "   login: $ADMIN_EMAIL\n   password: $postfixadminpassword\n\n" >> /root/credentials
+  setuppassword="$(pwgen 16 1)"
+  setuphash=$(php -r 'echo password_hash($argv[1], PASSWORD_DEFAULT);' "$setuppassword")
+  /usr/local/sbin/secrets set padmin_setup_hash "$setuphash"
+  printf "PostfixAdmin setup password\n   password: $setuppassword\n\n" >> /root/credentials
+  db_postfix_password="$(pwgen 16 1)"
+  /usr/local/sbin/secrets set postfix_db_password $db_postfix_password
+  printf "MariaDB\n   login: postfix\n   password: $db_postfix_password\n\n" >> /root/credentials
   pmapassword="$(pwgen 16 1)"
   roundcubepassword="$(pwgen 16 1)"
   blowfishsecret="$(pwgen 32 1)"
@@ -301,23 +388,31 @@ if [ ! -f $flag ]; then
   /usr/local/sbin/secrets set pma_blowfish_secret $blowfishsecret
   printf "MariaDB\n   login: pma\n   password: $pmapassword\n\n" >> /root/credentials
   printf "MariaDB\n   login: roundcube\n   password: $roundcubepassword\n\n" >> /root/credentials
+  set -x
+else
+  # Existing data with an older package of an application: updated by its recipe in upgrade-data (with a backup,
+  # restored on a failure), before our configs below are written into the application's folder
+  /usr/local/sbin/upgrade-data app postfixadmin $pfa_tar
+  /usr/local/sbin/upgrade-data app phpmyadmin $pma_tar
 fi
 #
 # Our configs of PostfixAdmin and phpMyAdmin, rebuilt at every boot from the release with the values from the
 # secrets file. Each ends by including the admin's own settings from EFS (custom.php), so those win.
 # (the values are read in separate assignments, so a missing secret stops the install)
 padmin_conf=/mnt/mailserver/www/admin/padmin/config.local.php
+pma_conf=/mnt/mailserver/www/admin/phpmyadmin/config.inc.php
+aws s3 cp s3://$BUCKET_CONFIG/config.local.php $padmin_conf
+aws s3 cp s3://$BUCKET_CONFIG/config.inc.php $pma_conf
+secret_step write the passwords into the PostfixAdmin and phpMyAdmin configs
 padmin_db_password=$(/usr/local/sbin/secrets get postfix_db_password)
 padmin_setup_hash=$(/usr/local/sbin/secrets get padmin_setup_hash)
-aws s3 cp s3://$BUCKET_CONFIG/config.local.php $padmin_conf
 # '|' as the sed delimiter: the bcrypt setup hash can contain '/'
 sed -i "s|{database_password}|$padmin_db_password|; s|{admin_email}|$ADMIN_EMAIL|g; \
   s|{admindomain}|$ADMIN_DOMAIN|g; s|{setup_password}|$padmin_setup_hash|" $padmin_conf
-pma_conf=/mnt/mailserver/www/admin/phpmyadmin/config.inc.php
 pma_db_password=$(/usr/local/sbin/secrets get pma_db_password)
 pma_blowfish_secret=$(/usr/local/sbin/secrets get pma_blowfish_secret)
-aws s3 cp s3://$BUCKET_CONFIG/config.inc.php $pma_conf
 sed -i "s/{pmapassword}/$pma_db_password/; s/{blowfish_secret}/$pma_blowfish_secret/" $pma_conf
+set -x
 custom_file /mnt/mailserver/etc/postfixadmin/custom.php "<?php" \
   "// Your PostfixAdmin settings. Flashlight's config.local.php includes this file at its end, so the values set" \
   "// here win; Flashlight upgrades never change this file. Example:" "//   \$CONF['page_size'] = '50';"
@@ -333,15 +428,19 @@ if [ ! -f $flag ]; then
   mysql -u root < /mnt/mailserver/www/admin/phpmyadmin/sql/create_tables.sql
   mysql -u root -e "CREATE DATABASE postfix CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
   mysql -u root -e "CREATE DATABASE roundcube CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
+  secret_step create the database users with their passwords
   mysql -u root -e "GRANT ALL PRIVILEGES ON postfix.* TO 'postfix'@'localhost' identified by '$db_postfix_password';"
   mysql -u root -e "GRANT ALL PRIVILEGES ON phpmyadmin.* TO 'pma'@'localhost' identified by '$pmapassword';"
   mysql -u root -e "GRANT ALL PRIVILEGES ON roundcube.* TO 'roundcube'@'localhost' identified by '$roundcubepassword';"
+  set -x
   mysql -u root -e "FLUSH PRIVILEGES;"
   #
   # creating postfix db
   php /mnt/mailserver/www/admin/padmin/public/upgrade.php
+  secret_step create the PostfixAdmin superadmin
   /mnt/mailserver/www/admin/padmin/scripts/postfixadmin-cli admin add $ADMIN_EMAIL --superadmin 1 --active 1 \
     --password $postfixadminpassword --password2 $postfixadminpassword
+  set -x
 fi
 rm -r /var/www
 ln -s /mnt/mailserver/www /var/www
@@ -401,7 +500,7 @@ fi
 #
 # Spot instances: on the interruption notice and on the weekly price check the instance stops its
 # services and asks the ASG to replace it (replace-instance); events go to /mnt/mailserver/log/instance.log
-for tool in replace-instance rebuild-check mailbox-cleanup db-backup outbound-alert; do
+for tool in replace-instance rebuild-check mailbox-cleanup db-backup outbound-alert valkey-check; do
   aws s3 cp s3://$BUCKET_CONFIG/$tool /mnt/mailserver/automation/
   chmod 700 /mnt/mailserver/automation/$tool
 done
@@ -434,7 +533,9 @@ crontab=/mnt/mailserver/etc/crontab
   # scheduled rebuild (stack parameter RebuildAfterDays, 0 = off), two hours after the price check
   [ "$REBUILD_AFTER_DAYS" -gt 0 ] && echo "15   3  *  *  0 root /mnt/mailserver/automation/rebuild-check $REBUILD_AFTER_DAYS"
   # spam filter: warns the admin about mailboxes that may have been taken over (sending limits, outgoing spam)
-  [ "$ANTISPAM" = 'ENABLED' ] && echo "*/10 *  *  *  * root /mnt/mailserver/automation/outbound-alert $ADMIN_EMAIL $(echo "$DOMAIN_NAMES" | cut -d',' -f 1)"
+  [ "$ANTISPAM" = 'ENABLED' ] && echo "*/10 *  *  *  * root /mnt/mailserver/automation/outbound-alert $ADMIN_EMAIL $(echo "$DOMAIN_NAMES" | cut -d',' -f 1) $ADMIN_DOMAIN"
+  # spam filter: a WARN line in instance.log while its data in Valkey take more than 85% of the memory cap
+  [ "$ANTISPAM" = 'ENABLED' ] && echo '40   5  *  *  * root /mnt/mailserver/automation/valkey-check'
   echo '# Flashlight end'
 } > $crontab.new
 mv $crontab.new $crontab
@@ -459,13 +560,15 @@ sed -i "s/{MainDomain}/$(echo "$DOMAIN_NAMES" | cut -d',' -f 1)/; s/{MailDomain}
   s/{SmtpdMilters}/$milters/" /etc/postfix/main.cf
 # lookups in the PostfixAdmin database; the files hold its password: root and the postfix group only
 # (the password is read in a separate assignment, so a missing secret stops the install)
-postfix_db_password=$(/usr/local/sbin/secrets get postfix_db_password)
 mkdir -p /etc/postfix/mysql
 for map in virtual_mailbox_domains virtual_mailbox_maps virtual_alias_domain_mailbox_maps virtual_alias_maps \
     virtual_alias_domain_maps virtual_alias_domain_catchall_maps relay_domains sender_login_maps; do
   aws s3 cp s3://$BUCKET_CONFIG/$map.cf /etc/postfix/mysql/
 done
+secret_step write the database password into the Postfix lookups
+postfix_db_password=$(/usr/local/sbin/secrets get postfix_db_password)
 sed -i "s/{database_password}/$postfix_db_password/" /etc/postfix/mysql/*.cf
+set -x
 chown root:postfix /etc/postfix/mysql/*.cf
 chmod 640 /etc/postfix/mysql/*.cf
 # the admin's own settings, applied over ours one by one (a continuation line, starting with a space, belongs
@@ -492,8 +595,12 @@ fi
 rm -rf /var/spool/postfix
 ln -s /mnt/mailserver/spool/postfix /var/spool/postfix
 efs_unit postfix
-# its lookups go to the PostfixAdmin database
-start_after postfix mariadb.service
+restart_unit postfix
+# its lookups go to the PostfixAdmin database; with the spam filter it also waits for Rspamd (and Rspamd for the
+# virus scanner), so mail isn't taken before it can be checked. Ordering only: if Rspamd fails, Postfix still starts
+postfix_after="mariadb.service"
+[ "$ANTISPAM" = 'ENABLED' ] && postfix_after="$postfix_after rspamd.service"
+start_after postfix $postfix_after
 systemctl enable postfix
 #
 # Configuring dovecot. Our dovecot.conf and dovecot-mysql.conf come from the release at every boot (the package's
@@ -520,11 +627,22 @@ sievec -c /dev/null /etc/dovecot/sieve/spam-to-junk.sieve
 aws s3 cp s3://$BUCKET_CONFIG/dovecot-mysql.conf /etc/dovecot
 imap_sieve=""
 [ "$ANTISPAM" = 'ENABLED' ] && imap_sieve=" imap_sieve"
+# IMAP connections the memory holds: ~2 MB each (1.5-1.6 MB measured in load tests), after the services (about
+# 1.5 GB, 2.5 GB with ClamAV; its second copy while loading new signatures goes to swap) and 512 MB left for the
+# page cache. Never below Dovecot's default of 1024: 2-4 GB servers keep it (too many connections there means
+# swapping, which is better than refused mail programs); 8 GB with ClamAV gets ~2350, 16 GB ~6350.
+services_mb=1536
+[ "$ANTIVIRUS" = 'ENABLED' ] && services_mb=2560
+imap_limit=$(( (mem_mb - services_mb - 512) / 2 ))
+[ $imap_limit -lt 1024 ] && imap_limit=1024
 sed -i "s/{MainDomain}/$(echo "$DOMAIN_NAMES" | cut -d',' -f 1)/; s/{MailDomain}/$MAIL_DOMAIN/; s/{ImapSievePlugin}/$imap_sieve/" \
   /etc/dovecot/dovecot.conf
+sed -i "s/{ImapProcessLimit}/$imap_limit/; s/{ServiceClientLimit}/$(( imap_limit + 1000 ))/g" /etc/dovecot/dovecot.conf
 # (a separate assignment, so a missing secret stops the install instead of leaving an empty password)
+secret_step write the database password into the Dovecot lookups
 postfix_db_password=$(/usr/local/sbin/secrets get postfix_db_password)
 sed -i "s/{database_password}/$postfix_db_password/" /etc/dovecot/dovecot-mysql.conf
+set -x
 # the lookup file holds the database password: root and Dovecot only
 chown root:dovecot /etc/dovecot/dovecot-mysql.conf
 chmod 640 /etc/dovecot/dovecot-mysql.conf
@@ -535,15 +653,16 @@ custom_file /mnt/mailserver/etc/dovecot/custom.conf \
   "# set here win; Flashlight upgrades never change this file. Reload Dovecot after editing (systemctl reload" \
   "# dovecot). Example:" "#   protocol imap {" "#     mail_max_userip_connections = 50" "#   }"
 efs_unit dovecot
+restart_unit dovecot
 # logins are checked against the PostfixAdmin database
 start_after dovecot mariadb.service
 systemctl enable dovecot
 #
 # Installing Roundcube (webmail) with the optional Larry skin (users pick it in their settings)
+rc_tar=roundcubemail-1.7.7-complete.tar.gz
+larry_tar=roundcube-larry-03ccd35.tar.gz
 if [ ! -f $flag ]; then
   cd ~
-  rc_tar=roundcubemail-1.7.6-complete.tar.gz
-  larry_tar=roundcube-larry-03ccd35.tar.gz
   aws s3 cp s3://$BUCKET_CONFIG/$rc_tar .
   aws s3 cp s3://$BUCKET_CONFIG/$larry_tar .
   mkdir /var/www/webmail
@@ -556,18 +675,26 @@ if [ ! -f $flag ]; then
   # the web installer isn't needed: the database and the config are prepared here
   rm -rf /var/www/webmail/installer /var/www/webmail/public_html/installer.php
   chown -R apache: /var/www/webmail/temp /var/www/webmail/logs
+  secret_step generate the Roundcube encryption key
   /usr/local/sbin/secrets set roundcube_des_key "$(pwgen 32 1)"
+  set -x
   mysql roundcube < /var/www/webmail/SQL/mysql.initial.sql
+else
+  # an older package on existing data: updated by its recipe in upgrade-data, as PostfixAdmin above
+  /usr/local/sbin/upgrade-data app roundcube $rc_tar
+  /usr/local/sbin/upgrade-data app larry $larry_tar
 fi
 # Our Roundcube config, rebuilt at every boot from the release with the values from the secrets file; it ends by
 # including the admin's own settings from EFS (custom.inc.php), so those win
 rc_conf=/var/www/webmail/config/config.inc.php
-rc_db_password=$(/usr/local/sbin/secrets get roundcube_db_password)
-rc_des_key=$(/usr/local/sbin/secrets get roundcube_des_key)
 aws s3 cp s3://$BUCKET_CONFIG/config.inc.php.rc $rc_conf
 rc_antispam=""
 [ "$ANTISPAM" = 'ENABLED' ] && rc_antispam=", 'markasjunk'"
+secret_step write the database password and the encryption key into the Roundcube config
+rc_db_password=$(/usr/local/sbin/secrets get roundcube_db_password)
+rc_des_key=$(/usr/local/sbin/secrets get roundcube_des_key)
 sed -i "s|{des_key}|$rc_des_key|; s|{RoundcubePassword}|$rc_db_password|; s|{AntispamPlugins}|$rc_antispam|" $rc_conf
+set -x
 custom_file /mnt/mailserver/etc/roundcube/custom.inc.php "<?php" \
   "// Your Roundcube settings. Flashlight's config/config.inc.php includes this file at its end, so the values set" \
   "// here win; Flashlight upgrades never change this file. Example:" "//   \$config['product_name'] = 'My Mail';"
@@ -603,10 +730,12 @@ EOF
 # A fresh MariaDB 10.11 has no anonymous users or test database, so only root needs a password (for phpMyAdmin);
 # root on the server itself (shell, db-backup) keeps logging in through the unix socket without one.
 if [ ! -f $flag ]; then
+  secret_step set the MariaDB root password
   db_root_password="$(pwgen 16 1)"
   printf "MariaDB\n   Link: https://$ADMIN_DOMAIN/myadmin\n" >> /root/credentials
   printf "   login: root\n   password: $db_root_password\n\n" >> /root/credentials
   mysql -u root -e "ALTER USER root@localhost IDENTIFIED VIA unix_socket OR mysql_native_password USING PASSWORD('$db_root_password');"
+  set -x
 fi
 #
 # Configuring Apache. The package's own config (httpd.conf, ssl.conf, modules) stays on the instance, so it
@@ -618,6 +747,12 @@ rm -f /etc/httpd/conf.d/sites.conf
 aws s3 cp s3://$BUCKET_CONFIG/sites.conf /etc/httpd/conf.d/sites.conf
 sed -i "s/{AdminEmail}/$ADMIN_EMAIL/g; s/{AdminDomain}/$ADMIN_DOMAIN/g; s/{MailDomain}/$MAIL_DOMAIN/g" \
   /etc/httpd/conf.d/sites.conf
+# The admin site's start page (behind the site password): links to the admin tools, Rspamd only with Antispam.
+# Without it, the bare address shows Apache's test page.
+aws s3 cp s3://$BUCKET_CONFIG/admin-index.html /var/www/admin/index.html
+sed -i "s/{MailDomain}/$MAIL_DOMAIN/g; s/{Version}/$(/usr/local/sbin/upgrade-data release)/g" /var/www/admin/index.html
+[ "$ANTISPAM" = 'ENABLED' ] || sed -i '/<!-- rspamd -->/,/<!-- \/rspamd -->/d' /var/www/admin/index.html
+chmod 644 /var/www/admin/index.html
 # a self-signed certificate for "localhost", for the catch-all HTTPS site of sites.conf that refuses requests to
 # other names (with our real certificate, Apache warns that it doesn't match "localhost")
 openssl req -x509 -newkey rsa:2048 -nodes -days 3650 -subj /CN=localhost -addext subjectAltName=DNS:localhost \
@@ -645,6 +780,10 @@ ln -sf /mnt/mailserver/etc/httpd/custom.conf /etc/httpd/conf.d/zz-custom.conf
 rm -f /mnt/mailserver/etc/httpd/sites.conf
 # the package's httpd.conf needs its DocumentRoot to exist (/var/www is on EFS); nothing is served from it
 mkdir -p /var/www/html
+# the package loads every load balancer method (00-proxy.conf), but no balancer is used here (only proxy_fcgi to
+# PHP-FPM and proxy_http to the Rspamd web interface); without mod_heartmonitor, the heartbeat method logs
+# "AH02282: No slotmem from mod_heartmonitor" at every start
+sed -i 's/^LoadModule lbmethod_heartbeat_module/#&/' /etc/httpd/conf.modules.d/00-proxy.conf
 #
 # PHP-FPM pool sized by memory (local file, rewritten at every boot): about 10 PHP processes per 2 GB
 # (the package default of up to 50 could run a small server out of memory); processes are started
@@ -653,6 +792,8 @@ php_children=$(awk '/^MemTotal/ {n = int($2 / 1024 / 200); print (n < 5 ? 5 : n)
 sed -i "s/^pm = .*/pm = ondemand/; s/^pm.max_children = .*/pm.max_children = $php_children/" /etc/php-fpm.d/www.conf
 efs_unit httpd
 efs_unit php-fpm
+restart_unit httpd
+restart_unit php-fpm
 unit_env httpd "OPTIONS="
 # the web applications use the database; Apache passes their requests to PHP-FPM
 start_after php-fpm mariadb.service
@@ -697,51 +838,43 @@ echo "OPTIONS=\"-x $dkim/opendkim.conf\"" > /etc/sysconfig/opendkim
 efs_unit opendkim
 systemctl enable opendkim
 #
+# The virus scanner's signature database (see Antivirus below) is downloaded data only: without the scanner it
+# doesn't stay on EFS (enabling it again downloads it again, about a minute). Antivirus needs Antispam (the template
+# checks), so this runs outside the spam filter part, also when the spam filter is off.
+[ "$ANTIVIRUS" = 'ENABLED' ] || rm -rf /mnt/mailserver/clamav
+#
 # Spam filtering (stack parameter Antispam): Rspamd checks incoming mail as the first Postfix milter (main.cf);
 # spam gets an "X-Spam: Yes" header and goes to Junk (Dovecot's sieve_before), obvious spam is rejected. Valkey
 # (Redis) keeps what Rspamd learns, on EFS; Unbound is Rspamd's own DNS resolver (blocklists refuse queries that
 # come through the big shared resolvers, AWS's included). Our settings in /etc/rspamd/local.d are rewritten at
 # every boot; the admin's own live on EFS in /mnt/mailserver/etc/rspamd/override.d.
 if [ "$ANTISPAM" = 'ENABLED' ]; then
-  # Rspamd comes from its own repository (it isn't in AlmaLinux or EPEL), version 4.3 only: its bug-fix releases
-  # (4.3.x) come by themselves, a new version (4.4, 5.0) comes with a Flashlight release, after testing (the 4.3.0
-  # package, for one, stopped creating Rspamd's user and failed every install). Its packages are checked with the Rspamd signing key that comes
-  # with the release. The repository is a single server: if it can't be reached, dnf skips it (also for later
-  # updates), and the Rspamd package that came with this release is installed instead, after its signature check.
-  rspamd_rpm=rspamd-4.3.0-1.el10.x86_64.rpm
+  # Rspamd (it isn't in AlmaLinux or EPEL): the exact package that comes with this Flashlight release, installed
+  # after a check of its signature with the Rspamd signing key of the release; its dependencies come from AlmaLinux
+  # and EPEL. Rspamd's own repository isn't used: it keeps only its newest package, its bug-fix releases have
+  # changed what Flashlight relies on (the 4.3.0 package didn't create Rspamd's user, 4.3.1 moved the settings of
+  # the web interface), and it is a single slow server. A newer Rspamd comes with a Flashlight release, after testing.
+  rspamd_rpm=rspamd-4.3.1-1.el10.x86_64.rpm
   aws s3 cp s3://$BUCKET_CONFIG/rspamd.asc /etc/pki/rpm-gpg/RPM-GPG-KEY-rspamd
   rpm --import /etc/pki/rpm-gpg/RPM-GPG-KEY-rspamd
-  os_major=$(. /etc/os-release && echo "${VERSION_ID%%.*}")
-  cat > /etc/yum.repos.d/rspamd.repo <<EOF
-[rspamd]
-name=Rspamd stable repository
-baseurl=https://rspamd.com/rpm-stable/centos-$os_major/\$basearch
-enabled=1
-gpgcheck=1
-repo_gpgcheck=1
-gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-rspamd
-includepkgs=rspamd-4.3.*
-skip_if_unavailable=1
-EOF
   dnf install -y valkey unbound
-  # Rspamd's user and group, made the way its packages up to 4.2 did: the 4.3.0 package no longer creates them
-  # (its files then belong to root, and Rspamd has no user to run as)
-  getent group _rspamd > /dev/null || groupadd -r _rspamd
-  id _rspamd > /dev/null 2>&1 || useradd -g _rspamd -c "Rspamd user" -s /bin/false -r -d /var/lib/rspamd _rspamd
-  if ! dnf install -y rspamd; then
-    /usr/local/sbin/instance-log WARN "Rspamd repository unreachable: installing the release's copy ($rspamd_rpm)"
-    aws s3 cp s3://$BUCKET_CONFIG/$rspamd_rpm /root/
-    rpm -K /root/$rspamd_rpm | grep -q 'digests signatures OK'
-    dnf install -y /root/$rspamd_rpm
-    rm /root/$rspamd_rpm
-  fi
+  aws s3 cp s3://$BUCKET_CONFIG/$rspamd_rpm /root/
+  rpm -K /root/$rspamd_rpm | grep -q 'digests signatures OK'
+  dnf install -y /root/$rspamd_rpm
+  rm /root/$rspamd_rpm
   #
   # Valkey: data on EFS, so learned spam survives instance replacements. The valkey user's ID may differ on each
   # new instance, hence the chown at every boot.
   install -d -m 750 /mnt/mailserver/valkey
   chown -R valkey:valkey /mnt/mailserver/valkey
   sed -i 's|^dir .*|dir /mnt/mailserver/valkey|' /etc/valkey/valkey.conf
-  printf '%s\n' "# Flashlight: memory cap; Rspamd's learned data expire by themselves" "maxmemory 256mb" \
+  # IPv4 only: IPv6 is off, and the package's optional ::1 logs a bind warning at every start
+  sed -i 's|^bind .*|bind 127.0.0.1|' /etc/valkey/valkey.conf
+  # Memory cap. At the cap Valkey drops first the keys that expire soonest (volatile-ttl); keys without an expiry
+  # are never dropped. Expiring: rate limit counters, greylisting, caches, and Bayes words that are rare or common
+  # to spam and ham (bayes_expiry, see classifier-bayes.conf below); without an expiry: the Bayes words that
+  # clearly mark spam or ham, and the Bayes counters. valkey-check warns at 85% of the cap.
+  printf '%s\n' "# Flashlight: memory cap; at the cap the keys that expire soonest go first" "maxmemory 256mb" \
     "maxmemory-policy volatile-ttl" "# written to disk at most 5 minutes after a change, and when it stops" \
     "save 300 1 60 10000" >> /etc/valkey/valkey.conf
   #
@@ -758,6 +891,9 @@ EOF
   rspamd_conf options.inc 'dns { nameserver = ["127.0.0.1:53"]; }' "task_timeout = 60s;" \
     'dynamic_conf = "/mnt/mailserver/rspamd/rspamd_dynamic";' 'rrd = "/mnt/mailserver/rspamd/rspamd.rrd";' \
     'stats_file = "/mnt/mailserver/rspamd/stats.ucl";'
+  # The settings changed in the web interface (dynconf, from Rspamd 4.3.1; its default file is on the instance's
+  # disk). The older file above (dynamic_conf) is imported into it once and renamed to rspamd_dynamic.imported.
+  rspamd_conf dynconf.conf 'path = "/mnt/mailserver/rspamd/rspamd_dynconf.json";'
   rspamd_conf redis.conf 'servers = "127.0.0.1:6379";'
   # no greylisting: it delays legitimate mail by minutes or hours (the sender retries later)
   rspamd_conf actions.conf "reject = 15;" "add_header = 6;" "greylist = null;"
@@ -771,8 +907,12 @@ EOF
     '    bucket = { burst = 30; rate = "30 / 1h"; skip_recipients = true; }' "  }" "  user_day {" \
     '    selector = "user.lower";' '    bucket = { burst = 300; rate = "300 / 1d"; skip_recipients = true; }' "  }" "}"
   rspamd_conf settings.conf "outbound {" "  authenticated = true;" '  apply { actions { "add header" = null; } }' "}"
-  # the Bayes filter also learns by itself from mail that scores very high or very low
-  rspamd_conf classifier-bayes.conf "autolearn = true;"
+  # the Bayes filter also learns by itself from mail that scores very high or very low. expire turns on
+  # bayes_expiry (without it the learned words never expire). Its cycle gives a rare word 180 days; if by then the
+  # word clearly marks spam or ham (seen more often than average, over 3/4 in one of them), a later cycle keeps it
+  # for good, otherwise it is deleted. Words common to spam and ham go after 10 days. A shorter expire
+  # takes effect by itself; a longer one needs "expire = -1" for one full expiry cycle first (Rspamd docs).
+  rspamd_conf classifier-bayes.conf "autolearn = true;" "expire = 15552000;"
   rspamd_conf milter_headers.conf 'use = ["authentication-results", "x-spamd-bar"];'
   # OpenDKIM signs our mail
   rspamd_conf dkim_signing.conf "enabled = false;"
@@ -887,17 +1027,29 @@ EOF
       "  message = '\${SCANNER}: virus found: \"\${VIRUS}\"';" "  timeout = 20.0;" "  max_size = 20971520;" "}"
     efs_unit clamd@scan
     efs_unit clamav-freshclam
+    # clamd needs some time to load its database. It counts as started once it answers (up to 2 minutes; the "-"
+    # means a slow load doesn't fail or stop it: after 2 minutes it counts as started anyway and goes on loading),
+    # so Rspamd, and Postfix after it, don't take mail it can't scan yet. Rspamd connects for every message, so it
+    # uses clamd as soon as it answers, also after a slow start or a restart. A crash restarts it, at most 5 times
+    # in 10 minutes (then it stays down and mail goes on without the virus scan).
+    printf '%s\n' '[Unit]' 'StartLimitIntervalSec=600' 'StartLimitBurst=5' '[Service]' \
+      'ExecStartPost=-/usr/bin/clamdscan --config-file=/etc/clamd.d/scan.conf --ping=120:1' 'TimeoutStartSec=420' \
+      'Restart=on-failure' 'RestartSec=30' > /etc/systemd/system/clamd@scan.service.d/ready.conf
+    systemctl daemon-reload
+    rspamd_after="$rspamd_after clamd@scan.service"
     systemctl enable clamd@scan clamav-freshclam
   fi
   #
   # Spamhaus through DQS with the stack's key (Spamhaus refuses queries from AWS without one)
   rm -f /etc/rspamd/local.d/rbl.conf /etc/rspamd/local.d/rbl_group.conf
-  if [ -n "$DQS_KEY" ]; then
-    dqs_key=$(printf '%s' "$DQS_KEY" | sed 's/[&|\\]/\\&/g')
+  if [ -n "${DQS_KEY:+set}" ]; then
     for f in rbl rbl_group; do
       aws s3 cp s3://$BUCKET_CONFIG/spamhaus-dqs-$f.conf /etc/rspamd/local.d/$f.conf
-      sed -i "s|your_DQS_key|$dqs_key|g" /etc/rspamd/local.d/$f.conf
     done
+    secret_step write the Spamhaus DQS key into the Rspamd config
+    dqs_key=$(printf '%s' "$DQS_KEY" | sed 's/[&|\\]/\\&/g')
+    sed -i "s|your_DQS_key|$dqs_key|g" /etc/rspamd/local.d/rbl.conf /etc/rspamd/local.d/rbl_group.conf
+    set -x
     # the key: readable by Rspamd only
     chown root:_rspamd /etc/rspamd/local.d/rbl.conf /etc/rspamd/local.d/rbl_group.conf
     chmod 640 /etc/rspamd/local.d/rbl.conf /etc/rspamd/local.d/rbl_group.conf
@@ -923,6 +1075,7 @@ EOF
   # The web interface: https://<admin domain>/rspamd/, behind the admin site's password and Rspamd's own (in the
   # secrets file and /root/credentials). Apache passes the browser's address on (its own copy: a browser can't
   # forge it), so Rspamd asks for the password; only requests from the server itself (Dovecot's learning) don't.
+  secret_step set the password of the Rspamd web interface
   if ! rspamd_password=$(/usr/local/sbin/secrets get rspamd_password 2> /dev/null); then
     rspamd_password=$(pwgen 16 1)
     /usr/local/sbin/secrets set rspamd_password "$rspamd_password"
@@ -932,6 +1085,7 @@ EOF
   rspamd_hash=$(rspamadm pw -p "$rspamd_password")
   rspamd_conf worker-controller.inc "allow_file_and_shm_inputs = false;" "password = \"$rspamd_hash\";" \
     "enable_password = \"$rspamd_hash\";"
+  set -x
   chown root:_rspamd /etc/rspamd/local.d/worker-controller.inc
   chmod 640 /etc/rspamd/local.d/worker-controller.inc
   cat > /etc/httpd/flashlight-rspamd.conf <<'EOF'
@@ -1004,10 +1158,30 @@ EOF
   rspamadm configtest
   efs_unit valkey
   efs_unit rspamd
+  restart_unit valkey
+  # the package restarts Rspamd always, but after 100 ms, so 5 quick failures stopped it for good
+  restart_unit rspamd always
   # Unbound and Rspamd need the network up (Rspamd loads its lists from the internet when it starts); Rspamd also
   # uses Valkey and Unbound. Its workers listen on 127.0.0.1 ("localhost" gave each socket twice here).
   start_after unbound network-online.target
+  # IPv4 only: IPv6 is off, and Unbound would try it (a warning at every start, wasted queries to IPv6 servers)
+  printf '%s\n' 'server:' '    do-ip6: no' > /etc/unbound/conf.d/flashlight.conf
+  # Warm-up: with an empty cache, many queries at once (Rspamd when the mail queued during a replacement arrives)
+  # race to build the DNSSEC chain of trust, and a share of them fail (SERVFAIL, "validation failure ... no DS").
+  # The keys (DNSKEY) of the root and of net, com and org, where most blocklists live, are fetched one at a time
+  # first: they check the answers of those zones, also the proofs that a zone under them is unsigned. Unbound
+  # counts as started after that (well under a second), and Rspamd starts after Unbound. "-": without the
+  # internet Unbound still starts.
+  printf '%s\n' '[Service]' \
+    "ExecStartPost=-/bin/sh -c 'for q in . net. com. org.; do dig +time=3 +tries=2 @127.0.0.1 \$\$q DNSKEY > /dev/null; done'" \
+    > /etc/systemd/system/unbound.service.d/warmup.conf
   start_after rspamd valkey.service unbound.service network-online.target$rspamd_after
+  # Rspamd counts as started once its controller answers (up to a minute, never a failure: see clamd above), and
+  # Postfix starts after it (see Postfix), so no mail comes in before it is checked ("$$": systemd's own "$")
+  printf '%s\n' '[Service]' \
+    "ExecStartPost=-/bin/sh -c 'for i in \$\$(seq 60); do curl -sf http://127.0.0.1:11334/ping > /dev/null && exit 0; sleep 1; done; exit 1'" \
+    > /etc/systemd/system/rspamd.service.d/ready.conf
+  systemctl daemon-reload
   unit_env rspamd "RSPAMD_LOCAL_ADDR=127.0.0.1"
   systemctl enable unbound valkey rspamd
 fi
@@ -1037,6 +1211,19 @@ if [ "$FAIL2BAN" = 'ENABLED' ]; then
   # Apache first starts (on the first boot of an instance)
   start_after fail2ban httpd.service postfix.service dovecot.service
   systemctl enable fail2ban
+fi
+#
+# The packages that work with the data on EFS and whose version isn't fixed by the data (information only, like
+# image= and os=): which versions last used the data. MariaDB, Dovecot and Valkey follow AlmaLinux; Rspamd comes
+# with the release, but a new one has changed its data before (4.3.1).
+/usr/local/sbin/upgrade-data set mariadb "$(rpm -q mariadb-server)"
+/usr/local/sbin/upgrade-data set dovecot "$(rpm -q dovecot)"
+if [ "$ANTISPAM" = 'ENABLED' ]; then
+  /usr/local/sbin/upgrade-data set rspamd "$(rpm -q rspamd)"
+  /usr/local/sbin/upgrade-data set valkey "$(rpm -q valkey)"
+else
+  /usr/local/sbin/upgrade-data set rspamd off
+  /usr/local/sbin/upgrade-data set valkey off
 fi
 #
 # The services this instance runs, in one place for the helpers (they depend on the stack's parameters, and on

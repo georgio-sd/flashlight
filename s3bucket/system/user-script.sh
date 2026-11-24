@@ -1,4 +1,6 @@
 #!/bin/bash -xe
+# Copyright 2020-2026 Samson (https://github.com/georgio-sd)
+# SPDX-License-Identifier: LicenseRef-PolyForm-Shield-1.0.0 (see LICENSE)
 #
 # Flashlight user script (optional): your own additions to the server, e.g. extra packages or settings.
 #

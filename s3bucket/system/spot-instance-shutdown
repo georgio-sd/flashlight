@@ -1,4 +1,6 @@
 #!/bin/bash
+# Copyright 2020-2026 Samson (https://github.com/georgio-sd)
+# SPDX-License-Identifier: LicenseRef-PolyForm-Shield-1.0.0 (see LICENSE)
 #
 # Watches for the 2-minute spot interruption notice and replaces this instance cleanly when it arrives.
 # The notice appears in instance metadata as spot/instance-action, e.g. {"action":"terminate","time":"..."}

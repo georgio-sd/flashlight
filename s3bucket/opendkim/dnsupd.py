@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Copyright 2020-2026 Samson (https://github.com/georgio-sd)
+# SPDX-License-Identifier: LicenseRef-PolyForm-Shield-1.0.0 (see LICENSE)
 """
 Writes the server's mail DNS records to Route 53 (run by base.sh at every boot).
 

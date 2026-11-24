@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 # olefy (Heinlein Support GmbH), https://github.com/HeinleinSupport/olefy, olefy.py at commit 9c01c57,
 # Apache License 2.0; unchanged below this header. Flashlight runs it as the olefy service (base.sh).
+# Not under Flashlight's license: the content below keeps its own (see THIRD-PARTY.md).
 
 # Copyright (c) 2020, Dennis Kalbhen <d.kalbhen@heinlein-support.de>
 # Copyright (c) 2020, Carsten Rosenberg <c.rosenberg@heinlein-support.de>

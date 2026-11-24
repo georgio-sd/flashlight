@@ -1,13 +1,14 @@
+<!-- Copyright 2020-2026 Samson (https://github.com/georgio-sd). SPDX-License-Identifier: LicenseRef-PolyForm-Shield-1.0.0 (see LICENSE) -->
 # Building amazon-efs-utils for AlmaLinux 10
 
 The mail server installs amazon-efs-utils from a prebuilt RPM in the public bucket,
 not from source. Nothing in this file runs on the mail server. Use a temporary
 EC2 instance and terminate it when you are done.
 
-Current build: `amazon-efs-utils-3.3.5-1.el10.x86_64.rpm`, built 2026-11-10 on
-AlmaLinux 10.2 with Rust 1.99.1 (rustup).
-SHA-256: `1dc67fe4083b9f4d4bbe0fdb6e0b0cb434f5f94d58666e028caeaf623b7e5eef`.
-Published at `s3://mail-server-bundles/v1.0/packages/`.
+Current build: `amazon-efs-utils-3.4.0-1.el10.x86_64.rpm`, built 2026-11-23 on
+AlmaLinux 10.3 with Rust 1.100.0 (rustup).
+SHA-256: `42de00058d806c9a4569ca8ee2fc10f42dc974bd143e4be55734d8df566eb9f7`.
+Published in `packages/` of the release folder (`s3://mail-server-bundles/vX.Y/packages/`).
 
 ## When to rebuild
 
@@ -31,7 +32,7 @@ sh rustup-init.sh -y --profile minimal --no-modify-path
 export PATH=/root/.cargo/bin:$PATH
 
 # 3. Sources of the wanted release
-git clone --depth 1 --branch v3.3.5 https://github.com/aws/efs-utils
+git clone --depth 1 --branch v3.4.0 https://github.com/aws/efs-utils
 cd efs-utils
 make sources
 
@@ -69,5 +70,5 @@ mount.efs --version
 sha256sum $R
 ```
 
-Upload it to `s3://mail-server-bundles/v1.0/packages/` and update the file name in the
-`Files` list of `1-dns-preset.yaml`.
+Upload it to `s3://mail-server-bundles/vX.Y/packages/` and update the file name in `base.sh`
+(`efs_rpm`) and in the `Files` list of `1-dns-preset.yaml`.

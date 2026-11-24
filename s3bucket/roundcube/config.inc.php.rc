@@ -1,4 +1,6 @@
 <?php
+// Copyright 2020-2026 Samson (https://github.com/georgio-sd)
+// SPDX-License-Identifier: LicenseRef-PolyForm-Shield-1.0.0 (see LICENSE)
 /**
  * Flashlight overrides for Roundcube 1.7.
  * DON'T EDIT THIS FILE: base.sh rewrites it at every boot from the Flashlight release, so upgrades can

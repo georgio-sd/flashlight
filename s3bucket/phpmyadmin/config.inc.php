@@ -1,4 +1,6 @@
 <?php
+// Copyright 2020-2026 Samson (https://github.com/georgio-sd)
+// SPDX-License-Identifier: LicenseRef-PolyForm-Shield-1.0.0 (see LICENSE)
 /* vim: set expandtab sw=4 ts=4 sts=4: */
 /**
  * Flashlight configuration of phpMyAdmin.

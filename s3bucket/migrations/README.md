@@ -1,3 +1,4 @@
+<!-- Copyright 2020-2026 Samson (https://github.com/georgio-sd). SPDX-License-Identifier: LicenseRef-PolyForm-Shield-1.0.0 (see LICENSE) -->
 # Data migrations
 
 `upgrade-<from>-<to>.sh` brings the data on EFS from release `<from>` to the next release `<to>`. A release ships
