@@ -95,6 +95,10 @@ default.
   new Rspamd comes only with a Flashlight release, after testing (its bug-fix releases had changed what the server
   relies on). The settings changed in the Rspamd web interface move to its new format at the upgrade and stay on
   the mail storage.
+- What the spam filter learns no longer piles up without end: a learned word that doesn't turn out to mark spam
+  or normal mail clearly is deleted after 180 days (words that do are kept), so its memory (256 MB) doesn't fill
+  up over the years and push out the sending limit counters. While it is over 85% full, a daily `WARN` line in
+  `instance.log` says so.
 - The warning about a mailbox that may have been taken over comes for going over the sending limits, as before,
   but for mail refused as spam, a virus or a blocked attachment only from 5 such messages in 6 hours (one is
   usually the user's own mistake). Its subject and text say what happened and link to the spam filter's history.
@@ -137,7 +141,8 @@ default.
 - Valkey and Unbound use IPv4 only (IPv6 is off): no more warnings at every start, and no DNS queries wasted on
   IPv6 servers; ManageSieve (webmail filters) listens only on 127.0.0.1. Services the server doesn't use are off:
   fwupd (firmware updates, of which an EC2 instance has none), the dnf metadata refresh, SSSD and gssproxy;
-  tuned applies its profile at boot and exits instead of staying in memory.
+  tuned applies its profile at boot and exits instead of staying in memory. EC2 Instance Connect's SSH key lookup
+  is off: it can't reach the instance metadata (root only) and only logged "failed to get IMDS token" at SSH logins.
 - The number of mail program connections grows with the server's memory: about 2350 on 8 GB with the antivirus,
   6350 on 16 GB (1024, Dovecot's default, on 2-4 GB servers).
 

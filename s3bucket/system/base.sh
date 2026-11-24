@@ -84,6 +84,13 @@ sed -i "s/^udp6\(.*\)/#udp6\1/; s/^tcp6\(.*\)/#tcp6\1/" /etc/netconfig
 # Disabling amazon-ssm-agent
 systemctl disable amazon-ssm-agent
 #
+# Disabling EC2 Instance Connect: the image's package makes sshd look up temporary keys in the instance metadata at
+# every key login, as user ec2-instance-connect, which the metadata rule below refuses (root only), so it only logged
+# "failed to get IMDS token". The server is entered with the stack's key pair. sshd keeps the first value it reads
+# and reads its drop-ins in name order, so this file wins over the package's 60-ec2-instance-connect.conf, also
+# after package updates. To use Instance Connect, delete it (its lookup also needs the metadata).
+echo 'AuthorizedKeysCommand none' > /etc/ssh/sshd_config.d/50-flashlight.conf
+#
 # Disabling nm-cloud-setup: it sets up extra private IPs and network interfaces from the instance metadata, and the
 # server has one interface with one IP (AWS maps the Elastic IP itself). Left on, it polls the metadata every 5
 # minutes, and at boot NetworkManager restarts it several times a second, which logs "code=killed, status=15/TERM"
@@ -493,7 +500,7 @@ fi
 #
 # Spot instances: on the interruption notice and on the weekly price check the instance stops its
 # services and asks the ASG to replace it (replace-instance); events go to /mnt/mailserver/log/instance.log
-for tool in replace-instance rebuild-check mailbox-cleanup db-backup outbound-alert; do
+for tool in replace-instance rebuild-check mailbox-cleanup db-backup outbound-alert valkey-check; do
   aws s3 cp s3://$BUCKET_CONFIG/$tool /mnt/mailserver/automation/
   chmod 700 /mnt/mailserver/automation/$tool
 done
@@ -527,6 +534,8 @@ crontab=/mnt/mailserver/etc/crontab
   [ "$REBUILD_AFTER_DAYS" -gt 0 ] && echo "15   3  *  *  0 root /mnt/mailserver/automation/rebuild-check $REBUILD_AFTER_DAYS"
   # spam filter: warns the admin about mailboxes that may have been taken over (sending limits, outgoing spam)
   [ "$ANTISPAM" = 'ENABLED' ] && echo "*/10 *  *  *  * root /mnt/mailserver/automation/outbound-alert $ADMIN_EMAIL $(echo "$DOMAIN_NAMES" | cut -d',' -f 1) $ADMIN_DOMAIN"
+  # spam filter: a WARN line in instance.log while its data in Valkey take more than 85% of the memory cap
+  [ "$ANTISPAM" = 'ENABLED' ] && echo '40   5  *  *  * root /mnt/mailserver/automation/valkey-check'
   echo '# Flashlight end'
 } > $crontab.new
 mv $crontab.new $crontab
@@ -861,7 +870,11 @@ if [ "$ANTISPAM" = 'ENABLED' ]; then
   sed -i 's|^dir .*|dir /mnt/mailserver/valkey|' /etc/valkey/valkey.conf
   # IPv4 only: IPv6 is off, and the package's optional ::1 logs a bind warning at every start
   sed -i 's|^bind .*|bind 127.0.0.1|' /etc/valkey/valkey.conf
-  printf '%s\n' "# Flashlight: memory cap; Rspamd's learned data expire by themselves" "maxmemory 256mb" \
+  # Memory cap. At the cap Valkey drops first the keys that expire soonest (volatile-ttl); keys without an expiry
+  # are never dropped. Expiring: rate limit counters, greylisting, caches, and Bayes words that are rare or common
+  # to spam and ham (bayes_expiry, see classifier-bayes.conf below); without an expiry: the Bayes words that
+  # clearly mark spam or ham, and the Bayes counters. valkey-check warns at 85% of the cap.
+  printf '%s\n' "# Flashlight: memory cap; at the cap the keys that expire soonest go first" "maxmemory 256mb" \
     "maxmemory-policy volatile-ttl" "# written to disk at most 5 minutes after a change, and when it stops" \
     "save 300 1 60 10000" >> /etc/valkey/valkey.conf
   #
@@ -894,8 +907,12 @@ if [ "$ANTISPAM" = 'ENABLED' ]; then
     '    bucket = { burst = 30; rate = "30 / 1h"; skip_recipients = true; }' "  }" "  user_day {" \
     '    selector = "user.lower";' '    bucket = { burst = 300; rate = "300 / 1d"; skip_recipients = true; }' "  }" "}"
   rspamd_conf settings.conf "outbound {" "  authenticated = true;" '  apply { actions { "add header" = null; } }' "}"
-  # the Bayes filter also learns by itself from mail that scores very high or very low
-  rspamd_conf classifier-bayes.conf "autolearn = true;"
+  # the Bayes filter also learns by itself from mail that scores very high or very low. expire turns on
+  # bayes_expiry (without it the learned words never expire). Its cycle gives a rare word 180 days; if by then the
+  # word clearly marks spam or ham (seen more often than average, over 3/4 in one of them), a later cycle keeps it
+  # for good, otherwise it is deleted. Words common to spam and ham go after 10 days. A shorter expire
+  # takes effect by itself; a longer one needs "expire = -1" for one full expiry cycle first (Rspamd docs).
+  rspamd_conf classifier-bayes.conf "autolearn = true;" "expire = 15552000;"
   rspamd_conf milter_headers.conf 'use = ["authentication-results", "x-spamd-bar"];'
   # OpenDKIM signs our mail
   rspamd_conf dkim_signing.conf "enabled = false;"

@@ -207,6 +207,7 @@ Resources:
       - 'system/base.sh'
       - 'system/double-inst-prot.service'
       - 'system/services-shutdown'
+      - 'system/valkey-check'
       - 'mariadb/db-backup'
       - 'phpmyadmin/config.inc.php'
       - 'postfixadmin/config.local.php'

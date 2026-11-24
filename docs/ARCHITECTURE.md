@@ -93,7 +93,8 @@ associations, SNS subscriptions), short-lived Spot requests, and the network obj
    - associates the Elastic IP;
    - writes its own flag `flag-ec2id-<instance id>` on EFS, which makes any other running instance stop its
      services (see [Only one instance](#only-one-instance));
-   - turns off what the image runs but the server doesn't need (amazon-ssm-agent; nm-cloud-setup, which sets up
+   - turns off what the image runs but the server doesn't need (amazon-ssm-agent; EC2 Instance Connect's SSH key
+     lookup, `/etc/ssh/sshd_config.d/50-flashlight.conf`; nm-cloud-setup, which sets up
      extra IPs and network interfaces from the instance metadata, while the server has one interface with one IP);
    - creates swap, quiets known harmless warnings, installs the packages;
    - starts MariaDB and, if the data are from an older release, upgrades them (see [UPGRADING](UPGRADING.md));
@@ -194,7 +195,7 @@ already upgraded to a newer release.
 | BACKUP | The daily database dump |
 | ALERT | A mailbox that may be compromised |
 | CHECK, ERROR | The weekly Spot price check: its decision with the prices, or why it couldn't compare |
-| WARN | Something worked with a fallback (swap made smaller...), or an AlertEmail address isn't confirmed |
+| WARN | Something worked with a fallback (swap made smaller...), an AlertEmail address isn't confirmed, or the spam filter's data are over 85% of Valkey's memory cap |
 | USER | The admin's user-script.sh failed |
 
 ## Data on EFS
@@ -369,7 +370,10 @@ With Antispam (the default), the spam filter is Rspamd 4.3 with its own helpers:
   repository isn't used: it keeps only its newest package, and its bug-fix releases have changed what Flashlight
   relies on. A newer Rspamd comes with a Flashlight release, after testing.
 - **Valkey** (a Redis fork) keeps the Bayes statistics, fuzzy hashes and rate limit counters, on EFS, written
-  at most 5 minutes after a change. Memory is capped at 256 MB; the data expire by themselves.
+  at most 5 minutes after a change. Memory is capped at 256 MB. Bayes words get 180 days (Rspamd's
+  bayes_expiry): the ones that by then clearly mark spam or ham are kept, the others are deleted; words common
+  to spam and ham go after 10 days. At the cap Valkey drops the data that expire soonest first (rate limit
+  counters, greylisting), so `valkey-check` writes a `WARN` line to `instance.log` while it is over 85% full.
 - **Unbound** is Rspamd's own DNS resolver: blocklists refuse queries that come through big shared resolvers,
   AWS's included.
 
@@ -441,6 +445,7 @@ test CA; switching to `production` with a stack update replaces it on the next i
 |---|---|
 | Every 10 minutes | `mailbox-cleanup`: mail of mailboxes deleted in PostfixAdmin moves to `mail/.deleted/` (30 days), their Roundcube data are deleted |
 | Every 10 minutes | `outbound-alert` (spam filter) |
+| Daily 05:40 | `valkey-check` (spam filter): a `WARN` line while Valkey is over 85% of its memory cap |
 | Daily 22:55 | `db-backup`: dumps of all databases to `backup/`, 28 days |
 | Saturday-to-Sunday 01:15 | `spotprices.py` (Spot) |
 | Sundays 03:15 | `rebuild-check` (RebuildAfterDays > 0) |
