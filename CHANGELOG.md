@@ -9,6 +9,21 @@ Releases with its templates. How to move a server to a newer release: [docs/UPGR
 Changes for the next release (1.2). Its installer files are in the public bucket folder `v1.2/`; the `v1.1/`
 folder is frozen.
 
+### Security
+
+- The config bucket refuses requests without TLS (a bucket policy); Flashlight and the AWS tools use HTTPS anyway.
+
+### Fixed
+
+- A failed first creation of stage 1 no longer ends in ROLLBACK_FAILED with a config bucket that has to be
+  emptied and deleted by hand: the rollback empties the bucket, so it is deleted with the rest. A rollback within
+  a few minutes after the reverse DNS of the Elastic IP was set no longer fails either (AWS refused to remove a
+  record it was still applying): stage 1 now waits until the record is applied, then removes it.
+- The rollback of a failed first creation of stage 1 removes only the A records of `admin.` and `mail.` that point
+  to the stack's own Elastic IP, which is released right after. It no longer deletes the domain's MX, DKIM and
+  DMARC records when stage 1 is stopped by another resource, a timeout or a cancel (1.1 fixed only a failure of
+  the DNS step itself), and it no longer leaves A records pointing to the released address after such a failure.
+
 ### Changed
 
 - Stage 2's DnsPreset parameter (the name of the stage 1 stack) has no default any more; it was

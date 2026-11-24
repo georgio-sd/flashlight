@@ -25,8 +25,8 @@ is "a new instance installs itself over the existing data".
 |---|---|
 | Elastic IP | The server's permanent address |
 | S3 config bucket | The installer files of the release; `install-logs/` (logs of failed installs, 90 days); `upload/` (the admin's folder) |
-| Lambda DownloadBundles | Copies the release's installer files from the public Flashlight bucket into the config bucket. Runs on every stack create and update |
-| Lambda DnsPreset | Finds the newest Flashlight image (AMI) and copies it into the account's region if needed, waiting until the copy can be used; creates the A records of `mail.` and `admin.` in the main zone and an MX record in every mail zone; sets reverse DNS of the Elastic IP to `mail.<main domain>`. On deletion, or when a domain leaves the list, it removes Flashlight's values from these records and from DKIM, SPF and DMARC, leaving other values of the same records alone |
+| Lambda DownloadBundles | Copies the release's installer files from the public Flashlight bucket into the config bucket. Runs on every stack create and update. On the rollback of a failed first creation it empties the bucket, so CloudFormation can delete it (it tells such a rollback by the stack's status); a normal delete leaves the bucket to the admin |
+| Lambda DnsPreset | Finds the newest Flashlight image (AMI) and copies it into the account's region if needed, waiting until the copy can be used; creates the A records of `mail.` and `admin.` in the main zone and an MX record in every mail zone; sets reverse DNS of the Elastic IP to `mail.<main domain>`. On deletion, or when a domain leaves the list, it removes Flashlight's values from these records and from DKIM, SPF and DMARC, leaving other values of the same records alone. On the rollback of a failed first creation (its own failure, or the stack's status `ROLLBACK_IN_PROGRESS`) it removes only the A records with the stack's address, which is released next; the MX, DKIM, SPF and DMARC records stay, as the domain may have had them before the install |
 | Log groups | The logs of the two functions |
 
 The stage 2 stack reads stage 1's outputs (the address, the bucket, the image, the domains) through
@@ -469,6 +469,8 @@ Times are in the server's time zone (TimeZone).
   `install-logs/`, and full access to `upload/`; with AlertEmail, publish to the stack's alert topic and list
   its subscriptions. It can't change the installer files, so a compromised server
   can't plant a modified installer for the next instances.
+- **The config bucket answers only HTTPS.** Its bucket policy refuses every request without TLS, whoever makes
+  it; the instance, the Lambdas, the AWS CLI and the console use HTTPS anyway.
 - **Passwords.** Generated on the first install, kept in `root/secrets` and `root/credentials` (root only). The
   admin tools are behind the admin site's password (basic auth over HTTPS) and their own logins.
 - **fail2ban** bans addresses after repeated failed logins to SSH, mail and webmail (nftables).

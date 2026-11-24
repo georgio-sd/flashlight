@@ -85,6 +85,25 @@ Resources:
           Status: Enabled
           Prefix: install-logs/
           ExpirationInDays: 90
+  # The config bucket answers only requests over HTTPS (the instance, the Lambdas, the AWS CLI and the console use
+  # it anyway); a request without TLS is refused, whoever makes it
+  MSBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref MSBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Sid: DenyWithoutTLS
+          Effect: Deny
+          Principal: '*'
+          Action: 's3:*'
+          Resource:
+          - !GetAtt MSBucket.Arn
+          - !Sub '${MSBucket.Arn}/*'
+          Condition:
+            Bool:
+              'aws:SecureTransport': 'false'
   IPAddressMS:
     Type: AWS::EC2::EIP
     Properties:
@@ -140,6 +159,17 @@ Resources:
           - Effect: Allow
             Action: 's3:PutObject'
             Resource: !Sub "${MSBucket.Arn}/*"
+          # the rollback of a failed first creation empties the bucket, so CloudFormation can delete it; the stack's
+          # status tells such a rollback from a normal delete
+          - Effect: Allow
+            Action: 's3:ListBucket'
+            Resource: !GetAtt MSBucket.Arn
+          - Effect: Allow
+            Action: 's3:DeleteObject'
+            Resource: !Sub "${MSBucket.Arn}/*"
+          - Effect: Allow
+            Action: 'cloudformation:DescribeStacks'
+            Resource: !Ref AWS::StackId
   DnsPresetRole:
     Type: 'AWS::IAM::Role'
     Properties:
@@ -185,6 +215,10 @@ Resources:
           - Effect: Allow
             Action: 'route53:GetChange'
             Resource: !Sub "arn:${AWS::Partition}:route53:::change/*"
+          # a rollback of a failed first creation is told by the stack's status
+          - Effect: Allow
+            Action: 'cloudformation:DescribeStacks'
+            Resource: !Ref AWS::StackId
   DownloadBundles:
     Type: 'Custom::DownloadBundles'
     Properties:
@@ -267,6 +301,7 @@ Resources:
           ATTEMPTS = 3
 
           s3 = boto3.client('s3')
+          cfn = boto3.client('cloudformation')
           # Parallelism comes from copying several files at once, so each file gets one upload thread
           # and keeps at most one 8 MB chunk waiting in memory (the default is 10).
           # Worst case: WORKERS x 16 MB, about 220 MB in total with Python itself.
@@ -307,6 +342,19 @@ Resources:
                       time.sleep(2 * attempt)
 
 
+          def empty_bucket(bucket):
+              # no versioning on the bucket: list the keys and delete them, up to 1000 a call
+              count = 0
+              for page in s3.get_paginator('list_objects_v2').paginate(Bucket=bucket):
+                  keys = [{'Key': o['Key']} for o in page.get('Contents', [])]
+                  if keys:
+                      errors = s3.delete_objects(Bucket=bucket, Delete={'Objects': keys, 'Quiet': True}).get('Errors')
+                      if errors:
+                          raise RuntimeError('could not delete ' + str(errors[:3]))
+                      count += len(keys)
+              print('Emptied s3://' + bucket + ': ' + str(count) + ' files')
+
+
           def lambda_handler(event, context):
               print('RequestType: ' + event['RequestType'])
               try:
@@ -316,6 +364,19 @@ Resources:
                       base_url = props['BaseUrl'].rstrip('/')
                       with ThreadPoolExecutor(max_workers=WORKERS) as pool:
                           list(pool.map(lambda path: copy_file(bucket, base_url, path), props['Files']))
+                  elif event['RequestType'] == 'Delete':
+                      # The rollback of a failed first creation deletes the bucket right after this resource, and
+                      # CloudFormation can't delete a bucket with files (the stack would end in ROLLBACK_FAILED), so
+                      # it is emptied here. A normal stack delete leaves the bucket to the admin (INSTALL: empty it
+                      # first, after the server is gone), and a failed update never deletes it. Whatever goes wrong
+                      # here, the answer is SUCCESS: at worst the bucket stays, as before.
+                      try:
+                          status = cfn.describe_stacks(StackName=event['StackId'])['Stacks'][0]['StackStatus']
+                          print('Stack status: ' + status)
+                          if status == 'ROLLBACK_IN_PROGRESS':
+                              empty_bucket(event['ResourceProperties']['S3BucketName'])
+                      except Exception as e:
+                          print('WARNING: the bucket was not emptied: ' + repr(e))
                   send(event, context, 'SUCCESS')
               except Exception as e:
                   print('ERROR: ' + repr(e))
@@ -375,12 +436,27 @@ Resources:
           route53 = boto3.client('route53', config=aws_config)
           ec2 = boto3.client('ec2', config=aws_config)
           ec2_source = boto3.client('ec2', region_name=SOURCE_REGION, config=aws_config)
+          cfn = boto3.client('cloudformation', config=aws_config)
 
 
           # A failed first creation answers with this ID, so its rollback (a Delete with the same ID) can tell
           # that the records it would clean up were never this stack's: they may be the domain's own records
-          # with the same values (an MX to mail.<domain>, a DKIM key at mail._domainkey), made before the install
+          # with the same values (an MX to mail.<domain>, a DKIM key at mail._domainkey), made before the install.
+          # When the creation fails elsewhere (another resource, a timeout, a cancel), this function never answers
+          # with it; the stack's status (ROLLBACK_IN_PROGRESS) tells that rollback.
           FAILED_CREATE = 'DnsPreset-failed-'
+
+
+          def rollback_of_creation(event):
+              if event['PhysicalResourceId'].startswith(FAILED_CREATE):
+                  return True
+              try:
+                  status = cfn.describe_stacks(StackName=event['StackId'])['Stacks'][0]['StackStatus']
+                  print('Stack status: ' + status)
+                  return status == 'ROLLBACK_IN_PROGRESS'
+              except Exception as e:
+                  print('Stack status unknown, a normal delete assumed: ' + repr(e))
+                  return False
 
 
           def send(event, context, status, data=None, reason=None, physical_id=None):
@@ -489,8 +565,15 @@ Resources:
               def ptr():
                   return ec2.describe_addresses_attribute(AllocationIds=[allocation_id],
                                                           Attribute='domain-name')['Addresses']
-              if not ptr():
-                  return
+              # a record set moments before (a creation that failed or was cancelled within minutes) is still
+              # being applied, and AWS refuses a reset until then (PendingRequestAlreadyExists): wait for it
+              for _ in range(48):
+                  addresses = ptr()
+                  if not addresses:
+                      return
+                  if addresses[0].get('PtrRecordUpdate', {}).get('Status', '').upper() != 'PENDING':
+                      break
+                  time.sleep(10)
               ec2.reset_address_attribute(AllocationId=allocation_id, Attribute='domain-name')
               for _ in range(24):
                   if not ptr():
@@ -610,13 +693,18 @@ Resources:
                               'ImageId': image_id, 'ReverseDNS': reverse_dns,
                               'ImageStatus': wait_for_image(image_id, context)}
                   elif event['RequestType'] == 'Delete':
-                      if event['PhysicalResourceId'].startswith(FAILED_CREATE):
-                          # rollback of a failed first creation: leave the domains' records alone (a failure
-                          # after the records were written leaves them pointing to the released address; the
-                          # next successful creation overwrites them)
-                          print('Rollback of a failed creation: DNS records left as they are')
+                      records = our_records(event['ResourceProperties'])
+                      if rollback_of_creation(event):
+                          # rollback of a failed first creation: only the A records of the admin and mail names
+                          # that hold this stack's address go (it is released next and may go to anyone). The MX
+                          # stays: the domain may have had the same one before the install (a move from another
+                          # server), and pointing to the domain's own mail name it can't be taken over; the next
+                          # successful creation writes it again. SPF, DKIM and DMARC are the server's, and a
+                          # failed first creation never had a server: whatever is there isn't this stack's.
+                          print('Rollback of a failed creation: only the A records with this address are removed')
+                          clean_up({key: ours for key, ours in records.items() if key[2] == 'A'})
                       else:
-                          clean_up(our_records(event['ResourceProperties']))
+                          clean_up(records)
                       # the reverse DNS is always this stack's own, and blocks releasing the Elastic IP
                       remove_reverse_dns(event['ResourceProperties']['EipAllocationId'])
                   send(event, context, 'SUCCESS', data)

@@ -660,7 +660,8 @@ Two more things to keep in mind:
    the mail storage stays (below).
 2. **Empty the config bucket** of stage 1: S3 console, the bucket from stage 1's output `S3Bucket`, **Empty**.
    CloudFormation can't delete a bucket that has files in it, so without this the deletion of stage 1 fails.
-   Empty it only after step 1: the server writes its logs and backups there while it runs.
+   Empty it only after step 1: the server writes its logs and backups there while it runs. (If the first
+   creation of stage 1 fails, its rollback empties and deletes the bucket by itself.)
 3. **Delete the stage 1 stack.** It removes Flashlight's DNS records, resets the reverse DNS and releases the
    Elastic IP address. (Stage 1 can't be deleted while stage 2 exists: stage 2 uses its outputs.)
    If AWS Support once lifted the email sending limit or set the reverse DNS for this address, AWS may keep the
