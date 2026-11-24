@@ -251,4 +251,4 @@ passwords. From 1.0 on, upgrades between releases are automatic ([docs/UPGRADING
 
 ## [0.5] - 2025-11-07
 
-The original version, on AlmaLinux 8 (branch `dev`). Not maintained any more.
+The original version, on AlmaLinux 8 (tags `v0.5`–`v0.5.2`). Not maintained any more.
