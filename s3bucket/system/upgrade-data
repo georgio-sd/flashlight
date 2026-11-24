@@ -31,8 +31,8 @@
 # to migrations (configs that Flashlight owns are simply replaced, web applications are updated by version). A user
 # can skip releases: all steps from the data's release up to this one run in a row.
 #
-this_release=1.1
-releases="1.0 1.1"
+this_release=1.2
+releases="1.0 1.1 1.2"
 # the steps that have a migration script, e.g. "1.1-1.2 1.4-1.5"
 migrations=""
 #
