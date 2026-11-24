@@ -491,8 +491,7 @@ site) or SSH. Flashlight's limits:
 - 5 failed logins within 10 minutes: banned for 1 hour;
 - an address banned again before fail2ban forgets its previous ban (a day plus three times that ban's length)
   is banned twice as long, up to a week, and with fewer failures: after its third ban one failure is enough.
-  SSH bans don't grow;
-- `fail2ban-client unban` also clears the address's history.
+  SSH bans don't grow.
 
 **Right after the install, add the addresses that must never be banned:**
 
@@ -523,11 +522,12 @@ sudo fail2ban-client -t
 sudo systemctl restart fail2ban
 ```
 
-Who is banned, and unbanning an address:
+Who is banned, and unbanning:
 
 ```
 sudo fail2ban-client status dovecot
-sudo fail2ban-client unban 203.0.113.5
+sudo fail2ban-client unban 203.0.113.5     # one address (several: separated by spaces)
+sudo fail2ban-client unban --all           # every banned address
 ```
 
 ### The spam filter
