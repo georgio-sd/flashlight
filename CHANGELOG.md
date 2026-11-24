@@ -4,10 +4,10 @@
 All notable changes of Flashlight Mail Server. Each release has a tag (`v1.0`, ...) and a page under GitHub
 Releases with its templates. How to move a server to a newer release: [docs/UPGRADING.md](docs/UPGRADING.md).
 
-## [Unreleased]
+## [1.1] - 2026-11-23
 
-Changes for the next release (1.1). Its installer files are in the public bucket folder `v1.1/`; the `v1.0/`
-folder is frozen.
+Security updates of the web applications, alert emails, web applications updated at upgrades, costs per server in
+the billing, and fixes from running the 1.0 servers. The data on EFS need no changes.
 
 ### Upgrading from 1.0
 
