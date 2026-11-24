@@ -143,14 +143,11 @@ resources and costs are easy to tell apart:
 
 | Parameter | Default | What it does |
 |---|---|---|
-| Fail2ban | ENABLED | Bans IP addresses for a while after repeated failed logins (SSH, mail, webmail) |
+| Fail2ban | ENABLED | Bans IP addresses for a while after repeated failed logins (SSH, mail, webmail). If several people connect from one internet address (an office behind one router), one wrong password can get the whole office banned: add that address to fail2ban's exceptions, see [fail2ban](#fail2ban) |
 | Antispam | ENABLED | The spam filter (Rspamd). Spam goes to the Junk folder, obvious spam is refused. Also turns on the limits for outgoing mail and the warnings about compromised mailboxes |
 | SpamhausDQSKey | empty | Your Spamhaus DQS key (hidden in the console). With it, the spam filter checks each message's sending server, domains and links against the Spamhaus blocklists, the most widely used lists of known spam sources. Spamhaus answers servers in AWS only with a key; without one these checks are skipped. Needs Antispam |
 | AttachmentPolicy | Score | Attachments of risky file types. `Score`: they only add to the spam score. `Gmail`: mail with a file type Gmail blocks (exe, js, bat, iso, lnk...) is refused, also inside archives; encrypted archives go to Junk. `Strict`: Gmail plus more Windows file types from Outlook's blocked list (reg, url, inf, vhdx, PowerShell...) |
 | Antivirus | DISABLED | Virus scanning (ClamAV): mail with a virus is refused. Needs Antispam and a medium or larger instance type (4 GB of memory or more): the virus scanner needs about 1 GB of memory on top of what the other services use |
-
-If several people connect from one internet address (an office behind one router), one wrong password can get
-the whole office banned: add that address to fail2ban's exceptions, see [fail2ban](#fail2ban).
 
 ### Network
 
