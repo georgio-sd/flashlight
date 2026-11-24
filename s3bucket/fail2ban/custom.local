@@ -1,0 +1,83 @@
+# Your fail2ban settings. fail2ban reads this file after Flashlight's /etc/fail2ban/jail.local, so the values
+# set here win; Flashlight upgrades never change this file.
+#
+# Flashlight's limits: 5 failed logins within 10 minutes -> banned for 1 hour. An address banned again before
+# fail2ban forgets its previous ban (a day plus three times that ban's length) is banned twice as long, up to
+# a week, and with fewer failures: after its third ban one failure is enough. SSH bans don't grow.
+#
+# To use a setting below, remove the "#" in front of it. Then check the file and restart fail2ban (with an
+# error in the file fail2ban doesn't start and nothing is banned):
+#   fail2ban-client -t && systemctl restart fail2ban
+# Banned now / unban (unban also clears the address's history):
+#   fail2ban-client status dovecot
+#   fail2ban-client unban 203.0.113.5
+
+[DEFAULT]
+# Addresses that are never banned: single addresses and networks, separated by spaces. (The server's own
+# addresses are never banned anyway.) Put here:
+# - your office or other places where several people share one internet address: one mail program with an
+#   old password would ban all of them;
+# - your own static address as the administrator, so a mistyped password never locks you out of SSH or the
+#   administration site.
+#ignoreip = 198.51.100.7 203.0.113.0/28
+
+# Milder limits for all services, SSH too (its own section below can keep it stricter)
+#maxretry = 10
+#findtime = 10m
+#bantime = 30m
+
+# Repeat bans: a shorter maximum...
+#bantime.maxtime = 1d
+# ...or no growth at all (then repeat offenders don't need fewer failures either)
+#bantime.increment = false
+# These two don't change SSH: Flashlight sets its repeat bans in its own section (bans that never grow),
+# so change them for SSH in the [sshd] section below.
+
+# Mail programs (IMAP, ports 143 and 993). Phones retry an old password on their own.
+[dovecot]
+#maxretry = 10
+
+# Sending mail from mail programs (ports 587 and 465)
+[postfix-sasl]
+#maxretry = 10
+
+# Webmail
+[roundcube-auth]
+#maxretry = 10
+
+# Administration site (PostfixAdmin, phpMyAdmin)
+[apache-auth]
+#maxretry = 3
+
+# SSH (keys only, so failures there are scanners). Flashlight's repeat bans here never grow.
+[sshd]
+# Ban for longer
+#bantime = 1d
+# Or let repeat bans grow, like for the other services
+#bantime.increment = true
+#bantime.maxtime = 1w
+
+# Slow password guessing: few failures per hour from each address, so the 10-minute limit never bans it.
+# New rules, so remove the "#" from all lines of a rule. Its other settings (repeat bans, ignoreip) come
+# from [DEFAULT] above.
+
+# Mail programs (IMAP, ports 143 and 993)
+[dovecot-slow]
+#enabled = true
+#filter = dovecot
+#backend = systemd
+#port = imap,imaps
+#ignoreregex = ^\w[\w-]*\([^)]*\):
+#maxretry = 24
+#findtime = 1d
+#bantime = 1d
+
+# Sending mail from mail programs (ports 587 and 465)
+[postfix-sasl-slow]
+#enabled = true
+#filter = postfix[mode=auth]
+#backend = systemd
+#port = submission,465
+#maxretry = 24
+#findtime = 1d
+#bantime = 1d

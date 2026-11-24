@@ -35,6 +35,10 @@ folder is frozen.
   updates.
 - The templates have a description, shown in the CloudFormation console, and the first parameter of each stage
   reminds how to name its stack (`example-com`, `example-com-server`).
+- fail2ban's settings file (`/mnt/mailserver/etc/fail2ban/custom.local`) starts with commented examples on a new
+  install: addresses that are never banned (an office behind one router, the administrator's own address), milder
+  limits, shorter or no repeat bans, and rules against slow password guessing (a few tries per hour from each
+  address). INSTALL explains Flashlight's limits and how repeat bans grow. An existing file is not changed.
 
 ## [1.1] - 2026-11-23
 

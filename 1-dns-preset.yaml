@@ -267,6 +267,7 @@ Resources:
       - 'opendkim/opendkim.conf'
       - 'opendkim/dnsupd.py'
       - 'fail2ban/jail.local'
+      - 'fail2ban/custom.local'
       - 'rspamd/spamhaus-dqs-rbl.conf'
       - 'rspamd/spamhaus-dqs-rbl_group.conf'
       - 'rspamd/attachments-gmail.map'

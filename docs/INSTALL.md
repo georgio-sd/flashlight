@@ -149,6 +149,9 @@ resources and costs are easy to tell apart:
 | AttachmentPolicy | Score | Attachments of risky file types. `Score`: they only add to the spam score. `Gmail`: mail with a file type Gmail blocks (exe, js, bat, iso, lnk...) is refused, also inside archives; encrypted archives go to Junk. `Strict`: Gmail plus more Windows file types from Outlook's blocked list (reg, url, inf, vhdx, PowerShell...) |
 | Antivirus | DISABLED | Virus scanning (ClamAV): mail with a virus is refused. Needs Antispam and a medium or larger instance type (4 GB of memory or more): the virus scanner needs about 1 GB of memory on top of what the other services use |
 
+If several people connect from one internet address (an office behind one router), one wrong password can get
+the whole office banned: add that address to fail2ban's exceptions, see [fail2ban](#fail2ban).
+
 ### Network
 
 | Parameter | Default | What it does |
@@ -484,20 +487,51 @@ back and the old one goes on working.
 
 ### fail2ban
 
-An address that failed to log in too often is banned for a while. To unban one:
+fail2ban bans an address after repeated failed logins from it. The ban covers only the service where the
+logins failed: mail programs (IMAP), sending (ports 587 and 465), the web (webmail and the administration
+site) or SSH. Flashlight's limits:
 
-```
-sudo fail2ban-client unban 203.0.113.5
-```
+- 5 failed logins within 10 minutes: banned for 1 hour;
+- an address banned again before fail2ban forgets its previous ban (a day plus three times that ban's length)
+  is banned twice as long, up to a week, and with fewer failures: after its third ban one failure is enough.
+  SSH bans don't grow;
+- `fail2ban-client unban` also clears the address's history.
 
-To never ban your office address, put it into `/mnt/mailserver/etc/fail2ban/custom.local`:
+**Right after the install, add the addresses that must never be banned:**
+
+- **your office**, or any place where several people share one internet address: one mail program with an
+  old password (often a phone, which retries on its own) bans everybody there, for longer each time;
+- **your own static address** as the administrator, so a mistyped password never locks you out of SSH or
+  the administration site.
+
+Your fail2ban settings go into `/mnt/mailserver/etc/fail2ban/custom.local`. It is on the mail storage, so
+upgrades and server replacements keep it, and its values win over Flashlight's. Addresses and networks are
+separated by spaces:
 
 ```
 [DEFAULT]
-ignoreip = 127.0.0.1/8 203.0.113.5
+ignoreip = 198.51.100.7 203.0.113.0/28
 ```
 
-and run `sudo systemctl restart fail2ban`.
+The file also has several examples of settings that may be useful to you, commented out with `#`:
+milder limits, shorter or no repeat bans, limits for one service, and rules against slow password guessing
+(a few tries per hour from each address, which the 10-minute limit never catches). To use one, remove the
+`#` in front of its lines.
+
+Check the file and restart fail2ban after each change. With an error in the file fail2ban doesn't start and
+nothing is banned.
+
+```
+sudo fail2ban-client -t
+sudo systemctl restart fail2ban
+```
+
+Who is banned, and unbanning an address:
+
+```
+sudo fail2ban-client status dovecot
+sudo fail2ban-client unban 203.0.113.5
+```
 
 ### The spam filter
 

@@ -1195,10 +1195,11 @@ if [ "$FAIL2BAN" = 'ENABLED' ]; then
   # (a v1.0 install has a link to EFS here: replace it, don't write through it)
   rm -f /etc/fail2ban/jail.local
   aws s3 cp s3://$BUCKET_CONFIG/jail.local /etc/fail2ban/jail.local
-  custom_file /mnt/mailserver/etc/fail2ban/custom.local \
-    "# Your fail2ban settings. fail2ban reads this file after Flashlight's /etc/fail2ban/jail.local, so the values" \
-    "# set here win; Flashlight upgrades never change this file. Restart fail2ban after editing it." \
-    "# Example:" "#   [sshd]" "#   maxretry = 10" "#   [DEFAULT]" "#   ignoreip = 203.0.113.5"
+  # the admin's file starts as our commented examples (the office address, milder limits, slow guessing)
+  if [ ! -f /mnt/mailserver/etc/fail2ban/custom.local ]; then
+    mkdir -p /mnt/mailserver/etc/fail2ban
+    aws s3 cp s3://$BUCKET_CONFIG/custom.local /mnt/mailserver/etc/fail2ban/custom.local
+  fi
   ln -sf /mnt/mailserver/etc/fail2ban/custom.local /etc/fail2ban/jail.d/custom.local
   # v1.0 kept our jail.local on EFS; it is rewritten on the instance now
   rm -f /mnt/mailserver/etc/fail2ban/jail.local
