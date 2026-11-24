@@ -101,8 +101,9 @@ for adding domains.
 You pay only for the resources the server uses now, and you change them when your needs change. There is no
 need to buy capacity in advance "for growth":
 
-- **Spot instances.** The server can run on Spot capacity, at a fraction of the regular price. Once a week it
-  compares Spot prices and moves to a cheaper option when that saves enough. On-Demand is one setting away.
+- **Spot instances.** The server runs On-Demand by default; Spot is one setting away, at a fraction of the price,
+  with a short break in mail when AWS takes an instance back. On Spot, the server compares prices once a week and
+  moves to a cheaper option when that saves enough.
 - **Reserved pricing for On-Demand.** A 1- or 3-year Reserved Instance or Savings Plan, bought in the AWS
   console, lowers the On-Demand price to about the Spot level (a 3-year t3.small reservation comes to about $6
   a month), with no Spot interruptions. Nothing changes in the stacks: keep the second instance type
@@ -118,13 +119,13 @@ need to buy capacity in advance "for growth":
 An example: **10 mailboxes with 30 GB of mail**, in the US West (Oregon) region, at AWS prices of November 2026
 (before taxes):
 
-| Resource | Spot instance | On-Demand instance |
+| Resource | On-Demand instance | Spot instance |
 |---|---|---|
-| Server (t3.small / t3a.small) | $4 – $9 | $14 – $15 |
+| Server (t3.small / t3a.small) | $14 – $15 | $4 – $9 |
 | Mail storage (EFS, 30 GB, mostly older mail) | $2 – $4 | $2 – $4 |
 | Permanent IP address | $3.65 | $3.65 |
 | Server disk, DNS zone, S3, logs | about $1 | about $1 |
-| **Total per month** | **about $11 – $18** | **about $21 – $24** |
+| **Total per month** | **about $21 – $24** | **about $11 – $18** |
 
 The cost doesn't depend on the number of mailboxes, only on the size of the server and the amount of mail.
 Optional AWS Backup of the storage is billed separately by AWS.

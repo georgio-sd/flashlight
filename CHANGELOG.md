@@ -9,6 +9,18 @@ Releases with its templates. How to move a server to a newer release: [docs/UPGR
 Changes for the next release (1.2). Its installer files are in the public bucket folder `v1.2/`; the `v1.1/`
 folder is frozen.
 
+### Changed
+
+- Stage 2's DnsPreset parameter (the name of the stage 1 stack) has no default any more; it was
+  `MailServerDnsPreset`. The console now asks for the name, so a stage 1 stack named after the domain
+  (`example-com`, as INSTALL recommends) isn't paired with a wrong default, and a name with a dot is refused before
+  anything is created. Existing stacks keep their value at updates.
+- New servers run On-Demand by default (InstanceLifecycle; it was Spot). Spot, much cheaper but with 5 to 10
+  minutes without mail when AWS takes an instance back, is now a choice. Existing stacks keep their setting at
+  updates.
+- The templates have a description, shown in the CloudFormation console, and the first parameter of each stage
+  reminds how to name its stack (`example-com`, `example-com-server`).
+
 ## [1.1] - 2026-11-23
 
 Security updates of the web applications, alert emails, web applications updated at upgrades, costs per server in

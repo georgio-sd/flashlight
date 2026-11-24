@@ -4,6 +4,9 @@
 # https://console.aws.amazon.com/support/contacts?#/rdns-limits
 # Reverse DNS (PTR) of the Elastic IP is set by this stack itself (DnsPreset).
 #
+Description: >-
+  Flashlight Mail Server, stage 1: DNS records, the server image and the installer files of the server. Name
+  this stack after the main mail domain, with dashes for dots: example-com for example.com
 Metadata:
   AWS::CloudFormation::Interface:
     ParameterGroups:
@@ -24,7 +27,8 @@ Metadata:
 Parameters:
   MainZoneID:
     Type: 'AWS::Route53::HostedZone::Id'
-    Description: Select main mail domain
+    Description: >-
+      Main mail domain. Tip: name this stack after it, with dashes for dots (example-com for example.com)
   ZoneIDs:
     Type: 'List<AWS::Route53::HostedZone::Id>'
     Description: Select all mail domains

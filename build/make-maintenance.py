@@ -1,7 +1,8 @@
 # Copyright 2020-2026 Samson (https://github.com/georgio-sd)
 # SPDX-License-Identifier: LicenseRef-PolyForm-Shield-1.0.0 (see LICENSE)
 """Builds x-maintenance.yaml from 2-deployment.yaml: same template without the instance (LaunchTemplate,
-AutoScalingGroup, and the NoInstanceAlarm that watches the group) and without the Route 53 statement that imports the stage 1 zone list.
+AutoScalingGroup, and the NoInstanceAlarm that watches the group) and without the Route 53 statement that imports the stage 1 zone list,
+with its own description.
 
 Run it after every change of 2-deployment.yaml, so both templates keep the same parameters and resources
 (switching a stack between them must not lose parameter values or fail on allowed values):
@@ -28,6 +29,15 @@ end = next(i for i, l in enumerate(lines) if i > start and "'route53:ChangeResou
 lines[start:end + 1] = [
     "          # No Route 53 rights here: maintenance mode has no instance, and importing the zone list from stage 1",
     "          # would block the stage 1 update this mode exists for (an export can't change while it is imported)",
+]
+
+# 3. the template's description says it is the maintenance mode
+start = next(i for i, l in enumerate(lines) if l.startswith('Description:'))
+end = next(i for i, l in enumerate(lines) if i > start and not l.startswith('  '))
+lines[start:end] = [
+    'Description: >-',
+    '  Flashlight Mail Server, stage 2 in maintenance mode: no instance, the mail storage and the network stay. Back',
+    '  to service with 2-deployment.yaml of the same release',
 ]
 
 open(dst, 'w', newline='').write(NL.join(lines))
