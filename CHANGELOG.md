@@ -39,6 +39,9 @@ folder is frozen.
   install: addresses that are never banned (an office behind one router, the administrator's own address), milder
   limits, shorter or no repeat bans, and rules against slow password guessing (a few tries per hour from each
   address). INSTALL explains Flashlight's limits and how repeat bans grow. An existing file is not changed.
+- fail2ban's rule for the administration site counts only wrong user names and passwords. Requests Apache
+  refuses anyway (403, such as opening the server by its IP address) no longer count, so three visits to the
+  server's address no longer ban the whole web, webmail included, for an hour.
 
 ## [1.1] - 2026-11-23
 

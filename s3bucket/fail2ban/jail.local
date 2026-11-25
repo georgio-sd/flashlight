@@ -45,7 +45,9 @@ enabled = true
 logpath = /var/www/webmail/logs/errors.log
 backend = auto
 
-# Password of the administration site (PostfixAdmin, phpMyAdmin)
+# Password of the administration site (PostfixAdmin, phpMyAdmin). Requests Apache refuses anyway (403, e.g. the
+# default site that answers requests by the server's address) aren't counted: scanners, not password guessing.
 [apache-auth]
 enabled = true
 backend = auto
+ignoreregex = client denied by server configuration
