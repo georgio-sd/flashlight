@@ -42,6 +42,8 @@ folder is frozen.
 - fail2ban's rule for the administration site counts only wrong user names and passwords. Requests Apache
   refuses anyway (403, such as opening the server by its IP address) no longer count, so three visits to the
   server's address no longer ban the whole web, webmail included, for an hour.
+- The installer files come from a new public bucket, `flashlight-mail-server` in us-west-2 (was
+  `mail-server-bundles` in eu-central-1). Stage 1 of 1.2 and later uses it; it only answers HTTPS.
 
 ## [1.1] - 2026-11-23
 

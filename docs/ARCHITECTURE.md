@@ -504,7 +504,7 @@ Logs on the instance's own disk are lost when the instance is replaced; the ones
 ## Releases and upgrades
 
 A release is the three templates plus the installer files in the public bucket under its version
-(`mail-server-bundles/vX.Y/`). Stage 1 copies them into the config bucket, and every instance installs from
+(`flashlight-mail-server/vX.Y/`). Stage 1 copies them into the config bucket, and every instance installs from
 there. Data changes between releases are migrations, run in order by the new instance; the web applications
 are updated by their version instead, whenever the release brings a newer one. How to upgrade:
 [UPGRADING](UPGRADING.md). How a release is made: [RELEASING](RELEASING.md).

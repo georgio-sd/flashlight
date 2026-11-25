@@ -8,7 +8,7 @@ EC2 instance and terminate it when you are done.
 Current build: `amazon-efs-utils-3.4.0-1.el10.x86_64.rpm`, built 2026-11-23 on
 AlmaLinux 10.3 with Rust 1.100.0 (rustup).
 SHA-256: `42de00058d806c9a4569ca8ee2fc10f42dc974bd143e4be55734d8df566eb9f7`.
-Published in `packages/` of the release folder (`s3://mail-server-bundles/vX.Y/packages/`).
+Published in `packages/` of the release folder (`s3://flashlight-mail-server/vX.Y/packages/`).
 
 ## When to rebuild
 
@@ -70,5 +70,5 @@ mount.efs --version
 sha256sum $R
 ```
 
-Upload it to `s3://mail-server-bundles/vX.Y/packages/` and update the file name in `base.sh`
+Upload it to `s3://flashlight-mail-server/vX.Y/packages/` and update the file name in `base.sh`
 (`efs_rpm`) and in the `Files` list of `1-dns-preset.yaml`.

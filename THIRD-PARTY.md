@@ -19,7 +19,7 @@ in their headers.
 
 ## Packages in the installer's bucket
 
-The release bucket (`s3://mail-server-bundles/vX.Y/packages/`) carries these packages unchanged, as their
+The release bucket (`s3://flashlight-mail-server/vX.Y/packages/`) carries these packages unchanged, as their
 projects publish them (efs-utils built from its unchanged source). Each one includes its own license files.
 
 | Package | Project | License |

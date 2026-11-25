@@ -10,8 +10,8 @@ rules a change must follow so that existing servers can upgrade to it. The user'
 A release `X.Y` consists of:
 
 - the templates `1-dns-preset.yaml`, `2-deployment.yaml` and `x-maintenance.yaml` from the repository;
-- the installer files from `s3bucket/`, published in the public bucket under `mail-server-bundles/vX.Y/`
-  with the same folder layout (`system/base.sh`, `postfix/main.cf`, `packages/...`).
+- the installer files from `s3bucket/`, published in the public bucket `flashlight-mail-server` (us-west-2)
+  under `vX.Y/` with the same folder layout (`system/base.sh`, `postfix/main.cf`, `packages/...`).
 
 Stage 1 copies the files listed in its `Files` property from `BaseUrl` into the stack's config bucket. The
 config bucket is flat: each file is stored by its name only, so file names must be unique across all folders.
@@ -136,8 +136,8 @@ starts, the code names `X.Y` everywhere, so a stand installed from `develop` is 
 2. In `1-dns-preset.yaml`, point `BaseUrl` under `Mappings` to `.../vX.Y` (the one place it is set; DnsPreset
    gets it too, so an upgrade also takes the newest server image).
 3. In `CHANGELOG.md`, open an `[Unreleased]` section for the changes of `X.Y`.
-4. Create the bucket folder `vX.Y/` and add it to the public bucket's policy. Until the release it holds the
-   work in progress and is updated from `develop`; test stands install from it.
+4. Create the bucket folder `vX.Y/` (the public bucket's policy already makes every `v*/` folder readable).
+   Until the release it holds the work in progress and is updated from `develop`; test stands install from it.
 
 A stand installed from `develop` marks its data as `X.Y` at its next install. If a migration to `X.Y` is added
 later, the stand's data won't run it. To test it there, set the data back with
@@ -223,7 +223,7 @@ The release fixes what was done on `develop` and builds the bridge from the prev
    still there. If the release has a migration, also test a release skip (from two releases back) if one exists,
    and a failing migration. A failing migration is tested on the instance with `MIGRATIONS_DIR`, `RELEASES` and
    `THIS_RELEASE`, which `upgrade-data` reads instead of its built-in values.
-12. **Publish the files.** Upload `s3bucket/` to `s3://mail-server-bundles/vX.Y/` once more, keeping the layout,
+12. **Publish the files.** Upload `s3bucket/` to `s3://flashlight-mail-server/vX.Y/` once more, keeping the layout,
    so the folder matches the release, and check that every path of the `Files` list is there. From now on the
    folder is frozen.
 13. **Publish the code.** In `CHANGELOG.md`, turn `[Unreleased]` into `[X.Y] - <date>`. Merge into `main`, tag
