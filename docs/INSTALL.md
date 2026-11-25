@@ -493,6 +493,9 @@ site) or SSH. Flashlight's limits:
   is banned twice as long, up to a week, and with fewer failures: after its third ban one failure is enough.
   SSH bans don't grow.
 
+When sending mail, some mail programs try a wrong password twice, by two login methods, so one mistake
+counts as two failures.
+
 **Right after the install, add the addresses that must never be banned:**
 
 - **your office**, or any place where several people share one internet address: one mail program with an

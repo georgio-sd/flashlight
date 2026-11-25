@@ -38,7 +38,8 @@
 [dovecot]
 #maxretry = 10
 
-# Sending mail from mail programs (ports 587 and 465)
+# Sending mail from mail programs (ports 587 and 465). Some programs try a wrong password twice (two login
+# methods), so one mistake counts as two failures.
 [postfix-sasl]
 #maxretry = 10
 
