@@ -5,18 +5,6 @@
 Flashlight's own code is under the PolyForm Shield License 1.0.0 (see [LICENSE](LICENSE)). The components below
 come from other projects and keep their own licenses.
 
-## Files in this repository
-
-| File | Project | Source | License |
-|---|---|---|---|
-| `s3bucket/rspamd/olefy.py` | olefy, Heinlein Support GmbH | https://github.com/HeinleinSupport/olefy (commit 9c01c57), unchanged | [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0) |
-| `s3bucket/rspamd/spamhaus-dqs-rbl.conf`, `s3bucket/rspamd/spamhaus-dqs-rbl_group.conf` | Spamhaus DQS for Rspamd, Spamhaus Technology Ltd. | https://github.com/spamhaus/rspamd-dqs (commit d71470e), unchanged; the installer puts the user's key in | [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0) |
-| `s3bucket/rspamd/rspamd.asc` | Rspamd | the public key that signs Rspamd's packages, https://rspamd.com | |
-
-Each of these files names its source and license in its header. The attachment lists
-(`s3bucket/rspamd/attachments-*.map`) are file types taken from Google's and Microsoft's published lists, named
-in their headers.
-
 ## Packages in the installer's bucket
 
 The release bucket (`s3://flashlight-mail-server/vX.Y/packages/`) carries these packages unchanged, as their
@@ -30,6 +18,18 @@ projects publish them (efs-utils built from its unchanged source). Each one incl
 | `phpMyAdmin-<version>-all-languages.tar.gz` | phpMyAdmin, https://www.phpmyadmin.net | [GNU GPL 2.0](https://www.gnu.org/licenses/old-licenses/gpl-2.0.html) |
 | `rspamd-<version>.el10.x86_64.rpm` | Rspamd, https://rspamd.com | [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0) |
 | `amazon-efs-utils-<version>.el10.x86_64.rpm` | Amazon EFS utilities, https://github.com/aws/efs-utils (built as in [build/efs-utils.md](build/efs-utils.md)) | [MIT License](https://github.com/aws/efs-utils/blob/master/LICENSE) |
+
+## Files in this repository
+
+| File | Project | Source | License |
+|---|---|---|---|
+| `s3bucket/rspamd/olefy.py` | olefy, Heinlein Support GmbH | https://github.com/HeinleinSupport/olefy (commit 9c01c57), unchanged | [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0) |
+| `s3bucket/rspamd/spamhaus-dqs-rbl.conf`, `s3bucket/rspamd/spamhaus-dqs-rbl_group.conf` | Spamhaus DQS for Rspamd, Spamhaus Technology Ltd. | https://github.com/spamhaus/rspamd-dqs (commit d71470e), unchanged; the installer puts the user's key in | [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0) |
+| `s3bucket/rspamd/rspamd.asc` | Rspamd | the public key that signs Rspamd's packages, https://rspamd.com | |
+
+Each of these files names its source and license in its header. The attachment lists
+(`s3bucket/rspamd/attachments-*.map`) are file types taken from Google's and Microsoft's published lists, named
+in their headers.
 
 ## The server image
 
