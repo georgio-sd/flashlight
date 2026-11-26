@@ -419,6 +419,34 @@ days. Before you create a mailbox with the same address again, wait for the move
 Folders, read flags and filters come back, merged with any mail that arrived since. Webmail settings and
 contacts are not restored: they are only in the nightly database dumps in `/mnt/mailserver/backup/`.
 
+### Webmail
+
+Webmail (Roundcube) is at `https://mail.<main domain>/`: users log in with their full e-mail address and
+password. Messages can be up to 20 MB. Filters and the out-of-office reply run on the server when a message
+arrives, so they work whatever mail program the user reads with; spam goes to Junk before them and gets no reply.
+
+**Example: an out-of-office reply.** Settings → **Out of Office**: write the **Subject** and the **Body** (for
+example "I am away until 15 August"), enter the dates in **Start time** and **End time** (the time next to
+them is optional), set **Status** to **On**, and **Save**. The reply goes out only between those dates, once
+per sender every 7 days (**Advanced settings** → **Reply interval** changes that), and never to mailing lists
+or automatic messages. If mail also comes to the user through aliases, click **Fill with all my addresses**
+under **My e-mail addresses**: only mail sent to those addresses gets the reply.
+
+**Example: mail from one company into a subfolder of the Inbox.**
+
+1. Settings → **Folders** → **Create**: **Folder name** `Partners`, **Parent folder** Inbox, **Save**.
+2. Settings → **Filters** → **Create**: **Filter name** `Partners`; **Scope**: matching all of the following
+   rules; **Rules**: change **Subject** to **From**, keep **contains**, enter `@partner.com`; **Actions**:
+   **Move message to** → `Partners` (under Inbox); **Save**.
+
+Also worth knowing:
+
+- **Junk** in the toolbar above a message (**Not junk** in the Junk folder) moves it and teaches the spam
+  filter, when it is on; see [The spam filter](#the-spam-filter);
+- **Larry**, an older and more compact look: Settings → **Preferences** → **User Interface** → **Interface skin**.
+
+Roundcube's own help for users: https://docs.roundcube.net/doc/help/1.1/en_US/
+
 ### Mail programs
 
 Add the account in the mail program as an **IMAP** account. Most programs ask for the e-mail address and the
@@ -467,34 +495,6 @@ settings" and enter port 587 with TLS.
 
 One mailbox may have up to 30 connections from one address, so a computer and a phone behind the same office
 router both fit.
-
-### Webmail
-
-Webmail (Roundcube) is at `https://mail.<main domain>/`: users log in with their full e-mail address and
-password. Messages can be up to 20 MB. Filters and the out-of-office reply run on the server when a message
-arrives, so they work whatever mail program the user reads with; spam goes to Junk before them and gets no reply.
-
-**Example: an out-of-office reply.** Settings → **Out of Office**: write the **Subject** and the **Body** (for
-example "I am away until 15 August"), enter the dates in **Start time** and **End time** (the time next to
-them is optional), set **Status** to **On**, and **Save**. The reply goes out only between those dates, once
-per sender every 7 days (**Advanced settings** → **Reply interval** changes that), and never to mailing lists
-or automatic messages. If mail also comes to the user through aliases, click **Fill with all my addresses**
-under **My e-mail addresses**: only mail sent to those addresses gets the reply.
-
-**Example: mail from one company into a subfolder of the Inbox.**
-
-1. Settings → **Folders** → **Create**: **Folder name** `Partners`, **Parent folder** Inbox, **Save**.
-2. Settings → **Filters** → **Create**: **Filter name** `Partners`; **Scope**: matching all of the following
-   rules; **Rules**: change **Subject** to **From**, keep **contains**, enter `@partner.com`; **Actions**:
-   **Move message to** → `Partners` (under Inbox); **Save**.
-
-Also worth knowing:
-
-- **Junk** in the toolbar above a message (**Not junk** in the Junk folder) moves it and teaches the spam
-  filter, when it is on; see [The spam filter](#the-spam-filter);
-- **Larry**, an older and more compact look: Settings → **Preferences** → **User Interface** → **Interface skin**.
-
-Roundcube's own help for users: https://docs.roundcube.net/doc/help/1.1/en_US/
 
 ### Checking that it works
 
