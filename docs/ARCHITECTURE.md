@@ -400,7 +400,7 @@ mail.
 Rspamd's Bayes filter learns by itself from mail that scores very high or very low, and from the users:
 Dovecot's imapsieve runs a script when a message is moved into Junk (learn as spam) or out of Junk to any folder
 but Trash (learn as not spam), and passes the message to Rspamd. This works from any mail program. Roundcube
-adds Spam and Not spam buttons (the `markasjunk` plugin), which move the message the same way.
+adds Junk and Not junk buttons (the `markasjunk` plugin), which move the message the same way.
 
 ### Web interface
 
