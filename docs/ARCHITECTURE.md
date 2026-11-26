@@ -331,7 +331,8 @@ flowchart LR
 
 1. **Postfix** accepts the connection. Limits per client address: 20 connections at once, 30 connections and 30
    messages a minute. It refuses invalid HELO names, unknown sender domains, recipients it doesn't host, and
-   relaying for anyone not logged in. Domains, mailboxes and aliases come from the PostfixAdmin database.
+   relaying for anyone not logged in. Domains, mailboxes and aliases come from the PostfixAdmin database; only
+   active ones count, and a mailbox of a turned-off domain can't log in either (Dovecot checks both Active flags).
 2. **Rspamd** (first milter) scores the message (see [Spam filter](#spam-filter)). From 15 points, or for a virus
    or a blocked attachment, the message is refused during the SMTP session, so the sender learns about it. Over
    6 points it gets an `X-Spam: Yes` header.

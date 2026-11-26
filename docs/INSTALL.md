@@ -391,6 +391,14 @@ Quotas are in MB, and 0 means no limit (the default for new domains and mailboxe
   mailbox of the domain, **Domain Quota** the most its mailboxes' quotas may add up to. PostfixAdmin checks
   them when you create or change a mailbox; the mail itself is limited only by each mailbox's quota.
 
+A mailbox can be turned off without deleting it: clear **Active** in its settings. Its mail is then refused
+("User unknown"), and it can't log in or send, but its mail, filters and webmail settings stay as they are;
+turn it on again and everything is back. **Active** of a domain does the same for all its mailboxes at once.
+
+A deleted mailbox's mail goes to `/mnt/mailserver/mail/.deleted/` within 10 minutes and is kept there for 30
+days. Before you create a mailbox with the same address again, wait for the move (a `MAILBOX` line in
+`/mnt/mailserver/log/instance.log`): a mailbox created sooner gets the old one's mail.
+
 ### Mail programs
 
 Add the account in the mail program as an **IMAP** account. Most programs ask for the e-mail address and the

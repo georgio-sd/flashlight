@@ -56,6 +56,8 @@ folder is frozen.
   server's address no longer ban the whole web, webmail included, for an hour.
 - The installer files come from a new public bucket, `flashlight-mail-server` in us-west-2 (was
   `mail-server-bundles` in eu-central-1). Stage 1 of 1.2 and later uses it; it only answers HTTPS.
+- Turning a domain off in PostfixAdmin (Active) now also stops its mailboxes from logging in and sending, like
+  turning off each mailbox; before, it only refused the domain's incoming mail. Mail and settings stay.
 
 ## [1.1] - 2026-11-23
 
