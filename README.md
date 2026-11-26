@@ -180,5 +180,5 @@ others, or selling support for it, for example. Such uses are possible with the 
 separate agreement: contact the author through GitHub (https://github.com/georgio-sd). The source is open to
 read: Flashlight is source-available, not open source.
 
-Components from other projects keep their own licenses: see [THIRD-PARTY.md](THIRD-PARTY.md). Bug reports and
-feature requests are welcome: see [CONTRIBUTING.md](CONTRIBUTING.md).
+Components from other projects keep their own licenses: see [THIRD-PARTY.md](THIRD-PARTY.md). Bug reports,
+feature requests and pull requests are welcome: see [CONTRIBUTING.md](CONTRIBUTING.md).
