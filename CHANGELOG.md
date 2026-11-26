@@ -11,6 +11,7 @@ folder is frozen.
 
 | Program | 1.1 | 1.2 |
 |---|---|---|
+| AlmaLinux (server base image) | 10.3 | 10.3 |
 | Roundcube (webmail) | 1.7.7 | 1.7.7 |
 | Roundcube skin Larry | 03ccd35 | 03ccd35 |
 | PostfixAdmin | 4.0.7 | 4.0.7 |
@@ -63,6 +64,7 @@ the billing, and fixes from running the 1.0 servers. The data on EFS need no cha
 
 | Program | 1.0 | 1.1 |
 |---|---|---|
+| AlmaLinux (server base image) | 10.2 | **10.3** |
 | Roundcube (webmail) | 1.7.6 | **1.7.7** |
 | Roundcube skin Larry | 03ccd35 | 03ccd35 |
 | PostfixAdmin | 4.0.6 | **4.0.7** |
@@ -222,6 +224,7 @@ releases.
 
 | Program | Version |
 |---|---|
+| AlmaLinux (server base image) | 10.2 |
 | Roundcube (webmail) | 1.7.6 |
 | Roundcube skin Larry | 03ccd35 |
 | PostfixAdmin | 4.0.6 |
