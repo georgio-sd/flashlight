@@ -27,9 +27,9 @@ folder is frozen.
 
 ### Added
 
-- A WARN line in `/mnt/mailserver/log/instance.log` when a mail domain, or `mail.<main domain>`, has two SPF
-  records (one added next to Flashlight's instead of editing it): with two, every SPF check fails, this
-  server's mail included.
+- A second SPF record next to Flashlight's (added instead of editing it) is deleted at the next server start,
+  with a WARN line in `/mnt/mailserver/log/instance.log` that shows it: with two, every SPF check fails, this
+  server's mail included. Applies to every mail domain and to `mail.<main domain>`.
 
 ### Fixed
 

@@ -14,8 +14,9 @@ The records:
   <domain>                  SPF "v=spf1 ip4:<EIP> -all". An SPF record that already allows our address
                             (ip4:<EIP>) is the admin's own, e.g. with an include: of another mail service, and
                             stays as it is; any other one is replaced. Other TXT strings of the domain (site
-                            verifications and the like) are always kept. Two SPF records at one name (the admin
-                            added one instead of editing ours) fail every SPF check: a WARN line in instance.log
+                            verifications and the like) are always kept. A name may have only one SPF record
+                            (with two, every SPF check fails, ours included): next to the one that allows our
+                            address, any other SPF record is deleted, with a WARN line in instance.log
   _dmarc.<domain>           "v=DMARC1; p=reject; sp=reject; adkim=r; aspf=r", only if the domain has no DMARC
                             record yet (the admin may have changed the policy or added a report address)
   <MAIL_HOST>               SPF of the host name itself (checked for bounces, which have an empty sender),
@@ -59,26 +60,30 @@ def plain(value):
     return value.replace('" "', '').strip('"')
 
 
+def is_spf(value):
+    return plain(value).lower().split()[:1] == ['v=spf1']
+
+
 def txt_with_spf(zone_id, name, eip):
     """the name's TXT values with our SPF, and what happened to the SPF (for the log); an SPF that already allows
-    our address stays as it is"""
+    our address stays as it is, and any other SPF record next to it is deleted (two fail every SPF check)"""
     values = txt_values(zone_id, name)
     ours = 'v=spf1 ip4:%s -all' % eip
     for value in values:
         words = plain(value).lower().split()
         if words[:1] == ['v=spf1'] and ('ip4:' + eip in words or 'ip4:' + eip + '/32' in words):
-            return values, 'unchanged' if plain(value) == ours else 'kept (the admin\'s own, allows our address)'
-    others = [v for v in values if not plain(v).lower().startswith('v=spf1')]
+            status = 'unchanged' if plain(value) == ours else 'kept (the admin\'s own, allows our address)'
+            extra = [v for v in values if is_spf(v) and v != value]
+            for v in extra:
+                subprocess.run(['/usr/local/sbin/instance-log', 'WARN', 'SPF: a second SPF record at %s deleted (a '
+                                'name may have only one, or every SPF check fails); add what it allowed to the '
+                                'remaining one: %s' % (name, plain(v))])
+            if extra:
+                status += ', %d other SPF record(s) deleted' % len(extra)
+            return [v for v in values if v not in extra], status
+    others = [v for v in values if not is_spf(v)]
     replaced = len(others) < len(values)
     return others + [txt(ours)], 'replaced (did not allow our address)' if replaced else 'created'
-
-
-def warn_if_two_spf(name, values):
-    """a name may have only one SPF record: with two, every SPF check fails (permerror); the admin merges them"""
-    count = sum(1 for v in values if plain(v).lower().split()[:1] == ['v=spf1'])
-    if count > 1:
-        subprocess.run(['/usr/local/sbin/instance-log', 'WARN', 'SPF: %d records at %s; a name may have only one, '
-                        'or every SPF check fails: merge them into one in Route 53' % (count, name)])
 
 
 def upsert(name, values):
@@ -96,7 +101,6 @@ def main():
         dkim = dkim_value(domain)
         dkim_now = txt_values(zone_id, dkim_name)
         spf, spf_status = txt_with_spf(zone_id, domain, eip)
-        warn_if_two_spf(domain, spf)
         changes = [upsert(dkim_name, [dkim]), upsert(domain, spf)]
         status = ['DKIM ' + ('unchanged' if [plain(v) for v in dkim_now] == [plain(dkim)]
                              else 'replaced' if dkim_now else 'created'),
@@ -109,7 +113,6 @@ def main():
             status.append('DMARC created (p=reject)')
         if i == 0:
             host_spf, host_status = txt_with_spf(zone_id, mail_host, eip)
-            warn_if_two_spf(mail_host, host_spf)
             changes.append(upsert(mail_host, host_spf))
             status.append('SPF of ' + mail_host + ' ' + host_status)
         route53.change_resource_record_sets(HostedZoneId=zone_id, ChangeBatch={'Changes': changes})

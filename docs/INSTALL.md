@@ -697,9 +697,10 @@ Route 53:
   `v=spf1 ip4:203.0.113.10 include:_spf.example.net -all`. Without that, its mail fails SPF and, with
   Flashlight's DMARC `p=reject`, is refused or goes to spam.
   - Edit Flashlight's record, don't create a second one: a domain with two SPF records fails every SPF check,
-    this server's mail included (the server then writes a WARN line to `/mnt/mailserver/log/instance.log` at
-    its next start). In Route 53 it is one of the values of the domain's TXT record; leave the other values
-    (site verifications and the like) as they are.
+    this server's mail included. If there are two, the server keeps the one with its address at its next start
+    and deletes the other, with a WARN line in `/mnt/mailserver/log/instance.log` that shows it: add what it
+    allowed to the remaining record. In Route 53 the SPF record is one of the values of the domain's TXT
+    record; leave the other values (site verifications and the like) as they are.
   - Keep `ip4:<server address>` exactly so. The server checks the record at every start: it leaves a record
     that has it and replaces any other with its own, dropping your additions (`mx` or `a` in its place don't
     count).
