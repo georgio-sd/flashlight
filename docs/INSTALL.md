@@ -399,6 +399,26 @@ A deleted mailbox's mail goes to `/mnt/mailserver/mail/.deleted/` within 10 minu
 days. Before you create a mailbox with the same address again, wait for the move (a `MAILBOX` line in
 `/mnt/mailserver/log/instance.log`): a mailbox created sooner gets the old one's mail.
 
+**Restoring a deleted mailbox** (within the 30 days):
+
+1. Create the mailbox again in PostfixAdmin (**Add Mailbox**) with the same address and a new password: the
+   commands below need it to exist.
+2. Log in to the server over SSH (see [First login](#first-login)) and bring back the mail and filters as
+   root. The name of the mailbox's trash folder (such as `2026-11-25-230930-user@example.com`) is in the
+   `MAILBOX` line of `/mnt/mailserver/log/instance.log`:
+
+   ```
+   sudo -i
+   cd /mnt/mailserver/mail
+   mv .deleted/<trash folder> restore
+   doveadm import -u <address> maildir:/mnt/mailserver/mail/restore/mail "" all
+   [ -d restore/sieve ] && mkdir -p sieve/<domain>/<address> && cp -a restore/sieve/. sieve/<domain>/<address>/
+   rm -rf restore
+   ```
+
+Folders, read flags and filters come back, merged with any mail that arrived since. Webmail settings and
+contacts are not restored: they are only in the nightly database dumps in `/mnt/mailserver/backup/`.
+
 ### Mail programs
 
 Add the account in the mail program as an **IMAP** account. Most programs ask for the e-mail address and the
