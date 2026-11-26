@@ -755,7 +755,8 @@ own. Old copies stay: Flashlight never deletes them, and each costs a few cents 
 
 After an upgrade the server uses the new copy, and the old one is no longer needed. Check that the `ImageId`
 output of stage 1 shows the new copy's ID, then delete the old one: EC2 console, AMIs, the old copy,
-**Deregister AMI**, then its snapshot (EC2 console, Snapshots, the same `Name`).
+**Deregister AMI**, and tick **Delete associated snapshots** (without it the copy's disk snapshot stays and is
+still billed).
 
 Don't delete the copy in `ImageId`. The server keeps running without it, but it can't start a new instance at
 its next replacement (a Spot interruption, the weekly price check, the scheduled rebuild). It then stays without
