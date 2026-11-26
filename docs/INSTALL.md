@@ -687,9 +687,8 @@ address onto blocklists.
 ### Your own SPF, DKIM and DMARC records
 
 Flashlight writes `v=spf1 ip4:<server address> -all`, a DKIM key and a DMARC record with `p=reject` for every
-mail domain.
-If your company also sends mail through another service, or you want DMARC reports, edit the records in
-Route 53:
+mail domain. If your company also sends mail through another service, or you want DMARC reports, edit the
+records in Route 53:
 
 - **SPF** lists the servers that may send mail from the domain; Flashlight's record allows only this server.
   If something else also sends mail from your domain (a newsletter service such as Mailchimp or SendGrid, a
