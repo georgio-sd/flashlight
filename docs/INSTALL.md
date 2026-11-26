@@ -123,7 +123,7 @@ The first parameter below, DnsPreset, is the name of the stage 1 stack: `example
 If you have several Flashlight servers in one account, name all of them this way. Then each server's
 resources and costs are easy to tell apart:
 
-| Server | Stage 1 | Stage 2 |
+| Server | Stage 1 stack name | Stage 2 stack name |
 |---|---|---|
 | A | `example-com` | `example-com-server` |
 | B | `example-org` | `example-org-server` |
