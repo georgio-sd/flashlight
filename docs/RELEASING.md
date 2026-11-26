@@ -135,7 +135,9 @@ starts, the code names `X.Y` everywhere, so a stand installed from `develop` is 
    release listed). The flag file on EFS and the `versions` file take the number from there.
 2. In `1-dns-preset.yaml`, point `BaseUrl` under `Mappings` to `.../vX.Y` (the one place it is set; DnsPreset
    gets it too, so an upgrade also takes the newest server image).
-3. In `CHANGELOG.md`, open an `[Unreleased]` section for the changes of `X.Y`.
+3. In `CHANGELOG.md`, open an `[Unreleased]` section for the changes of `X.Y`, with the version table under its
+   first paragraph: the previous release's column and an `X.Y` column, same rows in the same order (Roundcube,
+   Larry, PostfixAdmin, phpMyAdmin, Rspamd, oletools, olefy, amazon-efs-utils).
 4. Create the bucket folder `vX.Y/` (the public bucket's policy already makes every `v*/` folder readable).
    Until the release it holds the work in progress and is updated from `develop`; test stands install from it.
 
@@ -226,9 +228,10 @@ The release fixes what was done on `develop` and builds the bridge from the prev
 12. **Publish the files.** Upload `s3bucket/` to `s3://flashlight-mail-server/vX.Y/` once more, keeping the layout,
    so the folder matches the release, and check that every path of the `Files` list is there. From now on the
    folder is frozen.
-13. **Publish the code.** In `CHANGELOG.md`, turn `[Unreleased]` into `[X.Y] - <date>`. Merge into `main`, tag
-   `vX.Y`, and write the release notes: what changed, whether the release changes the data, and any action the
-   user must take. Then start the next version on `develop` (see above).
+13. **Publish the code.** In `CHANGELOG.md`, turn `[Unreleased]` into `[X.Y] - <date>` and check its version table
+   against the `Files` list (`packages/`), `olefy-requirements.txt` and `olefy.py`: a version that changed is in
+   bold. Merge into `main`, tag `vX.Y`, and write the release notes: what changed, whether the release changes the
+   data, and any action the user must take. Then start the next version on `develop` (see above).
 
 ## Testing tips
 

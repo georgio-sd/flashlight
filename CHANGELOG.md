@@ -9,6 +9,17 @@ Releases with its templates. How to move a server to a newer release: [docs/UPGR
 Changes for the next release (1.2). Its installer files are in the public bucket folder `v1.2/`; the `v1.1/`
 folder is frozen.
 
+| Program | 1.1 | 1.2 |
+|---|---|---|
+| Roundcube (webmail) | 1.7.7 | 1.7.7 |
+| Roundcube skin Larry | 03ccd35 | 03ccd35 |
+| PostfixAdmin | 4.0.7 | 4.0.7 |
+| phpMyAdmin | 5.2.3 | 5.2.3 |
+| Rspamd (spam filter) | 4.3.1 | 4.3.1 |
+| oletools (macro check in attachments) | 0.60.2 | 0.60.2 |
+| olefy (connects oletools to Rspamd) | 9c01c57 | 9c01c57 |
+| amazon-efs-utils (EFS client) | 3.4.0 | 3.4.0 |
+
 ### Security
 
 - The config bucket refuses requests without TLS (a bucket policy); Flashlight and the AWS tools use HTTPS anyway.
@@ -49,6 +60,17 @@ folder is frozen.
 
 Security updates of the web applications, alert emails, web applications updated at upgrades, costs per server in
 the billing, and fixes from running the 1.0 servers. The data on EFS need no changes.
+
+| Program | 1.0 | 1.1 |
+|---|---|---|
+| Roundcube (webmail) | 1.7.6 | **1.7.7** |
+| Roundcube skin Larry | 03ccd35 | 03ccd35 |
+| PostfixAdmin | 4.0.6 | **4.0.7** |
+| phpMyAdmin | 5.2.3 | 5.2.3 |
+| Rspamd (spam filter) | 4.3.0 | **4.3.1** |
+| oletools (macro check in attachments) | 0.60.2 | 0.60.2 |
+| olefy (connects oletools to Rspamd) | 9c01c57 | 9c01c57 |
+| amazon-efs-utils (EFS client) | 3.3.5 | **3.4.0** |
 
 ### Upgrading from 1.0
 
@@ -197,6 +219,17 @@ default.
 
 A rewrite of the installer on current software, with a spam filter, automatic recovery and upgrades between
 releases.
+
+| Program | Version |
+|---|---|
+| Roundcube (webmail) | 1.7.6 |
+| Roundcube skin Larry | 03ccd35 |
+| PostfixAdmin | 4.0.6 |
+| phpMyAdmin | 5.2.3 |
+| Rspamd (spam filter) | 4.3.0 |
+| oletools (macro check in attachments) | 0.60.2 |
+| olefy (connects oletools to Rspamd) | 9c01c57 |
+| amazon-efs-utils (EFS client) | 3.3.5 |
 
 ### Upgrading from 0.5
 
