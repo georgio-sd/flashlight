@@ -382,6 +382,15 @@ your password manager.
 All your mail domains are already in PostfixAdmin, each with the `abuse@` and `postmaster@` aliases. Create
 the mailboxes in PostfixAdmin (**Virtual List**, **Add Mailbox**), and set their quotas there.
 
+Quotas are in MB, and 0 means no limit (the default for new domains and mailboxes):
+
+- **Mailbox quota** (set on the mailbox): the server enforces it. Mail for a full mailbox is refused while the
+  sender's server is still connected ("552 Mailbox is full"), so the sender is told, and the user can't save
+  more until they delete some mail. Roundcube shows how full the mailbox is.
+- **Domain limits** (Domain List, edit the domain): **Mailbox Quota** is the largest quota you can give one
+  mailbox of the domain, **Domain Quota** the most its mailboxes' quotas may add up to. PostfixAdmin checks
+  them when you create or change a mailbox; the mail itself is limited only by each mailbox's quota.
+
 ### Mail programs
 
 Add the account in the mail program as an **IMAP** account. Most programs ask for the e-mail address and the
