@@ -7,7 +7,7 @@ described in [How the server works](ARCHITECTURE.md).
 
 The whole installation takes about half an hour, most of it waiting for AWS.
 
-## Before you start
+## What you need before you start
 
 1. **An AWS account and a region.** Any region with at least two Availability Zones works; three are
    recommended. Create both stacks in the same region: stage 2 reads the outputs of stage 1, and CloudFormation
