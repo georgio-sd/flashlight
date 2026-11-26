@@ -369,9 +369,9 @@ sudo cat /root/credentials
 | Entry | Where it is used |
 |---|---|
 | Admin web access | The admin site `https://admin.<main domain>/`: user `admin` and its password. The browser asks for it before any of the admin tools; the site then opens a page with links to them |
-| PostfixAdmin superadmin | `https://admin.<main domain>/padmin`: login is your AdminEmail |
+| PostfixAdmin superadmin | `https://admin.<main domain>/padmin/`: login is your AdminEmail. Here you manage domains, mailboxes, aliases and their passwords |
 | PostfixAdmin setup password | PostfixAdmin's setup page, rarely needed |
-| MariaDB | phpMyAdmin, `https://admin.<main domain>/myadmin` |
+| MariaDB | phpMyAdmin, `https://admin.<main domain>/myadmin/` |
 | Rspamd web interface | The spam filter, `https://admin.<main domain>/rspamd/` (with the spam filter) |
 
 The file lives on the mail storage, so it stays the same when the server is replaced. Keep a copy of it in
