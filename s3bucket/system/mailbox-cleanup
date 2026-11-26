@@ -34,7 +34,7 @@ for dir in "$mail"/*/*@*/; do
   domain=${dir%/*}; domain=${domain##*/}
   case "$domain" in sieve|shared-folders|.*) continue ;; esac
   has_mailbox "$address" && continue
-  dest=$trash/$(date +%Y-%m-%d-%H%M%S)-$address
+  dest=$trash/$(date +%Y%m%d-%H%M%S)-$address
   mkdir -p "$dest"
   mv "$dir" "$dest/mail"
   [ -d "$mail/sieve/$domain/$address" ] && mv "$mail/sieve/$domain/$address" "$dest/sieve"

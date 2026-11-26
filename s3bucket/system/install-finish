@@ -114,7 +114,7 @@ failed() {
     --query 'Stacks[0].StackStatus' --output text 2> /dev/null)}
   # the log name says who started this instance: a stack operation, or an ASG replacement (only these are retried)
   case "$status" in *_IN_PROGRESS) kind=stack ;; *_COMPLETE) kind=replace ;; *) kind=unknown ;; esac
-  where="s3://$BUCKET_CONFIG/install-logs/$kind-$(date +%Y-%m-%d-%H-%M-%S)-$id.log"
+  where="s3://$BUCKET_CONFIG/install-logs/$kind-$(date +%Y%m%d-%H%M%S)-$id.log"
   aws s3 cp $log "$where" --quiet || where="(upload failed) $log on the instance"
   event FAILED "$reason; install log: $where"
   case "$status" in
@@ -168,7 +168,7 @@ case "$1" in
     # this instance's install log stays on EFS (root only: a first install's trace contains passwords)
     if mountpoint -q $efs; then
       install -d -m 700 $efs/log/install
-      install -m 600 $log $efs/log/install/$(date +%Y-%m-%d-%H-%M-%S)-$id.log
+      install -m 600 $log $efs/log/install/$(date +%Y%m%d-%H%M%S)-$id.log
       find $efs/log/install -name '*.log' -mtime +90 -delete
     fi
     [ -n "$user_rc" ] && [ "$user_rc" != 0 ] && event USER "user-script.sh failed with code $user_rc (details in the install log)"

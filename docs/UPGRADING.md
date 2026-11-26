@@ -92,7 +92,7 @@ A successful upgrade shows lines like these:
 
 ```
 BOOT     new Spot instance, installing
-UPGRADE  data 1.0 -> 1.1, backup in backup/upgrade-1.0-1.1-2027-03-01-02-10-44
+UPGRADE  data 1.0 -> 1.1, backup in backup/upgrade-1.0-1.1-20270301-021044
 UPGRADE  step 1.0-1.1 done
 UPGRADE  data now at 1.1
 REBOOT   rebooting

@@ -58,6 +58,9 @@ folder is frozen.
   `mail-server-bundles` in eu-central-1). Stage 1 of 1.2 and later uses it; it only answers HTTPS.
 - Turning a domain off in PostfixAdmin (Active) now also stops its mailboxes from logging in and sending, like
   turning off each mailbox; before, it only refused the domain's incoming mail. Mail and settings stay.
+- Install logs, upgrade backups and the trash folders of deleted mailboxes are named with a compact date and
+  time, `20261125-230930` (was `2026-11-25-23-09-30`, and `2026-11-25-230930` for the trash). Older ones keep
+  their names until they are deleted by age.
 
 ## [1.1] - 2026-11-23
 

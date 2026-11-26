@@ -404,7 +404,7 @@ days. Before you create a mailbox with the same address again, wait for the move
 1. Create the mailbox again in PostfixAdmin (**Add Mailbox**) with the same address and a new password: the
    commands below need it to exist.
 2. Log in to the server over SSH (see [First login](#first-login)) and bring back the mail and filters as
-   root. The name of the mailbox's trash folder (such as `2026-11-25-230930-user@example.com`) is in the
+   root. The name of the mailbox's trash folder (such as `20261125-230930-user@example.com`) is in the
    `MAILBOX` line of `/mnt/mailserver/log/instance.log`:
 
    ```

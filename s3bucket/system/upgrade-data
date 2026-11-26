@@ -148,7 +148,7 @@ case "$1" in
       instance-log FAILED "$name: no update recipe for $installed -> $package, nothing changed"
       exit 1
     fi
-    bk=$efs/backup/upgrade-$name-$(date +%Y-%m-%d-%H-%M-%S)
+    bk=$efs/backup/upgrade-$name-$(date +%Y%m%d-%H%M%S)
     pkg=/root/$package old=$bk/old dest=$dir
     instance-log UPGRADE "$name $installed -> $package, backup in ${bk#$efs/}"
     # backup: the database dump and the old folder itself (moved, not copied: the new package goes to an empty one)
@@ -213,7 +213,7 @@ case "$1" in
       instance-log UPGRADE "data $data -> $this_release, no data changes in between"
       exit 0
     fi
-    dir=$efs/backup/upgrade-$data-$this_release-$(date +%Y-%m-%d-%H-%M-%S)
+    dir=$efs/backup/upgrade-$data-$this_release-$(date +%Y%m%d-%H%M%S)
     instance-log UPGRADE "data $data -> $this_release, backup in ${dir#$efs/}"
     if ! backup $dir; then
       instance-log FAILED "upgrade backup failed, nothing changed"
