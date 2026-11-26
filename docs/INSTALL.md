@@ -517,7 +517,9 @@ router both fit.
 The domain list belongs to stage 1, and stage 1 can't change it while stage 2 uses it. So the server goes into
 maintenance mode for a moment (about 15 minutes without mail service; other servers retry their deliveries):
 
-1. Create the new domain's hosted zone in Route 53, if it isn't there yet.
+1. Create the new domain's hosted zone in Route 53, if it isn't there yet. If the domain is registered
+   elsewhere (not in Route 53), go to the registrar's site and replace the domain's name servers with the
+   four listed in the zone's NS record, then wait until `dig NS <domain>` shows them (up to 48 hours).
 2. Update the stage 2 stack with `x-maintenance.yaml` (**Replace current template**), keeping the parameters.
    The server is shut down; all data stay.
 3. Update the stage 1 stack with the same `1-dns-preset.yaml`, adding the zone to **ZoneIDs** (or removing it).
