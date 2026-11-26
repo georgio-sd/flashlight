@@ -523,9 +523,9 @@ are updated by their version instead, whenever the release brings a newer one. H
 | PostfixAdmin | 4.0 | The release (pinned) |
 | phpMyAdmin | 5.2 | The release (pinned) |
 | Certbot with the Route 53 plugin | | EPEL |
-| Rspamd | 4.3.1 | The release (pinned) |
+| Rspamd | 4.3 | The release (pinned) |
 | Valkey | 8.1 | AlmaLinux (follows it, see RELEASING) |
 | Unbound | | AlmaLinux |
-| oletools (olefy) | 0.60.2 | PyPI with pinned hashes; olefy.py in the release |
+| oletools (olefy) | 0.60 | PyPI with pinned hashes; olefy.py in the release |
 | ClamAV | 1.4 | EPEL |
 | fail2ban | | EPEL |
