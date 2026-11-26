@@ -196,18 +196,20 @@ The release fixes what was done on `develop` and builds the bridge from the prev
    are only Rspamd's learning, so a failure costs relearning, not mail), and update the version in the table.
 9. **Server image.** Look up the newest official AlmaLinux image (owner `764336703387`, name
    `AlmaLinux OS 10.* x86_64`). If its minor release is newer than our image's, copy it, unencrypted, with the name
-   `Flashlight ` + its full name (`Flashlight AlmaLinux OS 10.3.20261116.0 x86_64`: unique, and it tells the build
-   it was made from) and the description `Mailserver:img_b`, and with the tags `Name` = the same name and
+   `Flashlight ` + its full name, taken as it is (`Flashlight AlmaLinux OS 10.3.20261116.0 x86_64`: unique, and it
+   tells the build it was made from) and the description `Mailserver:img_b`, and with the tags `Name` = the same name and
    `flashlight:installation` = `release` (the cost of publishing Flashlight, like the public bucket, which has the
    same tag), then make the image and the snapshot of its disk public and check both:
 
    ```
    aws ec2 describe-images --region us-west-2 --owners 764336703387 \
      --filters "Name=name,Values=AlmaLinux OS 10*x86_64*" --query 'reverse(sort_by(Images,&CreationDate))[:3].[ImageId,Name]'
-   aws ec2 copy-image --region us-west-2 --source-region us-west-2 --source-image-id ami-... \
-     --name "Flashlight AlmaLinux OS X.Y.YYYYMMDD.0 x86_64" --description Mailserver:img_b --tag-specifications \
-     'ResourceType=image,Tags=[{Key=Name,Value=Flashlight AlmaLinux OS X.Y.YYYYMMDD.0 x86_64},{Key=flashlight:installation,Value=release}]' \
-     'ResourceType=snapshot,Tags=[{Key=Name,Value=Flashlight AlmaLinux OS X.Y.YYYYMMDD.0 x86_64},{Key=flashlight:installation,Value=release}]'
+   SRC=ami-...    # the newest one from the list above
+   NAME="Flashlight $(aws ec2 describe-images --region us-west-2 --image-ids $SRC --query 'Images[0].Name' --output text)"
+   aws ec2 copy-image --region us-west-2 --source-region us-west-2 --source-image-id $SRC \
+     --name "$NAME" --description Mailserver:img_b --tag-specifications \
+     "ResourceType=image,Tags=[{Key=Name,Value=$NAME},{Key=flashlight:installation,Value=release}]" \
+     "ResourceType=snapshot,Tags=[{Key=Name,Value=$NAME},{Key=flashlight:installation,Value=release}]"
    aws ec2 modify-image-attribute --region us-west-2 --image-id ami-... --launch-permission "Add=[{Group=all}]"
    aws ec2 modify-snapshot-attribute --region us-west-2 --snapshot-id snap-... \
      --attribute createVolumePermission --operation-type add --group-names all
