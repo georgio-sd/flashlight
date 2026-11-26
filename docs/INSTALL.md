@@ -690,9 +690,20 @@ Flashlight writes `v=spf1 ip4:<server address> -all` and a DMARC record with `p=
 If your company also sends mail through another service, or you want DMARC reports, edit the records in
 Route 53:
 
-- **SPF:** keep `ip4:<server address>` in the record and add what you need, for example
-  `v=spf1 ip4:203.0.113.10 include:_spf.example.net -all`. A record that allows the server's address is left
-  alone; one that doesn't is replaced at the next server start.
+- **SPF** lists the servers that may send mail from the domain; Flashlight's record allows only this server.
+  If something else also sends mail from your domain (a newsletter service such as Mailchimp or SendGrid, a
+  CRM or help desk, your website or online shop, Google Workspace or Microsoft 365 while you move from it),
+  add it to the same record as its instructions say, for example
+  `v=spf1 ip4:203.0.113.10 include:_spf.example.net -all`. Without that, its mail fails SPF and, with
+  Flashlight's DMARC `p=reject`, is refused or goes to spam.
+  - Edit Flashlight's record, don't create a second one: a domain with two SPF records fails every SPF check,
+    this server's mail included (the server then writes a WARN line to `/mnt/mailserver/log/instance.log` at
+    its next start). In Route 53 it is one of the values of the domain's TXT record; leave the other values
+    (site verifications and the like) as they are.
+  - Keep `ip4:<server address>` exactly so. The server checks the record at every start: it leaves a record
+    that has it and replaces any other with its own, dropping your additions (`mx` or `a` in its place don't
+    count).
+  - SPF allows at most 10 `include:` and similar lookups in one record.
 - **DMARC:** an existing `_dmarc` record is never changed. Flashlight creates it only when the domain has none.
 
 The DKIM record is always Flashlight's.

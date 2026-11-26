@@ -14,7 +14,8 @@ The records:
   <domain>                  SPF "v=spf1 ip4:<EIP> -all". An SPF record that already allows our address
                             (ip4:<EIP>) is the admin's own, e.g. with an include: of another mail service, and
                             stays as it is; any other one is replaced. Other TXT strings of the domain (site
-                            verifications and the like) are always kept
+                            verifications and the like) are always kept. Two SPF records at one name (the admin
+                            added one instead of editing ours) fail every SPF check: a WARN line in instance.log
   _dmarc.<domain>           "v=DMARC1; p=reject; sp=reject; adkim=r; aspf=r", only if the domain has no DMARC
                             record yet (the admin may have changed the policy or added a report address)
   <MAIL_HOST>               SPF of the host name itself (checked for bounces, which have an empty sender),
@@ -72,6 +73,14 @@ def txt_with_spf(zone_id, name, eip):
     return others + [txt(ours)], 'replaced (did not allow our address)' if replaced else 'created'
 
 
+def warn_if_two_spf(name, values):
+    """a name may have only one SPF record: with two, every SPF check fails (permerror); the admin merges them"""
+    count = sum(1 for v in values if plain(v).lower().split()[:1] == ['v=spf1'])
+    if count > 1:
+        subprocess.run(['/usr/local/sbin/instance-log', 'WARN', 'SPF: %d records at %s; a name may have only one, '
+                        'or every SPF check fails: merge them into one in Route 53' % (count, name)])
+
+
 def upsert(name, values):
     return {'Action': 'UPSERT', 'ResourceRecordSet': {
         'Name': name, 'Type': 'TXT', 'TTL': TTL, 'ResourceRecords': [{'Value': v} for v in values]}}
@@ -87,6 +96,7 @@ def main():
         dkim = dkim_value(domain)
         dkim_now = txt_values(zone_id, dkim_name)
         spf, spf_status = txt_with_spf(zone_id, domain, eip)
+        warn_if_two_spf(domain, spf)
         changes = [upsert(dkim_name, [dkim]), upsert(domain, spf)]
         status = ['DKIM ' + ('unchanged' if [plain(v) for v in dkim_now] == [plain(dkim)]
                              else 'replaced' if dkim_now else 'created'),
@@ -99,6 +109,7 @@ def main():
             status.append('DMARC created (p=reject)')
         if i == 0:
             host_spf, host_status = txt_with_spf(zone_id, mail_host, eip)
+            warn_if_two_spf(mail_host, host_spf)
             changes.append(upsert(mail_host, host_spf))
             status.append('SPF of ' + mail_host + ' ' + host_status)
         route53.change_resource_record_sets(HostedZoneId=zone_id, ChangeBatch={'Changes': changes})

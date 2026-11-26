@@ -25,6 +25,12 @@ folder is frozen.
 
 - The config bucket refuses requests without TLS (a bucket policy); Flashlight and the AWS tools use HTTPS anyway.
 
+### Added
+
+- A WARN line in `/mnt/mailserver/log/instance.log` when a mail domain, or `mail.<main domain>`, has two SPF
+  records (one added next to Flashlight's instead of editing it): with two, every SPF check fails, this
+  server's mail included.
+
 ### Fixed
 
 - A failed first creation of stage 1 no longer ends in ROLLBACK_FAILED with a config bucket that has to be

@@ -195,7 +195,7 @@ already upgraded to a newer release.
 | BACKUP | The daily database dump |
 | ALERT | A mailbox that may be compromised |
 | CHECK, ERROR | The weekly Spot price check: its decision with the prices, or why it couldn't compare |
-| WARN | Something worked with a fallback (swap made smaller...), an AlertEmail address isn't confirmed, or the spam filter's data are over 85% of Valkey's memory cap |
+| WARN | Something worked with a fallback (swap made smaller...), an AlertEmail address isn't confirmed, the spam filter's data are over 85% of Valkey's memory cap, or a domain has two SPF records |
 | USER | The admin's user-script.sh failed |
 
 ## Data on EFS
@@ -432,7 +432,9 @@ with an `ALERT` line in the event log. The limits can be changed by the admin
 
 `dnsupd.py` keeps other TXT values of the domain (site verifications, for example). It also keeps the admin's
 own records: an SPF record that already allows the server's address (with an `include:` of another mail service,
-say) and any existing DMARC record. A domain removed from the stack loses its DKIM key and Flashlight's records.
+say) and any existing DMARC record. Two SPF records at one name fail every SPF check, so `dnsupd.py` reports
+them with a WARN line in instance.log; merging them is the admin's job. A domain removed from the stack loses
+its DKIM key and Flashlight's records.
 
 The certificate (Let's Encrypt, RSA) covers `mail.<main domain>` and `admin.<main domain>`; it is used by
 Postfix, Dovecot and Apache. Certbot validates through DNS (`_acme-challenge` TXT records in Route 53), so no
