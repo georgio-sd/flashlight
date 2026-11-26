@@ -684,9 +684,10 @@ Both files survive server replacements and Flashlight upgrades. If you raise the
 that your users really need it: these limits are what stops a stolen mailbox from getting your server's
 address onto blocklists.
 
-### Your own SPF and DMARC records
+### Your own SPF, DKIM and DMARC records
 
-Flashlight writes `v=spf1 ip4:<server address> -all` and a DMARC record with `p=reject` for every mail domain.
+Flashlight writes `v=spf1 ip4:<server address> -all`, a DKIM key and a DMARC record with `p=reject` for every
+mail domain.
 If your company also sends mail through another service, or you want DMARC reports, edit the records in
 Route 53:
 
@@ -705,6 +706,14 @@ Route 53:
     that has it and replaces any other with its own, dropping your additions (`mx` or `a` in its place don't
     count).
   - SPF allows at most 10 `include:` and similar lookups in one record.
+- **DKIM** signs every message the server sends, so the receiving server can check that it really comes from
+  your domain and wasn't changed on the way. The server keeps the private key (RSA 2048, one per domain, on the
+  mail storage, so it survives server replacements) and publishes the public one at `mail._domainkey.<domain>`.
+  This record is always Flashlight's: the server writes it again at every new instance, so don't edit it.
+  A service you use to send mail from your domain (newsletters, a CRM) signs with its own key under another
+  name (such as `k1._domainkey` or `google._domainkey`): add its record as its instructions say, next to
+  Flashlight's DKIM record, which it doesn't affect. A message passes DMARC if SPF or DKIM passes for your
+  domain, so such a service works even without being in SPF.
 - **DMARC** protects your domain from forged mail: it tells other servers what to do with a message that uses
   your domain as the sender but fails SPF and DKIM, which is usually someone else sending in your name (spam,
   phishing). Flashlight's record says reject it (`p=reject`). Change it as you need, for example add
@@ -712,8 +721,6 @@ Route 53:
   an existing `_dmarc` record. It creates one only for a domain that has none, at every new instance, so a
   deleted record comes back (to turn DMARC off, set `p=none` instead), and a record left by a previous mail
   service stays as it was; check it after the install.
-
-The DKIM record is always Flashlight's.
 
 ### Your own settings
 
