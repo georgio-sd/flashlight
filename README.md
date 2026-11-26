@@ -113,8 +113,8 @@ need to buy capacity in advance "for growth":
   go back to a smaller one the same way. Which size fits how many users, measured with load tests:
   [Choosing the instance type](docs/INSTALL.md#choosing-the-instance-type).
 - **Storage grows by itself.** EFS has no fixed size: you pay for the gigabytes of mail you actually have.
-  Mail that nobody has opened for a month moves automatically to a storage class that is about ten times
-  cheaper, and comes back on first access.
+- **Old mail costs less.** Mail that nobody has opened for a month moves to the much cheaper Infrequent Access
+  storage class by itself, and comes back on first access (MailStorageLifecyclePolicy: 7 to 90 days, or off).
 
 An example: **10 mailboxes with 30 GB of mail**, in the US West (Oregon) region, at AWS prices of November 2026
 (before taxes):
