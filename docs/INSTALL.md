@@ -488,10 +488,10 @@ under **My e-mail addresses**: only mail sent to those addresses gets the reply.
    rules; **Rules**: change **Subject** to **From**, keep **contains**, enter `@partner.com`; **Actions**:
    **Move message to** → `Partners` (under Inbox); **Save**.
 
-Also in the settings:
+Also worth knowing:
 
-- **Spam** and **Not spam** buttons (with the spam filter) teach the filter, see
-  [The spam filter](#the-spam-filter);
+- **Junk** in the toolbar above a message (**Not junk** in the Junk folder) moves it and teaches the spam
+  filter, when it is on; see [The spam filter](#the-spam-filter);
 - **Larry**, an older and more compact look: Settings → **Preferences** → **User Interface** → **Interface skin**.
 
 Roundcube's own help for users: https://docs.roundcube.net/doc/help/1.1/en_US/
@@ -601,8 +601,8 @@ sudo fail2ban-client unban --all           # every banned address
 ### The spam filter
 
 - **Users teach it.** Moving a message into Junk teaches the filter that it is spam; moving it out of Junk
-  teaches it that it isn't. In webmail, the **Spam** and **Not spam** buttons do the same. This works from any
-  mail program.
+  teaches it that it isn't. In webmail, the **Junk** and **Not junk** buttons above a message do the same. This
+  works from any mail program.
 - **Why did a message get its verdict?** The **History** tab of the Rspamd web interface
   (`https://admin.<main domain>/rspamd/`) shows each message with the checks that fired and their points.
   A message with 6 points or more goes to Junk; from 15 points it is refused.
