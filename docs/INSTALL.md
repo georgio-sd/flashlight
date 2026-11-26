@@ -705,7 +705,13 @@ Route 53:
     that has it and replaces any other with its own, dropping your additions (`mx` or `a` in its place don't
     count).
   - SPF allows at most 10 `include:` and similar lookups in one record.
-- **DMARC:** an existing `_dmarc` record is never changed. Flashlight creates it only when the domain has none.
+- **DMARC** protects your domain from forged mail: it tells other servers what to do with a message that uses
+  your domain as the sender but fails SPF and DKIM, which is usually someone else sending in your name (spam,
+  phishing). Flashlight's record says reject it (`p=reject`). Change it as you need, for example add
+  `rua=mailto:dmarc@example.com` to get reports, or use `p=quarantine` while you move: the server never changes
+  an existing `_dmarc` record. It creates one only for a domain that has none, at every new instance, so a
+  deleted record comes back (to turn DMARC off, set `p=none` instead), and a record left by a previous mail
+  service stays as it was; check it after the install.
 
 The DKIM record is always Flashlight's.
 
