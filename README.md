@@ -116,19 +116,22 @@ need to buy capacity in advance "for growth":
 - **Old mail costs less.** Mail that nobody has opened for a month moves to the much cheaper Infrequent Access
   storage class by itself, and comes back on first access (MailStorageLifecyclePolicy: 7 to 90 days, or off).
 
-An example: **10 mailboxes with 30 GB of mail**, in the US West (Oregon) region, at AWS prices of November 2026
-(before taxes):
+An example: **100 mailboxes with 300 GB of mail**, 200 GB of it older mail in Infrequent Access, on a t3.medium
+in US West (Oregon), at AWS prices of November 2026 (before taxes). A company of this size usually prefers no
+Spot interruptions, so the server is On-Demand, with or without a reservation:
 
-| Resource | On-Demand instance | Spot instance |
-|---|---|---|
-| Server (t3.small / t3a.small) | $14 – $15 | $4 – $9 |
-| Mail storage (EFS, 30 GB, mostly older mail) | $2 – $4 | $2 – $4 |
-| Permanent IP address | $3.65 | $3.65 |
-| Server disk, DNS zone, S3, logs | about $1 | about $1 |
-| **Total per month** | **about $21 – $24** | **about $11 – $18** |
+| Resource | On-Demand | Reserved, 1 year | Reserved, 3 years |
+|---|---|---|---|
+| Server (t3.medium) | $30.37 | $19.05 | $13.14 |
+| Mail storage (EFS: 100 GB Standard, 200 GB Infrequent Access) | $35.00 | $35.00 | $35.00 |
+| Permanent IP address | $3.65 | $3.65 | $3.65 |
+| Server disk, DNS zone, S3, logs | about $1.50 | about $1.50 | about $1.50 |
+| **Total per month** | **about $70** | **about $59** | **about $53** |
 
-The cost doesn't depend on the number of mailboxes, only on the size of the server and the amount of mail.
-Optional AWS Backup of the storage is billed separately by AWS.
+That is $0.50 to $0.70 per mailbox a month. Reserved prices are for no upfront payment; paying upfront lowers them a
+little more. Not included: reading or moving mail in Infrequent Access ($0.01 per GB, usually cents), CPU credits if
+the server works above its baseline for long (see [t3 CPU credits](docs/INSTALL.md#t3-cpu-credits)), and data sent
+out to users beyond AWS's free 100 GB a month. Optional AWS Backup of the storage is billed separately by AWS.
 
 ## Software
 
