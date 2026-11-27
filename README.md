@@ -75,6 +75,8 @@ flowchart LR
     s3 -. installs .-> ec2
     efs -. daily .-> backup
     asg -. alerts .-> sns
+    %% (invisible link: keeps AWS Backup next to the SNS topic, up from the corner)
+    sns ~~~ backup
 ```
 
 The installation consists of two CloudFormation stacks:
