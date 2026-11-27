@@ -18,6 +18,8 @@ records, recovery after failures and upgrades.
 - Webmail in the browser (Roundcube), with mail filters and vacation replies
 - IMAP and SMTP for any mail program: Outlook, Thunderbird, Apple Mail, phone apps
 - An admin panel for mailboxes, aliases and quotas (PostfixAdmin)
+- A storage statistics page for the admin: who uses the mail storage, by domain and by mailbox, how it grows
+  month by month, which mailboxes nobody reads any more, and how much deleted mailboxes still hold
 - Trusted TLS certificates from Let's Encrypt, renewed automatically
 - SPF, DKIM and DMARC records created and kept up to date automatically, so your mail is accepted by other
   servers and your domains are protected against forged senders
@@ -25,7 +27,7 @@ records, recovery after failures and upgrades.
   and others), content checks and a filter that learns from your mail. Spam goes to the Junk folder, obvious
   spam is refused before it arrives. Optionally, attachments of risky file types (programs, scripts, disk
   images) are refused, as Gmail does. Office documents with suspicious macros go to the Junk folder (oletools)
-- The spam filter learns from your users: moving a message into Junk, or the "Spam" button in webmail, teaches
+- The spam filter learns from your users: moving a message into Junk, or the "Junk" button in webmail, teaches
   it what spam is; moving it out teaches it what isn't. A web interface for the admin shows why each message got
   its verdict, and keeps a whitelist of partner domains
 - Outgoing mail is guarded against stolen passwords: users send only as their own addresses, at a pace of 30 messages

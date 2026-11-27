@@ -195,7 +195,7 @@ already upgraded to a newer release.
 | BACKUP | The daily database dump |
 | ALERT | A mailbox that may be compromised |
 | CHECK, ERROR | The weekly Spot price check: its decision with the prices, or why it couldn't compare |
-| WARN | Something worked with a fallback (swap made smaller...), an AlertEmail address isn't confirmed, the spam filter's data are over 85% of Valkey's memory cap, or a second SPF record of a domain was deleted |
+| WARN | Something worked with a fallback (swap made smaller...), an AlertEmail address isn't confirmed, the spam filter's data are over 85% of Valkey's memory cap, a second SPF record of a domain was deleted, or the nightly storage statistics had errors |
 | USER | The admin's user-script.sh failed |
 
 ## Data on EFS
@@ -211,7 +211,7 @@ already upgraded to a newer release.
 | `etc/postfix/dkim/` | DKIM keys and OpenDKIM's config |
 | `etc/crontab` | The system crontab: Flashlight's block and the admin's own lines |
 | `etc/<program>/` | The admin's own settings files |
-| `www/admin/` | PostfixAdmin and phpMyAdmin with their configs, the admin site's password file, its start page (`index.html`, rewritten at every boot from `apache/admin-index.html`) |
+| `www/admin/` | PostfixAdmin and phpMyAdmin with their configs, the admin site's password file, its start page (`index.html`), the Mail storage statistics page (`storage_stats/index.php`) and the site's icon (`favicon.svg`), all rewritten at every boot from `apache/` |
 | `www/webmail/` | Roundcube's logs |
 | `rspamd/` | The spam filter's web interface settings, statistics, graphs, whitelist |
 | `valkey/` | What the spam filter has learned |
@@ -448,6 +448,7 @@ test CA; switching to `production` with a stack update replaces it on the next i
 |---|---|
 | Every 10 minutes | `mailbox-cleanup`: mail of mailboxes deleted in PostfixAdmin moves to `mail/.deleted/` (30 days), their Roundcube data are deleted |
 | Every 10 minutes | `outbound-alert` (spam filter) |
+| Daily 04:15 | `storage-stats`: the night's snapshot for the Mail storage statistics page (see [Mail storage statistics](#mail-storage-statistics)) |
 | Daily 05:40 | `valkey-check` (spam filter): a `WARN` line while Valkey is over 85% of its memory cap |
 | Daily 22:55 | `db-backup`: dumps of all databases to `backup/`, 28 days |
 | Saturday-to-Sunday 01:15 | `spotprices.py` (Spot) |
@@ -456,6 +457,31 @@ test CA; switching to `production` with a stack update replaces it on the next i
 | Daily | Log rotation: the logs on EFS are rotated weekly and kept 13 weeks |
 
 Times are in the server's time zone (TimeZone).
+
+## Mail storage statistics
+
+`storage-stats` (cron, daily 04:15, `nice 19`, as root) writes one snapshot a night into the MariaDB database
+`flashlight`, which every install creates where missing (`mariadb/storage-stats.sql`):
+
+| Table | One row per | Kept |
+|---|---|---|
+| `mailbox_day` | mailbox and night: name, created, active, quota, size, messages, unread in the Inbox, Trash, Junk and Sent | 13 months |
+| `deleted_day` | trash folder of a deleted mailbox and night: size, when it was deleted | 13 months |
+| `domain_day` | domain and night: active, mailboxes, size, messages, deleted mailboxes | 5 years |
+| `storage_day` | night: the EFS size as AWS bills it (Standard, Infrequent Access, Archive), the mail and trash totals, the run's start, length and errors | 5 years |
+| `meta` | the schema version | |
+
+Sizes are Dovecot's own totals (`doveadm quota get -A`, `doveadm mailbox status -A`), read from its indexes:
+nothing is recounted, and a run takes about 5 minutes for 2,500 mailboxes. What Dovecot doesn't serve (inactive
+mailboxes, mailboxes of an inactive domain) and the trash folders of deleted mailboxes are counted from the
+Maildir file names, which carry the sizes; a trash folder only once in its life, with a 10-minute limit and three
+nights at most. The EFS size comes from AWS. A source that fails leaves its fields empty; its error goes to
+`storage_day` and to a `WARN` line.
+
+The page (`www/admin/storage_stats/index.php`, rewritten at every boot) only reads. It connects as the `apache`
+user through the unix socket (MariaDB's `unix_socket` authentication, `SELECT` on `flashlight` only, no
+password), loads nothing from outside, and sends a strict Content-Security-Policy with a nonce and
+`Cache-Control: no-store`. `flashlight` is in the nightly database dump.
 
 ## Security
 
@@ -468,7 +494,7 @@ Times are in the server's time zone (TimeZone).
 - **Encryption.** EFS is encrypted at rest and in transit (TLS mount). The instance's root disk is encrypted with
   the AWS-managed key, so swap is too. Users connect with TLS 1.2 or newer; port 25 offers TLS to other servers.
 - **The instance's rights in AWS** (IAM role): associate the Elastic IP; change TXT records only, in the stack's
-  zones only; replace only its own stack's instances; signal its own stack; read the config bucket, write
+  zones only; replace only its own stack's instances; signal its own stack; read its own mail storage's size; read the config bucket, write
   `install-logs/`, and full access to `upload/`; with AlertEmail, publish to the stack's alert topic and list
   its subscriptions. It can't change the installer files, so a compromised server
   can't plant a modified installer for the next instances.

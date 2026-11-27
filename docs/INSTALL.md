@@ -684,6 +684,29 @@ Both files survive server replacements and Flashlight upgrades. If you raise the
 that your users really need it: these limits are what stops a stolen mailbox from getting your server's
 address onto blocklists.
 
+### Mail storage statistics
+
+`https://admin.<main domain>/storage_stats/` (the **Mail storage statistics** tile on the admin site's start page)
+shows who uses the mail storage. The server takes a snapshot every night at 04:15 (server time), so the page shows
+the state of that morning; a new server shows it from its first night on.
+
+- **Storage (EFS):** how much the server stores, as AWS bills it, and how that grew over 30 days, 3, 6 and 12
+  months; how much of it is in the cheaper Infrequent Access class; and how much is mail, deleted mailboxes and
+  the rest (indexes, databases and their dumps, logs, spam filter data).
+- **Domains:** each domain's size, messages and mailboxes, its share and growth over 30 days, its deleted
+  mailboxes.
+- **Mailboxes:** each mailbox's size, messages, unread mail in the Inbox and how that changed over 30 days, its
+  Trash, Junk and Sent, its quota. Click a column title to sort; find a mailbox by address or name, or show one
+  domain. Amber marks what is worth a look: over 1,000 unread in the Inbox or 300 more in 30 days (a mailbox
+  nobody reads any more), or over 90% of the quota used. Grey rows are mailboxes that don't work: turned off, or
+  their domain is.
+- **Deleted mailboxes:** the mail kept for 30 days after a mailbox was deleted (see [Mailboxes](#mailboxes)),
+  with the days left.
+
+Growth figures and charts build up: each appears once the server has that much history. **Download CSV** gives
+the mailbox or domain table as a file, sizes in bytes. A problem with the nightly snapshot shows at the top of
+the page and as a `WARN` line in `/mnt/mailserver/log/instance.log`.
+
 ### Your own SPF, DKIM and DMARC records
 
 Flashlight writes `v=spf1 ip4:<server address> -all`, a DKIM key and a DMARC record with `p=reject` for every
