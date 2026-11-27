@@ -23,8 +23,11 @@ and stays:
 | The event log, install logs, database dumps and upgrade backups (`/mnt/mailserver/log`, `/mnt/mailserver/backup`) | |
 | The mail of deleted mailboxes, for its 30 days (`/mnt/mailserver/mail/.deleted`) | |
 
-Some releases also need a one-off change to the data, for example a new database column. The new instance
-does this itself during the upgrade (see [What happens on the server](#what-happens-on-the-server)).
+Everything in the left column is what this guide calls **the data**: it lives on EFS and outlives every
+instance. The `flashlight=` line of `/mnt/mailserver/versions` records which release the data belong to. Some
+releases also need a one-off change to the data, for example a new database column; mail itself is never
+changed. The new instance makes these changes itself during the upgrade and then records its own release for
+the data (see [What happens on the server](#what-happens-on-the-server)).
 
 ## Before you start
 
@@ -83,6 +86,9 @@ UPGRADE  data now at 1.1
 REBOOT   rebooting
 READY    installed and rebooted, services up
 ```
+
+The `UPGRADE data` lines are about [the data](#what-an-upgrade-changes): the release they belong to, each
+release's change to them (`step`), and the release they are at now.
 
 A release that doesn't change the data shows one line instead: `UPGRADE data 1.0 -> 1.1, no data changes in
 between`. `/mnt/mailserver/versions` now shows the new release. Then send a test message and log in to webmail.
