@@ -13,12 +13,15 @@ and stays:
 
 | Kept as it is | Replaced by the new release |
 |---|---|
-| Mail, mailboxes, aliases, domains | Flashlight's own config files (Postfix, Dovecot, Apache, OpenDKIM, fail2ban, the web applications) |
-| MariaDB databases (PostfixAdmin, Roundcube, phpMyAdmin) | Our block in the crontab (`# Flashlight begin` ... `# Flashlight end`) |
-| Certificates, DKIM keys, passwords (`/mnt/mailserver/root`) | The instance itself: OS, packages, scripts |
-| Your own settings files (see below) | |
-| Your own crontab lines outside our block | |
+| Mail, mailboxes, aliases, domains | The instance itself: OS, packages, programs |
+| MariaDB databases (PostfixAdmin, Roundcube, phpMyAdmin) | Flashlight's own config files (Postfix, Dovecot, Apache, OpenDKIM, Rspamd, fail2ban, the web applications) |
+| Certificates, DKIM keys, passwords (`/mnt/mailserver/root`) | The web applications (Roundcube, PostfixAdmin, phpMyAdmin), when the release brings newer versions: updated by their own upgrade steps, after a backup |
+| **Your own settings files for every program**, which upgrades never change (`/mnt/mailserver/etc`, listed below) | Flashlight's scripts (`/mnt/mailserver/automation`) and its block in the same crontab (`# Flashlight begin` ... `# Flashlight end`) |
+| Your own lines in the crontab (`/mnt/mailserver/etc/crontab`, outside Flashlight's block) | The admin site's start page and its Mail storage statistics page |
 | The spam filter's learning, its web interface settings, statistics and the whitelist of partner domains (`/mnt/mailserver/valkey`, `/mnt/mailserver/rspamd`) | |
+| The mail storage statistics and their history (database `flashlight`) | |
+| The event log, install logs, database dumps and upgrade backups (`/mnt/mailserver/log`, `/mnt/mailserver/backup`) | |
+| The mail of deleted mailboxes, for its 30 days (`/mnt/mailserver/mail/.deleted`) | |
 
 Flashlight's config files are rebuilt at every boot, so any change made directly in them is lost at the next
 instance replacement, whether or not you upgrade. Your own settings go to the files below. Flashlight creates each
