@@ -338,6 +338,14 @@ systemctl enable --now mariadb
 # Data from an older Flashlight release: back up, run the migrations up to this release, restore all on a failure
 /usr/local/sbin/upgrade-data run
 #
+# The database of the "Mail storage statistics" page of the admin site: created where missing, so new installs and
+# upgrades from older releases get it alike. storage-stats fills it every night; the page reads it as the apache user
+# through the unix socket (SELECT only, no password). Mail works without it, so a failure here is only a warning.
+aws s3 cp s3://$BUCKET_CONFIG/storage-stats.sql /root/storage-stats.sql
+mysql -u root < /root/storage-stats.sql ||
+  /usr/local/sbin/instance-log WARN "storage statistics: database not set up (details in the install log)"
+rm -f /root/storage-stats.sql
+#
 # Installing phpMyAdmin and postfixadmin (pinned releases from the config bucket)
 pfa_tar=postfixadmin-v4.0.7-php74.tar.gz
 pma_tar=phpMyAdmin-5.2.3-all-languages.tar.gz
@@ -500,7 +508,7 @@ fi
 #
 # Spot instances: on the interruption notice and on the weekly price check the instance stops its
 # services and asks the ASG to replace it (replace-instance); events go to /mnt/mailserver/log/instance.log
-for tool in replace-instance rebuild-check mailbox-cleanup db-backup outbound-alert valkey-check; do
+for tool in replace-instance rebuild-check mailbox-cleanup db-backup outbound-alert valkey-check storage-stats; do
   aws s3 cp s3://$BUCKET_CONFIG/$tool /mnt/mailserver/automation/
   chmod 700 /mnt/mailserver/automation/$tool
 done
@@ -536,6 +544,8 @@ crontab=/mnt/mailserver/etc/crontab
   [ "$ANTISPAM" = 'ENABLED' ] && echo "*/10 *  *  *  * root /mnt/mailserver/automation/outbound-alert $ADMIN_EMAIL $(echo "$DOMAIN_NAMES" | cut -d',' -f 1) $ADMIN_DOMAIN"
   # spam filter: a WARN line in instance.log while its data in Valkey take more than 85% of the memory cap
   [ "$ANTISPAM" = 'ENABLED' ] && echo '40   5  *  *  * root /mnt/mailserver/automation/valkey-check'
+  # the night's snapshot for the admin site's "Mail storage statistics" page (an hour after the scheduled rebuild)
+  echo "15   4  *  *  * root /mnt/mailserver/automation/storage-stats $MAIL_STORAGE $AWS_REGION"
   echo '# Flashlight end'
 } > $crontab.new
 mv $crontab.new $crontab

@@ -1,0 +1,256 @@
+#!/usr/bin/python3
+# Copyright 2020-2026 Samson (https://github.com/georgio-sd)
+# SPDX-License-Identifier: LicenseRef-PolyForm-Shield-1.0.0 (see LICENSE)
+"""Nightly snapshot of the mail storage for the "Mail storage statistics" page of the admin site.
+
+usage: storage-stats FILE_SYSTEM_ID REGION        (cron, every night; runs as root)
+
+Writes today's rows of the flashlight database (storage-stats.sql): every mailbox, every trash folder of a deleted
+mailbox, every domain and the storage as a whole. A second run on the same day replaces that day's rows.
+Old rows go: mailboxes and trash after 13 months, domains and storage after 5 years.
+
+Light on the server: Dovecot's own totals (quota, folder status) are read from its indexes, nothing is recounted.
+Only what Dovecot doesn't know is counted from the Maildir file names (sizes are in the names, no file is opened):
+- inactive mailboxes and those of inactive domains (Dovecot doesn't list them);
+- trash folders of deleted mailboxes, once in their life: their size never changes, so a folder found in an earlier
+  snapshot keeps that size. A folder whose count takes over 10 minutes is left for the next night, 3 nights at most.
+A source that fails (Dovecot, AWS...) leaves its fields unknown (NULL); the rest is still written, and the errors go
+to storage_day and to a WARN line in /mnt/mailserver/log/instance.log.
+"""
+import fcntl
+import json
+import os
+import re
+import subprocess
+import sys
+import time
+from datetime import date, datetime
+
+MAIL = '/mnt/mailserver/mail'
+TRASH = MAIL + '/.deleted'
+SCHEMA = '1'
+WALK_SECONDS = 600       # one folder count stops after this long
+WALK_ATTEMPTS = 3        # nights a trash folder is tried; then it counts as too large
+FOLDERS = {'.Trash': 'trash_bytes', '.Junk': 'junk_bytes', '.Sent': 'sent_bytes'}   # Maildir++ names
+STATUS_FOLDERS = {'Trash': 'trash_bytes', 'Junk': 'junk_bytes', 'Sent': 'sent_bytes'}
+
+errors = []
+
+
+def note(message):
+    errors.append(message)
+    print('storage-stats: ' + message, file=sys.stderr)
+
+
+def run(cmd):
+    """stdout of a command, or None (and an error) when it fails"""
+    r = subprocess.run(cmd, capture_output=True, text=True)
+    if r.returncode != 0:
+        note('%s failed (%d): %s' % (' '.join(cmd[:3]), r.returncode, (r.stderr.strip().splitlines() or [''])[-1][:200]))
+        return None
+    return r.stdout
+
+
+def unescape(value):
+    """a field of `mariadb -B` output: NULL, or the text with \\t \\n \\\\ \\0 decoded"""
+    if value == 'NULL':
+        return None
+    return re.sub(r'\\(.)', lambda m: {'t': '\t', 'n': '\n', '0': '\0'}.get(m.group(1), m.group(1)), value)
+
+
+def query(database, sql):
+    out = run(['mariadb', '-N', '-B', database, '-e', sql])
+    return None if out is None else [[unescape(f) for f in line.split('\t')] for line in out.splitlines()]
+
+
+def sql_value(v):
+    if v is None:
+        return 'NULL'
+    if isinstance(v, bool):
+        return '1' if v else '0'
+    if isinstance(v, int):
+        return str(v)
+    if isinstance(v, (date, datetime)):
+        v = v.isoformat(sep=' ') if isinstance(v, datetime) else v.isoformat()
+    return "'" + str(v).replace('\\', '\\\\').replace("'", "\\'").replace('\0', '') + "'"
+
+
+def inserts(table, columns, rows):
+    """INSERT statements, 500 rows each"""
+    for i in range(0, len(rows), 500):
+        values = ',\n'.join('(' + ','.join(sql_value(r[c]) for c in columns) + ')' for r in rows[i:i + 500])
+        yield 'INSERT INTO %s (%s) VALUES\n%s;' % (table, ','.join(columns), values)
+
+
+def walk(path, deadline):
+    """messages, sizes and unread INBOX mail of a Maildir from its file names; raises TimeoutError past the deadline.
+    The sizes are W= (the size with CRLF line ends, as Dovecot's quota counts them), else S="""
+    found = {'messages': 0, 'bytes': 0, 'unread_inbox': 0, 'trash_bytes': 0, 'junk_bytes': 0, 'sent_bytes': 0}
+    seen = 0
+    for top, dirs, files in os.walk(path):
+        kind = os.path.basename(top)
+        if kind not in ('cur', 'new'):
+            continue
+        folder = os.path.relpath(os.path.dirname(top), path)      # '.' is the INBOX, '.Trash' a folder
+        for name in files:
+            seen += 1
+            if seen % 2000 == 0 and time.monotonic() > deadline:
+                raise TimeoutError
+            m = re.search(r',W=(\d+)', name) or re.search(r',S=(\d+)', name)
+            size = int(m.group(1)) if m else 0
+            found['messages'] += 1
+            found['bytes'] += size
+            if folder in FOLDERS:
+                found[FOLDERS[folder]] += size
+            if folder == '.' and (kind == 'new' or 'S' not in name.rpartition(':2,')[2]):
+                found['unread_inbox'] += 1
+    return found
+
+
+def main():
+    if len(sys.argv) != 3:
+        sys.exit(__doc__)
+    file_system, region = sys.argv[1], sys.argv[2]
+    os.environ['PATH'] = '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin'
+    os.nice(19)
+    lock = open('/run/storage-stats.lock', 'w')
+    try:
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        return                                         # the previous run is still working
+    started = datetime.now().replace(microsecond=0)
+    clock = time.monotonic()
+    today = started.date()
+
+    version = query('flashlight', "SELECT value FROM meta WHERE name = 'schema_version'")
+    if not version or version[0][0] != SCHEMA:
+        note('database flashlight missing or of another schema version (%s), nothing written' % version)
+        subprocess.run(['/usr/local/sbin/instance-log', 'WARN', 'storage-stats: ' + errors[-1]])
+        sys.exit(1)
+
+    # PostfixAdmin: the mailboxes and domains
+    domains = {d: a == '1' for d, a in (query('postfix', "SELECT domain, active FROM domain WHERE domain <> 'ALL'") or [])}
+    boxes = {}
+    for address, domain, name, created, active, quota in (query('postfix',
+            'SELECT username, domain, name, created, active, quota FROM mailbox') or []):
+        boxes[address.lower()] = {
+            'snapshot': today, 'address': address.lower(), 'domain': domain.lower(), 'name': name or '',
+            'created': created, 'active': active == '1', 'quota_bytes': max(int(quota or 0), 0),
+            'bytes': None, 'messages': None, 'unread_inbox': None,
+            'trash_bytes': None, 'junk_bytes': None, 'sent_bytes': None}
+
+    # Dovecot's totals of the mailboxes it serves (active mailboxes of active domains)
+    served = set()
+    quota_out = run(['doveadm', '-f', 'tab', 'quota', 'get', '-A'])
+    for line in (quota_out or '').splitlines()[1:]:
+        f = line.split('\t')
+        if len(f) < 4 or f[0].lower() not in boxes or not f[3].isdigit():
+            continue
+        box = boxes[f[0].lower()]
+        if f[2] == 'STORAGE':
+            box['bytes'] = int(f[3]) * 1024
+        elif f[2] == 'MESSAGE':
+            box['messages'] = int(f[3])
+        served.add(f[0].lower())
+    status_out = run(['doveadm', '-f', 'tab', 'mailbox', 'status', '-A', 'unseen vsize', 'INBOX'] + list(STATUS_FOLDERS))
+    if status_out is not None:
+        for address in served:                      # a folder never opened doesn't exist yet: 0
+            boxes[address].update(unread_inbox=0, trash_bytes=0, junk_bytes=0, sent_bytes=0)
+        for line in status_out.splitlines()[1:]:
+            f = line.split('\t')
+            if len(f) < 4 or f[0].lower() not in served or not f[2].isdigit() or not f[3].isdigit():
+                continue
+            if f[1] == 'INBOX':
+                boxes[f[0].lower()]['unread_inbox'] = int(f[2])
+            elif f[1] in STATUS_FOLDERS:
+                boxes[f[0].lower()][STATUS_FOLDERS[f[1]]] = int(f[3])
+
+    # the mailboxes Dovecot doesn't serve (inactive, or of an inactive domain): counted from their Maildir file
+    # names. If Dovecot didn't answer at all, the mailboxes it serves stay unknown rather than all being counted.
+    for address, box in boxes.items():
+        if address in served or (quota_out is None and box['active'] and domains.get(box['domain'], False)):
+            continue
+        path = '%s/%s/%s' % (MAIL, box['domain'], address)
+        if not os.path.isdir(path):
+            box.update(bytes=0, messages=0, unread_inbox=0, trash_bytes=0, junk_bytes=0, sent_bytes=0)
+            continue
+        try:
+            box.update(walk(path, time.monotonic() + WALK_SECONDS))
+        except TimeoutError:
+            note('%s: not counted, over %d minutes' % (address, WALK_SECONDS // 60))
+
+    # trash folders of deleted mailboxes: sizes from the latest earlier snapshot, the new ones counted once
+    known = {}
+    for folder, size, attempts in (query('flashlight',
+            'SELECT folder, bytes, size_attempts FROM deleted_day WHERE snapshot = '
+            '(SELECT MAX(snapshot) FROM deleted_day WHERE snapshot < CURDATE())') or []):
+        known[folder] = (None if size is None else int(size), int(attempts))
+    deleted = []
+    for folder in (sorted(os.listdir(TRASH)) if os.path.isdir(TRASH) else []):
+        m = re.match(r'^(?:\d{8}-\d{6}|\d{4}-\d{2}-\d{2}-\d{6})-(.+@(.+))$', folder)
+        if not m or not os.path.isdir(TRASH + '/' + folder):
+            continue
+        size, attempts = known.get(folder, (None, 0))
+        if size is None and attempts < WALK_ATTEMPTS:
+            try:
+                size = walk(TRASH + '/' + folder + '/mail', time.monotonic() + WALK_SECONDS)['bytes']
+            except TimeoutError:
+                attempts += 1
+                note('trash %s: not counted, over %d minutes (night %d of %d)' % (folder, WALK_SECONDS // 60, attempts,
+                                                                                WALK_ATTEMPTS))
+        deleted.append({'snapshot': today, 'folder': folder, 'address': m.group(1).lower(), 'domain': m.group(2).lower(),
+                        'deleted_at': datetime.fromtimestamp(int(os.stat(TRASH + '/' + folder).st_mtime)),
+                        'bytes': size, 'size_attempts': attempts})
+
+    # domains: every PostfixAdmin domain, and domains only left in the trash
+    summed = lambda rows, key: None if any(r[key] is None for r in rows) else sum(r[key] for r in rows)
+    domain_rows = []
+    for domain in sorted(set(domains) | {b['domain'] for b in boxes.values()} | {d['domain'] for d in deleted}):
+        mine = [b for b in boxes.values() if b['domain'] == domain]
+        trash = [d for d in deleted if d['domain'] == domain]
+        active = sum(1 for b in mine if b['active'])
+        domain_rows.append({'snapshot': today, 'domain': domain, 'domain_active': domains.get(domain),
+                            'mailboxes': len(mine), 'mailboxes_active': active, 'mailboxes_inactive': len(mine) - active,
+                            'bytes': summed(mine, 'bytes'), 'messages': summed(mine, 'messages'),
+                            'deleted_mailboxes': len(trash), 'deleted_bytes': summed(trash, 'bytes')})
+
+    # the storage as AWS bills it
+    efs = {}
+    out = run(['aws', 'efs', 'describe-file-systems', '--file-system-id', file_system, '--region', region,
+               '--query', 'FileSystems[0].SizeInBytes', '--output', 'json'])
+    if out is not None:
+        try:
+            efs = json.loads(out) or {}
+        except ValueError:
+            note('aws efs: unreadable answer')
+
+    statements = ['START TRANSACTION;']
+    for table in ('mailbox_day', 'deleted_day', 'domain_day', 'storage_day'):
+        statements.append('DELETE FROM %s WHERE snapshot = %s;' % (table, sql_value(today)))
+    statements += inserts('mailbox_day', ['snapshot', 'address', 'domain', 'name', 'created', 'active', 'quota_bytes',
+                                          'bytes', 'messages', 'unread_inbox', 'trash_bytes', 'junk_bytes', 'sent_bytes'],
+                          list(boxes.values()))
+    statements += inserts('deleted_day', ['snapshot', 'folder', 'address', 'domain', 'deleted_at', 'bytes',
+                                          'size_attempts'], deleted)
+    statements += inserts('domain_day', ['snapshot', 'domain', 'domain_active', 'mailboxes', 'mailboxes_active',
+                                         'mailboxes_inactive', 'bytes', 'messages', 'deleted_mailboxes', 'deleted_bytes'],
+                          domain_rows)
+    for table, keep in (('mailbox_day', 13), ('deleted_day', 13), ('domain_day', 60), ('storage_day', 60)):
+        statements.append('DELETE FROM %s WHERE snapshot < CURDATE() - INTERVAL %d MONTH;' % (table, keep))
+    storage = {'snapshot': today, 'efs_bytes': efs.get('Value'), 'efs_standard_bytes': efs.get('ValueInStandard'),
+               'efs_ia_bytes': efs.get('ValueInIA'), 'efs_archive_bytes': efs.get('ValueInArchive'),
+               'mailbox_bytes': summed(list(boxes.values()), 'bytes'), 'deleted_bytes': summed(deleted, 'bytes'),
+               'started': started, 'duration_seconds': int(time.monotonic() - clock),
+               'errors': '; '.join(errors)[:4000] or None}
+    statements += inserts('storage_day', list(storage), [storage])
+    statements.append('COMMIT;')
+    r = subprocess.run(['mariadb', 'flashlight'], input='\n'.join(statements), capture_output=True, text=True)
+    if r.returncode != 0:
+        note('writing the snapshot failed: %s' % (r.stderr.strip().splitlines() or [''])[-1][:200])
+    if errors:
+        subprocess.run(['/usr/local/sbin/instance-log', 'WARN', 'storage-stats: ' + '; '.join(errors)[:400]])
+    sys.exit(1 if r.returncode else 0)
+
+
+if __name__ == '__main__':
+    main()
