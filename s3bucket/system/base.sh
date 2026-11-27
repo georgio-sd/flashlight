@@ -763,6 +763,15 @@ aws s3 cp s3://$BUCKET_CONFIG/admin-index.html /var/www/admin/index.html
 sed -i "s/{MailDomain}/$MAIL_DOMAIN/g; s/{Version}/$(/usr/local/sbin/upgrade-data release)/g" /var/www/admin/index.html
 [ "$ANTISPAM" = 'ENABLED' ] || sed -i '/<!-- rspamd -->/,/<!-- \/rspamd -->/d' /var/www/admin/index.html
 chmod 644 /var/www/admin/index.html
+# the admin site's icon in the browser tab (also served for /favicon.ico, sites.conf)
+aws s3 cp s3://$BUCKET_CONFIG/favicon.svg /var/www/admin/favicon.svg
+chmod 644 /var/www/admin/favicon.svg
+# the "Mail storage statistics" page (reads the flashlight database that storage-stats fills every night)
+mkdir -p /var/www/admin/storage_stats
+aws s3 cp s3://$BUCKET_CONFIG/storage-stats.php /var/www/admin/storage_stats/index.php
+sed -i "s/{MailDomain}/$MAIL_DOMAIN/g; s/{Version}/$(/usr/local/sbin/upgrade-data release)/g" \
+  /var/www/admin/storage_stats/index.php
+chmod 644 /var/www/admin/storage_stats/index.php
 # a self-signed certificate for "localhost", for the catch-all HTTPS site of sites.conf that refuses requests to
 # other names (with our real certificate, Apache warns that it doesn't match "localhost")
 openssl req -x509 -newkey rsa:2048 -nodes -days 3650 -subj /CN=localhost -addext subjectAltName=DNS:localhost \

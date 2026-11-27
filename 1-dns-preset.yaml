@@ -253,6 +253,8 @@ Resources:
       - 'postfixadmin/config.local.php'
       - 'apache/sites.conf'
       - 'apache/admin-index.html'
+      - 'apache/storage-stats.php'
+      - 'apache/favicon.svg'
       - 'postfix/main.cf'
       - 'postfix/master.cf'
       - 'postfix/mysql/virtual_mailbox_domains.cf'

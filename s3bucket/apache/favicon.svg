@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+<!-- Copyright 2020-2026 Samson (https://github.com/georgio-sd). SPDX-License-Identifier: LicenseRef-PolyForm-Shield-1.0.0 (see LICENSE) -->
+<!-- Flashlight: the icon of the administration site (/var/www/admin/favicon.svg), the flashlight of its start page -->
+<rect width="32" height="32" rx="7" fill="#b86f00"/>
+<g transform="translate(4 4)" fill="none" stroke="#ffffff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+<path d="M9 2h6l-1 7h-4z"/><path d="M10 9h4v13h-4z"/><path d="M4 4l2 2M20 4l-2 2M2 10h3M19 10h3"/>
+</g>
+</svg>
