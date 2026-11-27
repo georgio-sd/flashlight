@@ -26,14 +26,14 @@ dump() {
 # MariaDB version (IF NOT EXISTS keeps the restored server's own root)
 dump users mariadb-dump -u root --system=users --insert-ignore
 # Application databases: a consistent snapshot without locking tables, so Postfix and Dovecot keep working
-for db in postfix roundcube phpmyadmin; do
+for db in postfix roundcube phpmyadmin flashlight; do
   dump $db mariadb-dump -u root --single-transaction --default-character-set=utf8mb4 $db
 done
 
 if [ -n "$failed" ]; then
   /usr/local/sbin/instance-log BACKUP "FAILED:$failed"
 else
-  /usr/local/sbin/instance-log BACKUP "ok, 4 dumps, $(du -ch *.$DATE.sql.gz | tail -1 | cut -f1)"
+  /usr/local/sbin/instance-log BACKUP "ok, 5 dumps, $(du -ch *.$DATE.sql.gz | tail -1 | cut -f1)"
   # old backups are removed only after a good one, so failing runs never eat the last good copies
   find /mnt/mailserver/backup -name '*.sql.gz' -mtime +28 -delete
 fi

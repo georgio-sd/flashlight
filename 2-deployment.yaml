@@ -450,6 +450,10 @@ Resources:
           - Effect: Allow
             Action: [ 'cloudformation:SignalResource', 'cloudformation:DescribeStacks' ]
             Resource: !Ref 'AWS::StackId'
+          # storage-stats: the size of the mail storage as AWS bills it (Standard and Infrequent Access)
+          - Effect: Allow
+            Action: 'elasticfilesystem:DescribeFileSystems'
+            Resource: !GetAtt MailStorage.Arn
           # install-finish: alert emails, and the check that the AlertEmail addresses are subscribed
           - !If
             - Alerts
