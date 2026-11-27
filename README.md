@@ -19,7 +19,7 @@ records, recovery after failures and upgrades.
 - IMAP and SMTP for any mail program: Outlook, Thunderbird, Apple Mail, phone apps
 - An admin panel for mailboxes, aliases and quotas (PostfixAdmin)
 - A storage statistics page for the admin: who uses the mail storage, by domain and by mailbox, how it grows
-  month by month, which mailboxes nobody reads any more, and how much deleted mailboxes still hold
+  month by month, which mailboxes may no longer be read, and how much deleted mailboxes still hold
 - Trusted TLS certificates from Let's Encrypt, renewed automatically
 - SPF, DKIM and DMARC records created and kept up to date automatically, so your mail is accepted by other
   servers and your domains are protected against forged senders
