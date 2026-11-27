@@ -26,8 +26,8 @@ and stays:
 Everything in the left column is what this guide calls **the data**: it lives on EFS and outlives every
 instance. The `flashlight=` line of `/mnt/mailserver/versions` records which release the data belong to. Some
 upgrades from one release to the next also need a one-off change to the data, for example a new database
-column; mail itself is never changed. The new instance makes these changes itself during the upgrade and then
-records its own release for the data (see [What happens on the server](#what-happens-on-the-server)).
+column or a file moved to another folder; mail itself is never changed. The new instance makes these changes
+itself during the upgrade and then records its own release for the data (see [What happens on the server](#what-happens-on-the-server)).
 
 ## Before you start
 
@@ -98,12 +98,13 @@ between`. `/mnt/mailserver/versions` now shows the new release. Then send a test
 The new instance mounts EFS and compares the release of the data with its own release:
 
 - **Same release:** a normal install. Only the configs and the instance are new.
-- **Older data, and no release in between changes them:** only the release recorded for the data is raised.
-- **Older data that must change:** it starts MariaDB and backs up everything a data change may touch: the databases and the
-  `etc`, `www`, `root` and `automation` folders on EFS. Mail itself is never changed by an upgrade and is not
-  in this backup. Then it runs the data changes of each release in between, in order. If any of them fails,
-  it restores the whole backup, writes a `FAILED` line to the event log and stops; your data are then exactly
-  as before the upgrade. The backup stays in `/mnt/mailserver/backup/upgrade-<from>-<to>-<date>` for 90 days.
+- **Older data, no data changes between the two releases:** only the release recorded for the data is raised.
+- **Older data, with data changes between the two releases:** it starts MariaDB and backs up everything a data
+  change may touch: the databases and the `etc`, `www`, `root` and `automation` folders on EFS. Mail itself is
+  never changed by an upgrade and is not in this backup. Then it runs the data changes one release after
+  another. If any of them fails, it restores the whole backup, writes a `FAILED` line to the event log and
+  stops; your data are then exactly as before the upgrade. The backup stays in
+  `/mnt/mailserver/backup/upgrade-<from>-<to>-<date>` for 90 days.
 - **Newer data** (an older release installed over data of a newer one): it stops before changing anything and
   writes a `FAILED` line.
 
