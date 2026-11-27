@@ -52,8 +52,9 @@ template** each time. Wait for each update to finish before starting the next on
    Keep the parameters as they are, except those that the section "Upgrading from <your release>" of the new
    release in [CHANGELOG.md](../CHANGELOG.md) asks to change: the maintenance template already has the new
    release's parameters. The server instance is shut down; EFS with all the data stays.
-2. **Stage 1.** Update the stage 1 stack with the new `1-dns-preset.yaml`. Keep the parameters as they are.
-   This copies the new release's installer files into your config bucket.
+2. **Stage 1.** Update the stage 1 stack with the new `1-dns-preset.yaml`. Keep the parameters as they are; the
+   `Updater` switch isn't needed, a new release runs the stack's setup by itself. This copies the new release's
+   installer files into your config bucket, takes the newest server image and writes the DNS records again.
 3. **Stage 2 back to service.** Update the stage 2 stack with the new `2-deployment.yaml`. Keep the parameters
    as they are after step 1; new parameters, if the release adds any, come with sensible defaults. A new instance is
    installed from the new release. The update finishes when the server reports that it is ready, usually
