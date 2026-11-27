@@ -772,6 +772,16 @@ aws s3 cp s3://$BUCKET_CONFIG/storage-stats.php /var/www/admin/storage_stats/ind
 sed -i "s/{MailDomain}/$MAIL_DOMAIN/g; s/{Version}/$(/usr/local/sbin/upgrade-data release)/g" \
   /var/www/admin/storage_stats/index.php
 chmod 644 /var/www/admin/storage_stats/index.php
+# the admin's thresholds for the page's amber marks: created once, read by the page (apache), written by root only
+custom_file /mnt/mailserver/etc/storage-stats/custom.ini \
+  "; Your thresholds for the amber marks of the Mail storage statistics page (admin site, /storage_stats/)." \
+  "; The page reads this file at every visit; Flashlight upgrades never change it." \
+  "; Remove the \";\" in front of a line to change its value (whole numbers above 0)." "" \
+  "; more unread messages in the Inbox than this" ";unread_max = 400" \
+  "; unread messages in the Inbox grown by more than this in 30 days" ";unread_growth = 200" \
+  "; more of the quota used than this, in percent" ";quota_full = 90"
+chown root:apache /mnt/mailserver/etc/storage-stats/custom.ini
+chmod 640 /mnt/mailserver/etc/storage-stats/custom.ini
 # a self-signed certificate for "localhost", for the catch-all HTTPS site of sites.conf that refuses requests to
 # other names (with our real certificate, Apache warns that it doesn't match "localhost")
 openssl req -x509 -newkey rsa:2048 -nodes -days 3650 -subj /CN=localhost -addext subjectAltName=DNS:localhost \

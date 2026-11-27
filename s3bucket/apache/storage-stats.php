@@ -11,11 +11,22 @@
 
 declare(strict_types=1);
 
-const UNREAD_MAX = 1000;     // amber: more unread in the Inbox than this
-const UNREAD_GROWTH = 300;   // amber: unread in the Inbox grew by more than this in 30 days
-const QUOTA_FULL = 90;       // amber: more of the quota used than this (%)
 const TRASH_DAYS = 30;       // mailbox-cleanup deletes trash folders after this many days
 const STALE_DAYS = 2;        // warning: the latest snapshot is older than this
+
+// The amber marks: Flashlight's thresholds, or the admin's from their settings file (created once by base.sh,
+// never changed by upgrades). A value that isn't a whole number above 0 keeps the default.
+$limits = [
+    'unread_max' => 400,      // more unread in the Inbox than this
+    'unread_growth' => 200,   // unread in the Inbox grew by more than this in 30 days
+    'quota_full' => 90,       // more of the quota used than this (%)
+];
+$custom = @parse_ini_file('/mnt/mailserver/etc/storage-stats/custom.ini', false, INI_SCANNER_RAW);
+foreach (is_array($custom) ? $custom : [] as $key => $value) {
+    if (isset($limits[$key]) && ctype_digit(trim((string)$value)) && (int)$value > 0) {
+        $limits[$key] = (int)$value;
+    }
+}
 
 $nonce = base64_encode(random_bytes(16));
 header('Cache-Control: no-store');
@@ -547,8 +558,9 @@ if ($csv && $last) {
         <a href="?csv=mailboxes">Download CSV</a>
       </div>
     </div>
-    <p class="muted"><span class="flag">amber</span> worth a look: over <?= num(UNREAD_MAX) ?> unread in the Inbox,
-      unread grown by over <?= num(UNREAD_GROWTH) ?> in 30 days, or over <?= QUOTA_FULL ?>% of the quota used.
+    <p class="muted"><span class="flag">amber</span> worth a look: over <?= num($limits['unread_max']) ?> unread in the Inbox,
+      unread grown by over <?= num($limits['unread_growth']) ?> in 30 days, or over <?= $limits['quota_full'] ?>% of the quota used
+      (thresholds: installation guide, Mail storage statistics).
       Grey rows: mailboxes that don't work, turned off themselves or by their domain.</p>
     <div class="scroll tall">
       <table class="sortable" id="mailbox-table">
@@ -569,9 +581,9 @@ if ($csv && $last) {
         </tr></thead>
         <tbody>
 <?php foreach ($boxes as $b):
-        $unreadFlag = $b['unread_inbox'] !== null && (int)$b['unread_inbox'] > UNREAD_MAX;
-        $growthFlag = $b['unread_change'] !== null && $b['unread_change'] > UNREAD_GROWTH;
-        $quotaFlag = $b['quota_used'] !== null && $b['quota_used'] > QUOTA_FULL;
+        $unreadFlag = $b['unread_inbox'] !== null && (int)$b['unread_inbox'] > $limits['unread_max'];
+        $growthFlag = $b['unread_change'] !== null && $b['unread_change'] > $limits['unread_growth'];
+        $quotaFlag = $b['quota_used'] !== null && $b['quota_used'] > $limits['quota_full'];
         $v = fn($x) => $x === null ? '-1' : (string)$x;
 ?>
           <tr<?= $b['state'] === 'yes' ? '' : ' class="off"' ?> data-domain="<?= h($b['domain']) ?>" data-text="<?= h(mb_strtolower($b['address'] . ' ' . $b['name'])) ?>">

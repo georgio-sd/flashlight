@@ -31,6 +31,7 @@ file once with an explanation and an example and never changes it afterwards:
 | Apache | `/mnt/mailserver/etc/httpd/custom.conf`, `custom-mail.conf`, `custom-admin.conf` |
 | MariaDB | `/mnt/mailserver/etc/mariadb/custom.cnf` |
 | fail2ban | `/mnt/mailserver/etc/fail2ban/custom.local` |
+| Mail storage statistics (admin site) | `/mnt/mailserver/etc/storage-stats/custom.ini` (thresholds of the amber marks) |
 | Roundcube | `/mnt/mailserver/etc/roundcube/custom.inc.php` |
 | PostfixAdmin | `/mnt/mailserver/etc/postfixadmin/custom.php` |
 | phpMyAdmin | `/mnt/mailserver/etc/phpmyadmin/custom.php` |

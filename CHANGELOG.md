@@ -32,7 +32,8 @@ folder is frozen.
   server's mail included. Applies to every mail domain and to `mail.<main domain>`.
 - **Mail storage statistics** on the admin site (`/storage_stats/`, a tile on the start page): who uses the mail
   storage. The storage as AWS bills it (Standard and Infrequent Access) and its growth; each domain and mailbox
-  with its size, unread mail and Trash, Junk and Sent, with amber marks for forgotten mailboxes and full quotas;
+  with its size, unread mail and Trash, Junk and Sent, with amber marks for forgotten mailboxes and full quotas
+  (thresholds of your own in `/mnt/mailserver/etc/storage-stats/custom.ini`);
   the deleted mailboxes and the days they have left. A snapshot is taken every night at 04:15 from Dovecot's own
   totals, light on the server; history is kept 13 months per mailbox and 5 years per domain and for the storage.
   Both tables also as CSV.

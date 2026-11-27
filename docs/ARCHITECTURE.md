@@ -250,6 +250,7 @@ Flashlight. Each program reads them after ours, so they win:
 | MariaDB | `etc/mariadb/custom.cnf` | Read after `flashlight.cnf` |
 | Rspamd | `etc/rspamd/override.d/` | Linked as `/etc/rspamd/override.d`; a file replaces the whole section of that name |
 | fail2ban | `etc/fail2ban/custom.local` | Read after `jail.local`; starts as commented examples from the release |
+| Mail storage statistics | `etc/storage-stats/custom.ini` | The thresholds of the page's amber marks, read at every visit |
 | Roundcube, PostfixAdmin, phpMyAdmin | `etc/roundcube/custom.inc.php`, `etc/postfixadmin/custom.php`, `etc/phpmyadmin/custom.php` | Included at the end of our config |
 
 The crontab is shared: Flashlight's jobs are between `# Flashlight begin` and `# Flashlight end`, rewritten at
