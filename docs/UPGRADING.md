@@ -51,17 +51,20 @@ itself during the upgrade and then records its own release for the data (see [Wh
 Run the three stack updates in this order, in the CloudFormation console, choosing **Replace current
 template** each time. Wait for each update to finish before starting the next one.
 
-1. **Stage 2 into maintenance mode.** Update the stage 2 stack with `x-maintenance.yaml` of the new release.
-   Keep the parameters as they are, except those that the section "Upgrading from <your release>" of the new
-   release in [CHANGELOG.md](../CHANGELOG.md) asks to change: the maintenance template already has the new
-   release's parameters. The server instance is shut down; EFS with all the data stays.
-2. **Stage 1.** Update the stage 1 stack with the new `1-dns-preset.yaml`. Keep the parameters as they are; the
-   `Updater` switch isn't needed, a new release runs the stack's setup by itself. This copies the new release's
-   installer files into your config bucket, takes the newest server image and writes the DNS records again.
-3. **Stage 2 back to service.** Update the stage 2 stack with the new `2-deployment.yaml`. Keep the parameters
-   as they are after step 1; new parameters, if the release adds any, come with sensible defaults. A new instance is
-   installed from the new release. The update finishes when the server reports that it is ready, usually
-   after 6 to 10 minutes.
+**Step 1. Stage 2 into maintenance mode.** Update the stage 2 stack with `x-maintenance.yaml` of the new
+release. Keep the parameters as they are, except those that the section "Upgrading from \<your release>" of
+the new release in [CHANGELOG.md](../CHANGELOG.md) asks to change: the maintenance template already has the new
+release's parameters. The server instance is shut down; EFS with all the data stays.
+
+**Step 2. Stage 1 update.** Update the stage 1 stack with the new `1-dns-preset.yaml`. Keep the parameters as
+they are; the `Updater` switch isn't needed, a new release runs the stack's setup by itself. This copies the new
+release's installer files into your config bucket, takes the newest server image and writes the DNS records
+again.
+
+**Step 3. Stage 2 back to service.** Update the stage 2 stack with the new `2-deployment.yaml`. Keep the
+parameters as they are after step 1; new parameters, if the release adds any, come with sensible defaults. A
+new instance is installed from the new release. The update finishes when the server reports that it is ready,
+usually after 6 to 10 minutes.
 
 Why maintenance mode first: in step 2 (the stage 1 update) the installer files in the config bucket are
 already the new ones. A running instance that got replaced at that moment (a spot interruption, for example)
@@ -121,7 +124,7 @@ line is written and the install stops. Your settings files for the applications 
 **A parameter value is no longer allowed.** CloudFormation refuses the update at once with
 `Parameter '...' must be one of AllowedValues`, or starts it and rolls it back within a minute with
 `Parameter validation failed: assertion error: ...`, which says what to choose. Nothing changed: choose the value
-(see "Upgrading from <your release>" in the CHANGELOG) and run the same step again.
+(see "Upgrading from \<your release>" in the CHANGELOG) and run the same step again.
 
 When the new instance fails to install, step 3 fails within a few minutes and CloudFormation rolls the stage 2
 stack back to maintenance mode. The server stays down until you act. To find the cause:
