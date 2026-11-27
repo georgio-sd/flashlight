@@ -63,10 +63,12 @@ template** each time. Wait for each update to finish before starting the next on
    installed from the new release. The update finishes when the server reports that it is ready, usually
    after 6 to 10 minutes.
 
-Why maintenance mode first: in step 2 the installer files in the config bucket are already the new ones. A
-running instance that got replaced at that moment (a spot interruption, for example) would be installed from
-new files with old settings. In maintenance mode no instance runs. Stage 1 also can't change its list of mail
-domains while stage 2 uses it, and in maintenance mode it doesn't.
+Why maintenance mode first: in step 2 (the stage 1 update) the installer files in the config bucket are
+already the new ones. A running instance that got replaced at that moment (a spot interruption, for example)
+would be installed from the new files by the old stage 2 template (its install commands and parameters). In
+maintenance mode no instance runs. Also, the stage 1 update takes the newest server image, and CloudFormation
+doesn't let it change the image while stage 2 is in service: when a newer image exists, the update is rolled
+back.
 
 ## Checking the result
 
@@ -140,12 +142,11 @@ Then either:
 
 ## Things to avoid
 
-- **Updating stage 2 straight to the new release without maintenance mode.** The old instance stops its
-  services while the new one installs. If the new one upgrades the data and then fails, the stack update rolls
-  back, but the old instance can't run data of a newer release: it keeps its services stopped and writes a
-  `STOP ... upgraded the data` line to the event log. The server stays down until you either run the update to
-  the new release again, or restore the upgrade backup by hand; in the second case the old instance resumes by
-  itself within a minute.
+- **Updating stage 2 straight to the new release without maintenance mode** (see why in
+  [Upgrade steps](#upgrade-steps)). If such an update fails after the new instance has upgraded the data, the
+  stack rolls back to the old instance, which can't run data of a newer release: it keeps its services stopped
+  and writes a `STOP ... upgraded the data` line to the event log until you run the update to the new release
+  again, or restore the upgrade backup by hand (it then resumes by itself within a minute).
 - **Editing Flashlight's own config files.** Use your own settings files instead (see
   [Customizing the server](INSTALL.md#customizing-the-server)).
 - **Deleting `/mnt/mailserver/versions` or `/mnt/mailserver/root/secrets`.** The first tells the installer
