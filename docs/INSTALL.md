@@ -699,8 +699,8 @@ the state of that morning; a new server shows it from its first night on.
   Trash, Junk and Sent, its quota. Click a column title to sort; find a mailbox by address or name, or show one
   domain. Amber marks what is worth a look: over 400 unread in the Inbox or 200 more in 30 days (possibly a
   mailbox nobody reads any more), or over 90% of the quota used. Your own thresholds go into
-  `/mnt/mailserver/etc/storage-stats/custom.ini`, which explains itself. Grey rows are mailboxes that don't work: turned off, or
-  their domain is.
+  `/mnt/mailserver/etc/storage-stats/custom.ini`, which explains itself. Grey rows are mailboxes that don't
+  work: turned off, or their domain is.
 - **Deleted mailboxes:** the mail kept for 30 days after a mailbox was deleted (see [Mailboxes](#mailboxes)),
   with the days left.
 
