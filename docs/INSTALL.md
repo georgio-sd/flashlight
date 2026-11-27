@@ -512,6 +512,24 @@ router both fit.
 
 ## Everyday tasks
 
+### Changing the install settings
+
+Most stage 2 parameters can be changed with a stack update (**Use current template**): the instance type,
+Spot or On-Demand, the spam filter, the antivirus and the others. The update replaces the server with a new
+one that has the same data; mail is down for a few minutes. If the new server fails to install, the stack rolls
+back and the old one goes on working.
+
+### What can't be changed after the install
+
+- **The main domain** (MainZoneID). The server's names, its certificate and its reverse DNS are made from it. Other
+  mail domains can be added and removed at any time (below), the main one stays.
+- **The names of the server** (MailSubDomain, AdminSubDomain). The certificate is issued once for these names, and
+  mail programs and DNS records point to them.
+- **The network settings** of stage 2 (VpcCidr, SubnetMask, AZoneNames, TwoAZoneConf).
+
+To change any of these, install a new server and move the data to it (the mail, the PostfixAdmin and Roundcube
+databases). This guide doesn't cover such a move.
+
 ### Adding or removing a mail domain
 
 The domain list belongs to stage 1, and stage 1 can't change it while stage 2 uses it. So the server goes into
@@ -531,23 +549,42 @@ delete it there if you no longer need them. Deleting the domain in PostfixAdmin 
 too; their mail goes to `/mnt/mailserver/mail/.deleted/` within 10 minutes and is kept there for 30 days. A domain
 deleted in PostfixAdmin but still in the stack's list comes back, empty, at the next instance install.
 
-### What can't be changed after the install
+### Upgrades
 
-- **The main domain** (MainZoneID). The server's names, its certificate and its reverse DNS are made from it. Other
-  mail domains can be added and removed at any time (above), the main one stays.
-- **The names of the server** (MailSubDomain, AdminSubDomain). The certificate is issued once for these names, and
-  mail programs and DNS records point to them.
-- **The network settings** of stage 2 (VpcCidr, SubnetMask, AZoneNames, TwoAZoneConf).
+See [Upgrading Flashlight](UPGRADING.md).
 
-To change any of these, install a new server and move the data to it (the mail, the PostfixAdmin and Roundcube
-databases). This guide doesn't cover such a move.
+### Mail storage statistics
 
-### Changing the server's settings
+`https://admin.<main domain>/storage_stats/` (the **Mail storage statistics** tile on the admin site's start page)
+shows who uses the mail storage. The server takes a snapshot every night at 04:15 (server time), so the page shows
+the state of that morning; a new server shows it from its first night on.
 
-Most stage 2 parameters can be changed with a stack update (**Use current template**): the instance type,
-Spot or On-Demand, the spam filter, the antivirus and the others. The update replaces the server with a new
-one that has the same data; mail is down for a few minutes. If the new server fails to install, the stack rolls
-back and the old one goes on working.
+- **Storage (EFS):** how much the server stores, as AWS bills it, and how that grew over 30 days, 3, 6 and 12
+  months; how much of it is in the cheaper Infrequent Access class; and how much is mail, deleted mailboxes and
+  the rest (indexes, databases and their dumps, logs, spam filter data).
+- **Domains:** each domain's size, messages and mailboxes, its share and growth over 30 days, its deleted
+  mailboxes.
+- **Mailboxes:** each mailbox's size, messages, unread mail in the Inbox and how that changed over 30 days, its
+  Trash, Junk and Sent, its quota. Click a column title to sort; find a mailbox by address or name, or show one
+  domain. Amber marks what is worth a look: over 400 unread in the Inbox or 200 more in 30 days (possibly a
+  mailbox nobody reads any more), or over 90% of the quota used. Your own thresholds go into
+  `/mnt/mailserver/etc/storage-stats/custom.ini`, which explains itself. Grey rows are mailboxes that don't
+  work: turned off, or their domain is.
+- **Deleted mailboxes:** the mail kept for 30 days after a mailbox was deleted (see [Mailboxes](#mailboxes)),
+  with the days left.
+
+Growth figures and charts build up: each appears once the server has that much history. **Download CSV** gives
+the mailbox or domain table as a file, sizes in bytes. A problem with the nightly snapshot shows at the top of
+the page and as a `WARN` line in `/mnt/mailserver/log/instance.log`.
+
+### Customizing the server
+
+Flashlight rebuilds its configuration files at every server start, so a change made directly in them is lost
+at the next replacement. Each program has a settings file of yours on the mail storage that Flashlight creates
+once and never changes; the list is in [Upgrading](UPGRADING.md#what-an-upgrade-changes). For changes that
+aren't settings (extra packages, for example), upload your own `user-script.sh` to the config bucket: every new
+server runs it once after the install. The template with instructions is `s3bucket/system/user-script.sh` in
+the repository.
 
 ### fail2ban
 
@@ -684,29 +721,14 @@ Both files survive server replacements and Flashlight upgrades. If you raise the
 that your users really need it: these limits are what stops a stolen mailbox from getting your server's
 address onto blocklists.
 
-### Mail storage statistics
+### Files to keep
 
-`https://admin.<main domain>/storage_stats/` (the **Mail storage statistics** tile on the admin site's start page)
-shows who uses the mail storage. The server takes a snapshot every night at 04:15 (server time), so the page shows
-the state of that morning; a new server shows it from its first night on.
+`upload/` in the config bucket is your folder: the server can write there, for example to keep a file outside
+the server:
 
-- **Storage (EFS):** how much the server stores, as AWS bills it, and how that grew over 30 days, 3, 6 and 12
-  months; how much of it is in the cheaper Infrequent Access class; and how much is mail, deleted mailboxes and
-  the rest (indexes, databases and their dumps, logs, spam filter data).
-- **Domains:** each domain's size, messages and mailboxes, its share and growth over 30 days, its deleted
-  mailboxes.
-- **Mailboxes:** each mailbox's size, messages, unread mail in the Inbox and how that changed over 30 days, its
-  Trash, Junk and Sent, its quota. Click a column title to sort; find a mailbox by address or name, or show one
-  domain. Amber marks what is worth a look: over 400 unread in the Inbox or 200 more in 30 days (possibly a
-  mailbox nobody reads any more), or over 90% of the quota used. Your own thresholds go into
-  `/mnt/mailserver/etc/storage-stats/custom.ini`, which explains itself. Grey rows are mailboxes that don't
-  work: turned off, or their domain is.
-- **Deleted mailboxes:** the mail kept for 30 days after a mailbox was deleted (see [Mailboxes](#mailboxes)),
-  with the days left.
-
-Growth figures and charts build up: each appears once the server has that much history. **Download CSV** gives
-the mailbox or domain table as a file, sizes in bytes. A problem with the nightly snapshot shows at the top of
-the page and as a `WARN` line in `/mnt/mailserver/log/instance.log`.
+```
+sudo aws s3 cp /mnt/mailserver/backup/some-file s3://<config bucket>/upload/
+```
 
 ### Your own SPF, DKIM and DMARC records
 
@@ -744,28 +766,6 @@ records in Route 53:
   an existing `_dmarc` record. It creates one only for a domain that has none, at every new instance, so a
   deleted record comes back (to turn DMARC off, set `p=none` instead), and a record left by a previous mail
   service stays as it was; check it after the install.
-
-### Your own settings
-
-Flashlight rebuilds its configuration files at every server start, so a change made directly in them is lost
-at the next replacement. Each program has a settings file of yours on the mail storage that Flashlight creates
-once and never changes; the list is in [Upgrading](UPGRADING.md#what-an-upgrade-changes). For changes that
-aren't settings (extra packages, for example), upload your own `user-script.sh` to the config bucket: every new
-server runs it once after the install. The template with instructions is `s3bucket/system/user-script.sh` in
-the repository.
-
-### Files to keep
-
-`upload/` in the config bucket is your folder: the server can write there, for example to keep a file outside
-the server:
-
-```
-sudo aws s3 cp /mnt/mailserver/backup/some-file s3://<config bucket>/upload/
-```
-
-### Upgrades
-
-See [Upgrading Flashlight](UPGRADING.md).
 
 ### Old server images
 

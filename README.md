@@ -43,7 +43,7 @@ failures and upgrades. Running a mail server still takes some technical skill, t
 - Room for your own settings beyond the install form: every program (Postfix, Dovecot, Apache, the spam filter,
   the web applications) has a settings file of yours that upgrades and server replacements never touch, and a
   script of yours runs whenever the server is rebuilt (after a replacement, an upgrade or a scheduled rebuild),
-  for extra packages, for example (see [Your own settings](docs/INSTALL.md#your-own-settings))
+  for extra packages, for example (see [Your own settings](docs/INSTALL.md#customizing-the-server))
 
 ## How it works
 
