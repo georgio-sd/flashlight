@@ -146,7 +146,8 @@ Then either:
   `STOP ... upgraded the data` line to the event log. The server stays down until you either run the update to
   the new release again, or restore the upgrade backup by hand; in the second case the old instance resumes by
   itself within a minute.
-- **Editing Flashlight's own config files.** Use the settings files listed above.
+- **Editing Flashlight's own config files.** Use your own settings files instead (see
+  [Customizing the server](INSTALL.md#customizing-the-server)).
 - **Deleting `/mnt/mailserver/versions` or `/mnt/mailserver/root/secrets`.** The first tells the installer
   which release your data belong to; the second holds the generated passwords and keys that Flashlight's
   configs are rebuilt from.
