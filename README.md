@@ -1,7 +1,7 @@
 <!-- Copyright 2020-2026 Samson (https://github.com/georgio-sd). SPDX-License-Identifier: LicenseRef-PolyForm-Shield-1.0.0 (see LICENSE) -->
 # Flashlight Mail Server
 
-**Your company's own mail server in your own AWS account, installed by two CloudFormation templates.**
+**Your company's own mail server in your own AWS account, with automated setup, recovery and upgrades.**
 
 Flashlight is made for small companies that want to run their corporate mail themselves instead of handing it
 to one of the big mail providers, without having to build and look after a mail server by hand. The mail,
