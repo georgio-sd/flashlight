@@ -732,6 +732,9 @@ sudo aws s3 cp /mnt/mailserver/backup/some-file s3://<config bucket>/upload/    
 sudo aws s3 cp s3://<config bucket>/upload/some-file /root/                       # from the bucket to the server
 ```
 
+`/root/` is on the server's own disk, lost when the server is replaced; a file that must stay goes to the mail
+storage, for example `/mnt/mailserver/root/`.
+
 ### Your own SPF, DKIM and DMARC records
 
 Flashlight writes `v=spf1 ip4:<server address> -all`, a DKIM key and a DMARC record with `p=reject` for every
