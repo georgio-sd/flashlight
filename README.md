@@ -56,6 +56,7 @@ and the same IP address, and carries on.
 flowchart LR
     users["Your users<br/>webmail, IMAP, SMTP"]
     others["Other mail servers"]
+    admin["Admin's mailbox<br/>alert emails"]
     subgraph aws["Your AWS account"]
         dns["Route 53<br/>your domains: MX, SPF, DKIM, DMARC"]
         eip["Elastic IP<br/>permanent address and reverse DNS"]
@@ -65,6 +66,7 @@ flowchart LR
         efs[("Amazon EFS<br/>mail, databases, settings<br/>stored across several Availability Zones")]
         s3["S3 bucket<br/>installer files and logs"]
         backup["AWS Backup<br/>optional"]
+        sns["SNS topic<br/>alert emails, optional"]
     end
     users --> eip
     others --> eip
@@ -73,6 +75,8 @@ flowchart LR
     ec2 <--> efs
     s3 -. installs .-> ec2
     efs -. daily .-> backup
+    asg -. alerts .-> sns
+    sns -. email .-> admin
 ```
 
 The installation consists of two CloudFormation stacks:
