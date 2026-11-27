@@ -580,11 +580,29 @@ the page and as a `WARN` line in `/mnt/mailserver/log/instance.log`.
 ### Customizing the server
 
 Flashlight rebuilds its configuration files at every server start, so a change made directly in them is lost
-at the next replacement. Each program has a settings file of yours on the mail storage that Flashlight creates
-once and never changes; the list is in [Upgrading](UPGRADING.md#what-an-upgrade-changes). For changes that
-aren't settings (extra packages, for example), upload your own `user-script.sh` to the config bucket: every new
-server runs it once after the install. The template with instructions is `s3bucket/system/user-script.sh` in
-the repository.
+at the next replacement, whether or not you upgrade. Your own settings go to the files below, on the mail
+storage. Flashlight creates each file once with an explanation and an example, and never changes it afterwards:
+upgrades and replacements keep it as it is.
+
+| Program | Your settings file |
+|---|---|
+| Postfix | `/mnt/mailserver/etc/postfix/main.local.cf` |
+| Dovecot | `/mnt/mailserver/etc/dovecot/custom.conf` |
+| Apache | `/mnt/mailserver/etc/httpd/custom.conf`, `custom-mail.conf`, `custom-admin.conf` |
+| MariaDB | `/mnt/mailserver/etc/mariadb/custom.cnf` |
+| fail2ban | `/mnt/mailserver/etc/fail2ban/custom.local` |
+| Mail storage statistics (admin site) | `/mnt/mailserver/etc/storage-stats/custom.ini` (thresholds of the amber marks) |
+| Roundcube | `/mnt/mailserver/etc/roundcube/custom.inc.php` |
+| PostfixAdmin | `/mnt/mailserver/etc/postfixadmin/custom.php` |
+| phpMyAdmin | `/mnt/mailserver/etc/phpmyadmin/custom.php` |
+| Rspamd (spam filter) | files in `/mnt/mailserver/etc/rspamd/override.d/` (see the README there) |
+
+OpenDKIM has no settings file of its own. In Rspamd, a file of yours replaces the whole section of that name,
+Flashlight's settings included, so start from a copy of ours in `/etc/rspamd/local.d/`.
+
+For changes that aren't settings (extra packages, for example), upload your own `user-script.sh` to the config
+bucket: every new server runs it once after the install. The template with instructions is
+`s3bucket/system/user-script.sh` in the repository.
 
 ### fail2ban
 

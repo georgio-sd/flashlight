@@ -16,32 +16,12 @@ and stays:
 | Mail, mailboxes, aliases, domains | The instance itself: OS, packages, programs |
 | MariaDB databases (PostfixAdmin, Roundcube, phpMyAdmin) | Flashlight's own config files (Postfix, Dovecot, Apache, OpenDKIM, Rspamd, fail2ban, the web applications) |
 | Certificates, DKIM keys, passwords (`/mnt/mailserver/root`) | The web applications (Roundcube, PostfixAdmin, phpMyAdmin), when the release brings newer versions: updated by their own upgrade steps, after a backup |
-| **Your own settings files for every program**, which upgrades never change (`/mnt/mailserver/etc`, listed below) | Flashlight's scripts (`/mnt/mailserver/automation`) and its block in the same crontab (`# Flashlight begin` ... `# Flashlight end`) |
+| **Your own settings files for every program**, which upgrades never change (`/mnt/mailserver/etc`, listed in [Customizing the server](INSTALL.md#customizing-the-server)) | Flashlight's scripts (`/mnt/mailserver/automation`) and its block in the same crontab (`# Flashlight begin` ... `# Flashlight end`) |
 | Your own lines in the crontab (`/mnt/mailserver/etc/crontab`, outside Flashlight's block) | The admin site's start page and its Mail storage statistics page |
 | The spam filter's learning, its web interface settings, statistics and the whitelist of partner domains (`/mnt/mailserver/valkey`, `/mnt/mailserver/rspamd`) | |
 | The mail storage statistics and their history (database `flashlight`) | |
 | The event log, install logs, database dumps and upgrade backups (`/mnt/mailserver/log`, `/mnt/mailserver/backup`) | |
 | The mail of deleted mailboxes, for its 30 days (`/mnt/mailserver/mail/.deleted`) | |
-
-Flashlight's config files are rebuilt at every boot, so any change made directly in them is lost at the next
-instance replacement, whether or not you upgrade. Your own settings go to the files below. Flashlight creates each
-file once with an explanation and an example and never changes it afterwards:
-
-| Program | Your settings file |
-|---|---|
-| Postfix | `/mnt/mailserver/etc/postfix/main.local.cf` |
-| Dovecot | `/mnt/mailserver/etc/dovecot/custom.conf` |
-| Apache | `/mnt/mailserver/etc/httpd/custom.conf`, `custom-mail.conf`, `custom-admin.conf` |
-| MariaDB | `/mnt/mailserver/etc/mariadb/custom.cnf` |
-| fail2ban | `/mnt/mailserver/etc/fail2ban/custom.local` |
-| Mail storage statistics (admin site) | `/mnt/mailserver/etc/storage-stats/custom.ini` (thresholds of the amber marks) |
-| Roundcube | `/mnt/mailserver/etc/roundcube/custom.inc.php` |
-| PostfixAdmin | `/mnt/mailserver/etc/postfixadmin/custom.php` |
-| phpMyAdmin | `/mnt/mailserver/etc/phpmyadmin/custom.php` |
-| Rspamd (spam filter) | files in `/mnt/mailserver/etc/rspamd/override.d/` (see the README there) |
-
-OpenDKIM has no settings file of its own. In Rspamd, a file of yours replaces the whole section of that name,
-Flashlight's settings included, so start from a copy of ours in `/etc/rspamd/local.d/`.
 
 Some releases also need a one-off change to the data, for example a new database column. The new instance
 does this itself during the upgrade (see [What happens on the server](#what-happens-on-the-server)).
