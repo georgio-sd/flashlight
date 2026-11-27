@@ -40,6 +40,10 @@ failures and upgrades. Running a mail server still takes some technical skill, t
 - Protection against password guessing (fail2ban)
 - Optional alert emails when the server is down and can't recover by itself
 - Daily database backups, and optional backups of all data with AWS Backup
+- Room for your own settings beyond the install form: every program (Postfix, Dovecot, Apache, the spam filter,
+  the web applications) has a settings file of yours that upgrades and server replacements never touch, and a
+  script of yours runs whenever the server is rebuilt (after a replacement, an upgrade or a scheduled rebuild),
+  for extra packages, for example (see [Your own settings](docs/INSTALL.md#your-own-settings))
 
 ## How it works
 
