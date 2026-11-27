@@ -3,10 +3,10 @@
 
 **Your company's own mail server in your own AWS account, with automated setup, recovery and upgrades.**
 
-Flashlight is made for small companies that want to run their corporate mail themselves instead of handing it
-to one of the big mail providers, without having to build and look after a mail server by hand. The mail,
-the mailboxes and every setting stay in the company's own AWS account, under its control. There is no
-per-user fee: you pay AWS for the resources the server uses, however many mailboxes you have.
+Flashlight is made for small and medium-sized companies that want to run their corporate mail themselves
+instead of handing it to one of the big mail providers, without having to build and look after a mail server
+by hand. The mail, the mailboxes and every setting stay in the company's own AWS account, under its control.
+There is no per-user fee: you pay AWS for the resources the server uses, however many mailboxes you have.
 
 Installing and supporting a mail server still takes some technical skill (see
 [What you need](#what-you-need)). Flashlight automates the routine parts: installation, certificates, DNS
