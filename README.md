@@ -11,11 +11,9 @@ server, not at a mail provider. There is no per-user fee: you pay AWS for the re
 however many mailboxes you have.
 
 Three things came first in Flashlight's design: keeping the company's mail safe, keeping the server running, and
-keeping its costs down. Installing, upgrading and managing it are made as easy as we could make them.
-
-Installing and supporting a mail server still takes some technical skill (see
-[What you need](#what-you-need)). Flashlight automates the routine parts: installation, certificates, DNS
-records, recovery after failures and upgrades.
+keeping its costs down. The routine work is automated: installation, certificates, DNS records, recovery after
+failures and upgrades. Running a mail server still takes some technical skill, though (see
+[What you need](#what-you-need)).
 
 ## What you get
 
