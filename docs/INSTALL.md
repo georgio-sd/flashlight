@@ -723,11 +723,13 @@ address onto blocklists.
 
 ### Files to keep
 
-`upload/` in the config bucket is your folder: the server can write there, for example to keep a file outside
-the server:
+To keep a file outside the server, or to pass it on elsewhere, copy it to `upload/` in the config bucket (stage 1's
+output `S3Bucket`): the server has full access to that folder just for this, and you take the file from there in
+the S3 console. It works the other way too: a file you put there, the server can fetch.
 
 ```
-sudo aws s3 cp /mnt/mailserver/backup/some-file s3://<config bucket>/upload/
+sudo aws s3 cp /mnt/mailserver/backup/some-file s3://<config bucket>/upload/     # from the server to the bucket
+sudo aws s3 cp s3://<config bucket>/upload/some-file /root/                       # from the bucket to the server
 ```
 
 ### Your own SPF, DKIM and DMARC records
