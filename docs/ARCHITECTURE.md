@@ -531,13 +531,15 @@ Times are in the server's time zone (TimeZone).
 | `meta` | the schema version | |
 
 Sizes are Dovecot's own totals (`doveadm quota get -A`, `doveadm mailbox status -A`), read from its indexes:
-nothing is recounted, and a run takes about 5 minutes for 2,500 mailboxes. What Dovecot doesn't serve (inactive
-mailboxes, mailboxes of an inactive domain) and the trash folders of deleted mailboxes are counted from the
-Maildir file names, which carry the sizes; a trash folder only once in its life, with a 10-minute limit and three
+nothing is recounted, and a run takes about 5 minutes for 2,500 mailboxes. Trash, Junk and Sent are the folders
+of these names; folders that other programs use instead (Outlook's Deleted Items, for example) count in the
+mailbox's size only. What Dovecot doesn't serve (inactive mailboxes, mailboxes of an inactive domain) and the
+trash folders of deleted mailboxes are counted from the Maildir file names, which carry the sizes; a trash folder only once in its life, with a 10-minute limit and three
 nights at most. The EFS size comes from AWS. A source that fails leaves its fields empty; its error goes to
 `storage_day` and to a `WARN` line.
 
-The page (`www/admin/storage_stats/index.php`, rewritten at every install) only reads. It connects as the `apache`
+The page (`www/admin/storage_stats/index.php`, rewritten at every install) only reads. The thresholds of its
+amber marks come from the admin's `etc/storage-stats/custom.ini`, read at every visit. It connects as the `apache`
 user through the unix socket (MariaDB's `unix_socket` authentication, `SELECT` on `flashlight` only, no
 password), loads nothing from outside, and sends a strict Content-Security-Policy with a nonce and
 `Cache-Control: no-store`. `flashlight` is in the nightly database dump.
