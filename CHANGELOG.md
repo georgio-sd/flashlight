@@ -38,6 +38,9 @@ folder is frozen.
   totals, light on the server; history is kept 13 months per mailbox and 5 years per domain and for the storage.
   Both tables also as CSV.
 - An icon for the admin site in the browser tab.
+- Trash and spam folders in another language, or of other names: the admin can add them in Dovecot's
+  `custom.conf`, so they are emptied after 30 days and teach the spam filter (INSTALL, Customizing the server,
+  with a command that lists the folders of all mailboxes).
 
 ### Fixed
 

@@ -48,6 +48,10 @@ The admin's settings files are created once by `custom_file` in `base.sh` and ne
 change or delete them. If a release has to change how a setting is applied, it does so in our files, so the
 admin's value still wins.
 
+Spam learning rules (`imapsieve_mailboxN` in `base.sh`): 1 to 8 are in use, 9 to 20 hold the place for new ones
+(Dovecot reads the rules in order and stops at the first missing number), the admin's start at 21. A new rule
+takes the first placeholder; existing numbers never change.
+
 ### Data on EFS
 
 Anything that lives on EFS and is not rebuilt at boot is data: databases, the `etc`, `www`, `root` and

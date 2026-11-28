@@ -449,7 +449,9 @@ Rspamd's Bayes filter learns by itself from mail that scores very high or very l
 Dovecot's imapsieve runs a script when a message is moved into a spam folder (learn as spam) or out of one to any
 folder but a trash or spam folder (learn as not spam), and passes the message to Rspamd. The folders go by name:
 Junk, and the names other programs use (Spam, Junk E-mail, Outlook's Junk Email); Trash, Deleted Messages and
-Outlook's Deleted Items. This works from any mail program. Roundcube
+Outlook's Deleted Items. This works from any mail program. The admin can add folders of other names in Dovecot's
+`custom.conf`: rules from 21 (1 to 8 are Flashlight's, 9 to 20 hold the place for its future rules) and a list of
+their trash and spam folders (`custom_no_ham`). Roundcube
 adds Junk and Not junk buttons (the `markasjunk` plugin), which move the message the same way.
 
 ### Web interface

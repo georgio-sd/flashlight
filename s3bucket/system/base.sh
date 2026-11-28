@@ -661,7 +661,56 @@ rm -f /mnt/mailserver/etc/dovecot/dovecot.conf /mnt/mailserver/etc/dovecot/dovec
 custom_file /mnt/mailserver/etc/dovecot/custom.conf \
   "# Your Dovecot settings. Flashlight's /etc/dovecot/dovecot.conf includes this file at its end, so the values" \
   "# set here win; Flashlight upgrades never change this file. Reload Dovecot after editing (systemctl reload" \
-  "# dovecot). Example:" "#   protocol imap {" "#     mail_max_userip_connections = 50" "#   }"
+  "# dovecot). Example:" "#   protocol imap {" "#     mail_max_userip_connections = 50" "#   }" \
+  "#" \
+  "# Trash and spam folders in another language (or of other names): see INSTALL.md, Customizing the server." \
+  "# Remove the \"#\" in front of the lines you need and put your folder names in. Example:" \
+  "#   namespace inbox {" \
+  "#     mailbox \"Удаленные\" {" \
+  "#       special_use = \\Trash" \
+  "#       autoexpunge = 30d" \
+  "#     }" \
+  "#     mailbox \"Нежелательная почта\" {" \
+  "#       special_use = \\Junk" \
+  "#       autoexpunge = 30d" \
+  "#     }" \
+  "#     mailbox \"Gelöschte Elemente\" {" \
+  "#       special_use = \\Trash" \
+  "#       autoexpunge = 30d" \
+  "#     }" \
+  "#     mailbox \"Junk-E-Mail\" {" \
+  "#       special_use = \\Junk" \
+  "#       autoexpunge = 30d" \
+  "#     }" \
+  "#   }" \
+  "#   plugin {" \
+  "#     # Two rules per spam folder, numbered from 21 on without gaps (1 to 20 are Flashlight's)" \
+  "#" \
+  "#     # --- 21: moved into «Нежелательная почта»: spam ---" \
+  "#     imapsieve_mailbox21_name = Нежелательная почта" \
+  "#     imapsieve_mailbox21_causes = COPY APPEND" \
+  "#     imapsieve_mailbox21_before = file:/etc/dovecot/sieve/learn-spam.sieve" \
+  "#" \
+  "#     # --- 22: moved out of «Нежелательная почта»: not spam ---" \
+  "#     imapsieve_mailbox22_name = *" \
+  "#     imapsieve_mailbox22_from = Нежелательная почта" \
+  "#     imapsieve_mailbox22_causes = COPY" \
+  "#     imapsieve_mailbox22_before = file:/etc/dovecot/sieve/learn-ham.sieve" \
+  "#" \
+  "#     # --- 23: moved into «Junk-E-Mail»: spam ---" \
+  "#     imapsieve_mailbox23_name = Junk-E-Mail" \
+  "#     imapsieve_mailbox23_causes = COPY APPEND" \
+  "#     imapsieve_mailbox23_before = file:/etc/dovecot/sieve/learn-spam.sieve" \
+  "#" \
+  "#     # --- 24: moved out of «Junk-E-Mail»: not spam ---" \
+  "#     imapsieve_mailbox24_name = *" \
+  "#     imapsieve_mailbox24_from = Junk-E-Mail" \
+  "#     imapsieve_mailbox24_causes = COPY" \
+  "#     imapsieve_mailbox24_before = file:/etc/dovecot/sieve/learn-ham.sieve" \
+  "#" \
+  "#     # --- all your trash and spam folders: moving out of a spam folder into one of these doesn't teach \"not spam\" ---" \
+  "#     sieve_env_custom_no_ham = Удаленные|Нежелательная почта|Gelöschte Elemente|Junk-E-Mail" \
+  "#   }"
 efs_unit dovecot
 restart_unit dovecot
 # logins are checked against the PostfixAdmin database
@@ -1172,6 +1221,24 @@ plugin {
   imapsieve_mailbox8_from = Junk Email
   imapsieve_mailbox8_causes = COPY
   imapsieve_mailbox8_before = file:/etc/dovecot/sieve/learn-ham.sieve
+  # 9-20: reserved for Flashlight's future rules. Dovecot reads the rules in order and stops at the first missing
+  # number, so these hold the place: each matches no folder (a name of its own: Dovecot warns about duplicates) and
+  # runs nothing. The admin's own rules start at 21.
+  imapsieve_mailbox9_name = Flashlight reserved 9
+  imapsieve_mailbox10_name = Flashlight reserved 10
+  imapsieve_mailbox11_name = Flashlight reserved 11
+  imapsieve_mailbox12_name = Flashlight reserved 12
+  imapsieve_mailbox13_name = Flashlight reserved 13
+  imapsieve_mailbox14_name = Flashlight reserved 14
+  imapsieve_mailbox15_name = Flashlight reserved 15
+  imapsieve_mailbox16_name = Flashlight reserved 16
+  imapsieve_mailbox17_name = Flashlight reserved 17
+  imapsieve_mailbox18_name = Flashlight reserved 18
+  imapsieve_mailbox19_name = Flashlight reserved 19
+  imapsieve_mailbox20_name = Flashlight reserved 20
+  # moving out of a spam folder into one of these doesn't teach "not spam" (learn-ham.sieve). The admin's own
+  # names, folders in another language for example, go to custom_no_ham in custom.conf (INSTALL.md)
+  sieve_env_flashlight_no_ham = Trash|Deleted Messages|Deleted Items|Junk|Spam|Junk E-mail|Junk Email
 }
 EOF
   mkdir -p /etc/dovecot/sieve/bin
@@ -1180,9 +1247,11 @@ require ["vnd.dovecot.pipe", "copy", "imapsieve"];
 pipe :copy "rspamd-learn" ["spam"];
 EOF
   cat > /etc/dovecot/sieve/learn-ham.sieve <<'EOF'
-require ["vnd.dovecot.pipe", "copy", "imapsieve", "environment", "variables"];
+require ["vnd.dovecot.pipe", "copy", "imapsieve", "environment", "vnd.dovecot.environment", "variables"];
 if environment :matches "imap.mailbox" "*" { set "mailbox" "${1}"; }
-if string :is "${mailbox}" ["Trash", "Deleted Messages", "Deleted Items", "Junk", "Spam", "Junk E-mail", "Junk Email"] { stop; }
+if environment :matches "vnd.dovecot.config.flashlight_no_ham" "*" { set "ours" "${1}"; }
+if environment :matches "vnd.dovecot.config.custom_no_ham" "*" { set "yours" "${1}"; }
+if string :contains "|${ours}|${yours}|" "|${mailbox}|" { stop; }
 pipe :copy "rspamd-learn" ["ham"];
 EOF
   printf '%s\n' '#!/bin/sh' '# Flashlight: passes a message moved into or out of Junk to Rspamd ($1: spam or ham)' \
