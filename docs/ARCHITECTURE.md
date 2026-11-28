@@ -606,7 +606,8 @@ themselves and are rarely needed.
   (its plan `aws/efs/automatic-backup-plan`, vault `aws/efs/automatic-backup-vault`) and keeps each copy 35
   days, billed separately by AWS. A copy restores in the AWS Backup console, to the same file system or a new
   one, whole or chosen folders. Without it, mail has no copy besides EFS's own redundancy across Availability
-  Zones: the database dumps don't hold it.
+  Zones: messages are files on EFS, and the nightly dumps hold only the databases (mailboxes, aliases,
+  settings), not the messages.
 - **Deleted mailboxes:** their mail is kept 30 days in `mail/.deleted/` and can be restored
   ([how](INSTALL.md#mailboxes)).
 - **Upgrades:** before a data upgrade, the new instance backs up the databases and the `etc`, `www`, `root` and
