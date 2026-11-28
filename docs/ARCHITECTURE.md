@@ -149,7 +149,7 @@ If the install can't even start (the AWS CLI can't be installed, or the config b
 `install-finish` to report it. UserData then sends the alert email itself (with the AWS CLI, or without it with
 `curl` signing the request with the instance role's keys), and the instance turns itself off after 30 minutes,
 which terminates it, and the Auto Scaling group starts a new one. Until an install works, this repeats about
-every 35 minutes, with one email each time.
+every 35 minutes, with one alert email each time.
 
 ### Alert emails
 
