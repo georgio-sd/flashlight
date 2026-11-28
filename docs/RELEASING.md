@@ -31,9 +31,8 @@ The instances start from a Flashlight image (AMI) owned by account 112904279782 
 description and copies it into the user's region. It does so when stage 1 is created, updated to a new release, or
 updated with the `Updater` switch; CloudFormation doesn't run it on an update that changes nothing it is given.
 A new image therefore reaches the users of all releases at their next upgrade or `Updater` switch, so it must work
-with all of them. The instance updates its operating system at every install
-anyway, but an image on the current AlmaLinux minor release (10.3 after 10.2) has less to update and installs
-faster: a release brings a new image when AlmaLinux has a newer minor release (checklist, step 9).
+with all of them. The instance updates its operating system on every new instance anyway, but an image on the
+current AlmaLinux minor release (10.3 after 10.2) has less to update and installs faster: a release brings a new image when AlmaLinux has a newer minor release (checklist, step 9).
 
 Other accounts can copy the image only if both the image and the snapshot of its disk are public. A public image
 alone isn't enough: the copy fails with "You do not have permission to access the storage of this ami", and so
@@ -43,8 +42,8 @@ does stage 1 in the user's account. The snapshot must not be encrypted (an encry
 
 ### Files Flashlight owns
 
-Config files, scripts and crontab jobs that Flashlight writes are rebuilt at every install from the release. A
-release can change them freely; no migration is needed. Each config still ends by including the admin's own
+Config files, scripts and crontab jobs that Flashlight writes are rebuilt on every new instance from the release.
+A release can change them freely; no migration is needed. Each config still ends by including the admin's own
 settings file (see the table in INSTALL.md, Customizing the server). Keep that include, and keep the
 "DON'T EDIT" header that points the admin to it.
 
@@ -58,8 +57,11 @@ takes the first placeholder; existing numbers never change.
 
 ### Data on EFS
 
-Anything that lives on EFS and is not rebuilt at boot is data: databases, the `etc`, `www`, `root` and
-`automation` folders, mail. A release that needs a one-off change to the data ships a migration (below).
+Data is what lives on EFS and isn't rewritten on every new instance: the databases (`mysql/`, among them
+`flashlight`), the admin's settings files and the certificates and keys (`etc/`, `root/`), the spam filter's
+learning (`valkey/`, `rspamd/`), mail and the mail queue (`mail/`, `spool/`). A release that needs a one-off
+change to the data ships a migration (below); before it runs, the databases and the `etc`, `www`, `root` and
+`automation` folders are backed up.
 
 Mail (`/mnt/mailserver/mail`) and the mail queue are never changed by a migration: they are not in the
 upgrade backup.
@@ -74,6 +76,10 @@ new secret must therefore:
 2. generate it for existing installs in its migration;
 3. add the key to the `keys` list in `system/secrets`.
 
+A secret that can simply be made when it is missing, like the Rspamd web interface's password, needs none of
+this: `base.sh` reads it with `secrets get ... 2> /dev/null` and makes and stores it on any new instance that
+doesn't find it, on the first install and on existing data alike.
+
 ### Packages
 
 Web application packages are pinned: the tarball is in `packages/` of the release folder in the public bucket,
@@ -81,7 +87,7 @@ named in the `Files` list and in `base.sh` (`pfa_tar`, `pma_tar`, `rc_tar`, `lar
 of each application is recorded in `/mnt/mailserver/versions` (`roundcube=`, `larry=`, `postfixadmin=`,
 `phpmyadmin=`).
 
-An application is installed on the first install. On existing data, every install runs
+An application is installed on the first install. On existing data, every new instance runs
 `upgrade-data app NAME PACKAGE` for each application. When the recorded package isn't the release's one, it:
 1. dumps the application's database and moves its folder into `backup/upgrade-NAME-<date>/`;
 2. runs the application's recipe `update_NAME` in `upgrade-data`: the new package goes into an empty folder,
@@ -90,7 +96,8 @@ An application is installed on the first install. On existing data, every instal
    stops the install.
 
 It never installs an older package than the recorded one (`WARN`, kept). An application without a recipe stops
-the install with `FAILED ... no update recipe` as soon as its package changes. The recipes exist for: PostfixAdmin, Roundcube.
+the install with `FAILED ... no update recipe` as soon as its package changes. The recipes exist for:
+PostfixAdmin, Roundcube.
 
 To bump an application:
 1. Read its release notes and upgrade notes. Compare its default config with the old one: a new setting that
@@ -108,7 +115,9 @@ Old package files stay in the public bucket folder of the release that used them
 ### OS packages
 
 OS packages come from AlmaLinux and EPEL at install time, always the newest ones for the OS release; EPEL is
-pinned to the OS minor branch. Nothing to do per release, unless a package is added or removed in `base.sh`.
+pinned to the OS minor branch. What doesn't simply follow them is checked at every release (checklist, steps 6
+to 9): the pinned Rspamd and EFS client packages, Valkey (AlmaLinux moves it to a newer version now and then)
+and the server image. oletools comes from PyPI with pinned hashes (`olefy-requirements.txt`).
 
 ## Migrations
 
@@ -197,7 +206,7 @@ The release fixes what was done on `develop` and builds the bridge from the prev
    upload the package to `packages/`, update its name in `base.sh` (`efs_rpm`) and in the stage 1 `Files` list,
    update the version, date and SHA-256 in build/efs-utils.md, and test a fresh install and an instance
    replacement with it.
-8. **Valkey.** It comes from AlmaLinux (AppStream), unpinned, and follows it at every install; Red Hat moves it
+8. **Valkey.** It comes from AlmaLinux (AppStream), unpinned, and follows it on every new instance; Red Hat moves it
    to a newer version within RHEL 10 now and then (8.0 to 8.1 in 2026). Compare `dnf repoquery valkey` on an
    instance with the version in the table of [ARCHITECTURE](ARCHITECTURE.md). If its minor or major version is
    newer, check on a stand with learned data that a `dump.rdb` written by the older Valkey loads after an
