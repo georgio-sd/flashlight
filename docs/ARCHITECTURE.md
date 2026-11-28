@@ -367,6 +367,7 @@ flowchart LR
     lmtp --> sieve["Sieve: spam -> Junk,<br/>other mail -><br/>the user's filters"]
     sieve --> box[("Mailbox<br/>on EFS")]
     rspamd -- "15+ points, virus,<br/>blocked attachment" --> reject["refused<br/>(sender gets the reason)"]
+    rspamd <-. "sender, links" .-> rbl["Blocklists over DNS<br/>(Spamhaus, others)"]
     rspamd <-. "attachments" .-> clamav["ClamAV: viruses<br/>(Antivirus)"]
     rspamd <-. "Office files" .-> olefy["olefy: macros"]
 ```
@@ -376,11 +377,11 @@ flowchart LR
    relaying for anyone not logged in. Domains, mailboxes and aliases come from the PostfixAdmin database; only
    active ones count, and a mailbox of a turned-off domain can't log in either (Dovecot checks both Active flags).
    Messages are limited to 25 MB, incoming and outgoing (a receiving server may have a lower limit).
-2. **Rspamd** (first milter) scores the message (see [Spam filter](#spam-filter)). ClamAV and olefy only report
-   to Rspamd what they found; Rspamd alone decides and answers Postfix. From 15 points, or for a virus or a
-   blocked attachment, the message is refused during the SMTP session, so the sender learns about it. From 6
-   points it gets an `X-Spam: Yes` header. There is no greylisting: it would delay legitimate mail by minutes
-   or hours.
+2. **Rspamd** (first milter) scores the message (see [Spam filter](#spam-filter)). ClamAV, olefy and the
+   blocklists (Spamhaus and others, asked over DNS) only report to Rspamd what they found; Rspamd alone decides
+   and answers Postfix. From 15 points, or for a virus or a blocked attachment, the message is refused during the
+   SMTP session, so the sender learns about it. From 6 points it gets an `X-Spam: Yes` header. There is no
+   greylisting: it would delay legitimate mail by minutes or hours.
 3. **OpenDKIM** (second milter) only signs; with the spam filter, Rspamd has already checked SPF, DKIM, DMARC
    and ARC and written the Authentication-Results header. Without the spam filter OpenDKIM verifies too.
 4. **Dovecot** delivers through LMTP. A global Sieve script (`sieve_before`) puts mail with `X-Spam: Yes` into
