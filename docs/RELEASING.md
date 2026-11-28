@@ -39,10 +39,10 @@ does stage 1 in the user's account. The snapshot must not be encrypted (an encry
 
 ### Files Flashlight owns
 
-Config files, scripts and crontab jobs that Flashlight writes are rebuilt at every boot from the release. A
+Config files, scripts and crontab jobs that Flashlight writes are rebuilt at every install from the release. A
 release can change them freely; no migration is needed. Each config still ends by including the admin's own
-settings file (see the table in UPGRADING.md). Keep that include, and keep the "DON'T EDIT" header that points
-the admin to it.
+settings file (see the table in INSTALL.md, Customizing the server). Keep that include, and keep the
+"DON'T EDIT" header that points the admin to it.
 
 The admin's settings files are created once by `custom_file` in `base.sh` and never changed. A release must not
 change or delete them. If a release has to change how a setting is applied, it does so in our files, so the

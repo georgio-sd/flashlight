@@ -579,7 +579,7 @@ the page and as a `WARN` line in `/mnt/mailserver/log/instance.log`.
 
 ### Customizing the server
 
-Flashlight rebuilds its configuration files at every server start, so a change made directly in them is lost
+Flashlight rebuilds its configuration files on every new instance, so a change made directly in them is lost
 at the next replacement, whether or not you upgrade. Your own settings go to the files below, on the mail
 storage. Flashlight creates each file once with an explanation and an example, and never changes it afterwards:
 upgrades and replacements keep it as it is.
@@ -729,7 +729,7 @@ sudo rspamadm configtest && sudo systemctl reload rspamd
 flashlight_submission_recipient_limit = 50
 ```
 
-and apply it now (the file itself is applied at every server start):
+and apply it now (the file itself is applied on every new instance):
 
 ```
 sudo postconf -e flashlight_submission_recipient_limit=50 && sudo systemctl reload postfix
@@ -770,7 +770,7 @@ records in Route 53:
     and deletes the other, with a WARN line in `/mnt/mailserver/log/instance.log` that shows it: add what it
     allowed to the remaining record. In Route 53 the SPF record is one of the values of the domain's TXT
     record; leave the other values (site verifications and the like) as they are.
-  - Keep `ip4:<server address>` exactly so. The server checks the record at every start: it leaves a record
+  - Keep `ip4:<server address>` exactly so. The server checks the record on every new instance: it leaves a record
     that has it and replaces any other with its own, dropping your additions (`mx` or `a` in its place don't
     count).
   - SPF allows at most 10 `include:` and similar lookups in one record.

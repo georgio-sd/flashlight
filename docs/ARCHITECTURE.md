@@ -238,8 +238,8 @@ The file isn't rotated: a server in normal use adds about 30 KB a month.
 | `etc/postfix/dkim/` | DKIM keys and OpenDKIM's config |
 | `etc/crontab` | The system crontab: Flashlight's block and the admin's own lines |
 | `etc/<program>/` | The admin's own settings files |
-| `www/admin/` | PostfixAdmin and phpMyAdmin (updated only when a release brings a newer version; their configs are rewritten at every boot), the admin site's password file (`.htpasswd`, made at the first install), its start page (`index.html`), the Mail storage statistics page (`storage_stats/index.php`) and the site's icon (`favicon.svg`), the last three rewritten at every boot from `apache/` |
-| `www/webmail/` | Roundcube: the application (updated like the admin applications), its config (rewritten at every boot), `temp/` and `logs/` (rotated weekly, kept 13 weeks) |
+| `www/admin/` | PostfixAdmin and phpMyAdmin (updated only when a release brings a newer version; their configs are rewritten at every install), the admin site's password file (`.htpasswd`, made at the first install), its start page (`index.html`), the Mail storage statistics page (`storage_stats/index.php`) and the site's icon (`favicon.svg`), the last three rewritten at every install from `apache/` |
+| `www/webmail/` | Roundcube: the application (updated like the admin applications), its config (rewritten at every install), `temp/` and `logs/` (rotated weekly, kept 13 weeks) |
 | `rspamd/` | The spam filter's web interface settings, statistics, graphs, whitelist |
 | `valkey/` | What the spam filter has learned |
 | `clamav/` | The antivirus signatures (only while Antivirus is enabled) |
@@ -263,9 +263,12 @@ unmounted, it would wipe the other's state, so the new server could lose its fil
 
 ## Configuration: ours and the admin's
 
-Flashlight's configuration files are rewritten from the release at every install, so they always match the
-installed programs and the release. They live on the instance (in `/etc`) and carry a "DON'T EDIT" header. A
-handful of values in them come from the stack's parameters and from `root/secrets`.
+Flashlight's configuration files are rewritten from the release at every install, that is on every new instance
+(a reboot of the same instance doesn't rewrite them; "at every boot" in the files' headers means the same), so
+they always match the installed programs and the release. Most live on the instance (in `/etc`); the configs of
+the web applications, OpenDKIM's config and Flashlight's block of the crontab live on EFS next to what they
+configure, and are rewritten all the same. They carry a "DON'T EDIT" header. A handful of values in them come
+from the stack's parameters and from `root/secrets`.
 
 The admin's settings live in separate files on EFS, created once with an explanation and never changed by
 Flashlight. Each program reads them after ours, so they win:
@@ -281,8 +284,11 @@ Flashlight. Each program reads them after ours, so they win:
 | Mail storage statistics | `etc/storage-stats/custom.ini` | The thresholds of the page's amber marks, read at every visit |
 | Roundcube, PostfixAdmin, phpMyAdmin | `etc/roundcube/custom.inc.php`, `etc/postfixadmin/custom.php`, `etc/phpmyadmin/custom.php` | Included at the end of our config |
 
+OpenDKIM has no file of the admin's. For changes that aren't settings (extra packages, for example), the admin's
+`user-script.sh` in the config bucket runs after every install (see [Install](#install)).
+
 The crontab is shared: Flashlight's jobs are between `# Flashlight begin` and `# Flashlight end`, rewritten at
-every boot; lines outside belong to the admin.
+every install; lines outside belong to the admin.
 
 ## Services
 
@@ -335,7 +341,7 @@ its database connections without a goodbye when it exits (after 100 clients, lik
 level 2 would log each as "Aborted connection", dozens an hour under load. Errors and real warnings are still
 logged; `log_warnings = 2` in the admin's `custom.cnf` shows these again.
 
-Dovecot's connection limits are sized by memory too, at every boot: an always-connected mail program costs
+Dovecot's connection limits are sized by memory too, at every install: an always-connected mail program costs
 about 1.6 MB (measured), so IMAP gets about one connection per 2 MB of what is left after the services (1.5 GB,
 2.5 GB with ClamAV) and 512 MB for the page cache, never fewer than Dovecot's default 1024: 2-4 GB servers keep
 1024, 8 GB with ClamAV gets about 2350, 16 GB about 6350. The stats, anvil and auth services, which every
@@ -507,7 +513,7 @@ Maildir file names, which carry the sizes; a trash folder only once in its life,
 nights at most. The EFS size comes from AWS. A source that fails leaves its fields empty; its error goes to
 `storage_day` and to a `WARN` line.
 
-The page (`www/admin/storage_stats/index.php`, rewritten at every boot) only reads. It connects as the `apache`
+The page (`www/admin/storage_stats/index.php`, rewritten at every install) only reads. It connects as the `apache`
 user through the unix socket (MariaDB's `unix_socket` authentication, `SELECT` on `flashlight` only, no
 password), loads nothing from outside, and sends a strict Content-Security-Policy with a nonce and
 `Cache-Control: no-store`. `flashlight` is in the nightly database dump.
