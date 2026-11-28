@@ -699,9 +699,9 @@ take 25 and 26. Dovecot stops at the first missing number, so leave no gaps. `si
 your trash and spam folders, separated by `|`. On a new server, `custom.conf` already holds this example,
 commented out.
 
-For changes that aren't settings (extra packages, for example), upload your own `user-script.sh` to the config
-bucket: every new server runs it once after the install. The template with instructions is
-`s3bucket/system/user-script.sh` in the repository.
+**Your own install script.** For changes that aren't settings (extra packages, for example), upload your own
+`user-script.sh` to the config bucket: every new server runs it once after the install. The template with
+instructions is `s3bucket/system/user-script.sh` in the repository.
 
 ### fail2ban
 
