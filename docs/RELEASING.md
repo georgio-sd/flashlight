@@ -9,9 +9,13 @@ rules a change must follow so that existing servers can upgrade to it. The user'
 
 A release `X.Y` consists of:
 
-- the templates `1-dns-preset.yaml`, `2-deployment.yaml` and `x-maintenance.yaml` from the repository;
-- the installer files from `s3bucket/`, published in the public bucket `flashlight-mail-server` (us-west-2)
-  under `vX.Y/` with the same folder layout (`system/base.sh`, `postfix/main.cf`, `packages/...`).
+- the templates `1-dns-preset.yaml`, `2-deployment.yaml` and `x-maintenance.yaml` from the repository, attached
+  to the release's page on GitHub, where users download them;
+- the installer files, published in the public bucket `flashlight-mail-server` (us-west-2) under `vX.Y/`: those
+  of `s3bucket/` with the same folder layout (`system/base.sh`, `postfix/main.cf`...), and the binary packages
+  in `packages/` (the EFS client, Rspamd, the web applications), which are kept only in the bucket, not in the
+  repository: a new release folder starts with a copy of the previous release's `packages/`;
+- the tag `vX.Y` on `main`, its GitHub release with the release notes, and its section in `CHANGELOG.md`.
 
 Stage 1 copies the files listed in its `Files` property from `BaseUrl` into the stack's config bucket. The
 config bucket is flat: each file is stored by its name only, so file names must be unique across all folders.
@@ -72,9 +76,10 @@ new secret must therefore:
 
 ### Packages
 
-Web application packages are pinned: the tarball is in `s3bucket/packages/`, named in the `Files` list and in
-`base.sh` (`pfa_tar`, `pma_tar`, `rc_tar`, `larry_tar`). The installed package of each application is recorded
-in `/mnt/mailserver/versions` (`roundcube=`, `larry=`, `postfixadmin=`, `phpmyadmin=`).
+Web application packages are pinned: the tarball is in `packages/` of the release folder in the public bucket,
+named in the `Files` list and in `base.sh` (`pfa_tar`, `pma_tar`, `rc_tar`, `larry_tar`). The installed package
+of each application is recorded in `/mnt/mailserver/versions` (`roundcube=`, `larry=`, `postfixadmin=`,
+`phpmyadmin=`).
 
 An application is installed on the first install. On existing data, every install runs
 `upgrade-data app NAME PACKAGE` for each application. When the recorded package isn't the release's one, it:
@@ -231,14 +236,16 @@ The release fixes what was done on `develop` and builds the bridge from the prev
    still there. If the release has a migration, also test a release skip (from two releases back) if one exists,
    and a failing migration. A failing migration is tested on the instance with `MIGRATIONS_DIR`, `RELEASES` and
    `THIS_RELEASE`, which `upgrade-data` reads instead of its built-in values.
-12. **Publish the files.** Upload `s3bucket/` to `s3://flashlight-mail-server/vX.Y/` once more, keeping the layout,
-   so the folder matches the release, and check that every path of the `Files` list is there. From now on the
+12. **Publish the files.** Copy `packages/` of the previous release into `vX.Y/packages/` (`aws s3 cp --recursive`),
+   then replace the packages the release updates (steps 6, 7 and the web applications). Upload `s3bucket/` to
+   `s3://flashlight-mail-server/vX.Y/` once more, keeping the layout, so the folder matches the release, and check
+   that every path of the `Files` list is there. From now on the
    folder is frozen.
 13. **Publish the code.** In `CHANGELOG.md`, turn `[Unreleased]` into `[X.Y] - <date>` and check its version table
    against the newest server image (step 9), the `Files` list (`packages/`), `olefy-requirements.txt` and
-   `olefy.py`: a version that changed is in bold. Merge into `main`, tag `vX.Y`, and write the release notes:
-   what changed, whether the release changes the data, and any action the user must take. Then start the next
-   version on `develop` (see above).
+   `olefy.py`: a version that changed is in bold. Merge into `main`, tag `vX.Y`, create its GitHub release with
+   the three templates attached, and write the release notes: what changed, whether the release changes the
+   data, and any action the user must take. Then start the next version on `develop` (see above).
 
 ## Testing tips
 
