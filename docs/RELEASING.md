@@ -144,6 +144,19 @@ A migration runs once per release step and can rely on the data being exactly at
 Migrations live in `s3bucket/migrations/` and go into the stage 1 `Files` list. All migrations of all releases
 stay in the list for good: a server several releases behind needs every step in between.
 
+To add a migration: put `upgrade-<from>-<to>.sh` into `s3bucket/migrations/`, name the step `<from>-<to>` in
+`migrations` in `system/upgrade-data` (a step that isn't listed runs no script, it only raises the data's
+release), and add the file to the stage 1 `Files` list.
+
+A migration runs before the steps that every new instance does where something is missing (the database of the
+storage statistics from `storage-stats.sql`, for example). It may only rely on what the data of `<from>` have; a
+change to the `flashlight` database goes into `storage-stats.sql` itself, which keeps its schema version in the
+`meta` table.
+
+The backup is `backup/upgrade-<from>-<to>-<date>/`, kept 90 days; after a failure the failed state is kept in its
+`failed/` folder. The event log shows each step (`UPGRADE`) or the failure (`FAILED`). How to test a migration:
+checklist, step 11.
+
 ## Starting a version
 
 Released versions are on `main`; the next version is worked on in the `develop` branch. As soon as work on `X.Y`
