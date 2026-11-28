@@ -77,6 +77,9 @@ folder is frozen.
   their names until they are deleted by age.
 - Messages can be up to 25 MB, incoming and outgoing (was 20 MB); a single attachment in webmail up to 18 MB.
   The receiving server may have a lower limit of its own.
+- Trash and Junk are emptied of messages older than 30 days, counted from when a message got there (before,
+  they kept everything until the user emptied them). The period can be changed per folder in Dovecot's
+  `custom.conf` (INSTALL, Customizing the server).
 
 ## [1.1] - 2026-11-23
 

@@ -422,8 +422,11 @@ contacts are not restored: they are only in the nightly database dumps in `/mnt/
 ### Webmail
 
 Webmail (Roundcube) is at `https://mail.<main domain>/`: users log in with their full e-mail address and
-password. Messages can be up to 25 MB. Filters and the out-of-office reply run on the server when a message
-arrives, so they work whatever mail program the user reads with; spam goes to Junk before them and gets no reply.
+password. Messages can be up to 25 MB. Attachments are encoded for sending, which makes them about a third
+bigger, so the files of one message can add up to about 18 MB; webmail shows this limit when a file is attached.
+Filters and the out-of-office reply run on the server when a message arrives, so they work whatever mail program
+the user reads with; spam goes to Junk before them and gets no reply. Messages in Trash and Junk are deleted
+30 days after they got there.
 
 **Example: an out-of-office reply.** Settings → **Out of Office**: write the **Subject** and the **Body** (for
 example "I am away until 15 August"), enter the dates in **Start time** and **End time** (the time next to
@@ -599,6 +602,18 @@ upgrades and replacements keep it as it is.
 
 OpenDKIM has no settings file of its own. In Rspamd, a file of yours replaces the whole section of that name,
 Flashlight's settings included, so start from a copy of Flashlight's in `/etc/rspamd/local.d/`.
+
+**Example: keep Junk longer.** Trash and Junk are emptied of messages older than 30 days (counted from when a
+message got there). To keep spam for 60 days, add to `/mnt/mailserver/etc/dovecot/custom.conf` and run
+`sudo systemctl reload dovecot` (`autoexpunge = 0` turns the clean-up off for that folder):
+
+```
+namespace inbox {
+  mailbox Junk {
+    autoexpunge = 60d
+  }
+}
+```
 
 For changes that aren't settings (extra packages, for example), upload your own `user-script.sh` to the config
 bucket: every new server runs it once after the install. The template with instructions is

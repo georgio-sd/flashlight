@@ -384,7 +384,9 @@ flowchart LR
    Junk and stops there, so the user's own filters and vacation replies never answer spam. Other mail goes
    through the user's filters. Mailbox quotas from PostfixAdmin apply: Postfix asks Dovecot (its `quota-status`
    service) before it accepts a message, and refuses mail for a full mailbox during the SMTP session, so no
-   bounce goes out later to a forged sender address.
+   bounce goes out later to a forged sender address. Trash and Junk keep a message for 30 days from when it got
+   there (`autoexpunge`, also on their other names: Deleted Messages, Spam, Junk E-mail); Dovecot deletes older
+   ones when a session of the user ends.
 
 If a milter is down, mail still flows, unchecked or unsigned (`milter_default_action = accept`).
 
