@@ -1133,23 +1133,45 @@ EOF
 </Location>
 EOF
   #
-  # Learning from the users: moving a message into Junk teaches Rspamd it is spam, moving it out of Junk (not to
-  # Trash) that it isn't, from any mail program (Dovecot's imapsieve; dovecot.conf includes the file below)
+  # Learning from the users: moving a message into a spam folder teaches Rspamd it is spam, moving it out of one
+  # (not to a trash folder) that it isn't, from any mail program (Dovecot's imapsieve; dovecot.conf includes the
+  # file below). The folders go by name, also the names other programs use (Outlook: Junk Email, Deleted Items).
   cat > /etc/dovecot/flashlight-antispam.conf <<'EOF'
 # Flashlight: learning of the spam filter (included by dovecot.conf). DON'T EDIT: rewritten at every boot.
 plugin {
   sieve_plugins = sieve_imapsieve sieve_extprograms
   sieve_global_extensions = +vnd.dovecot.pipe +vnd.dovecot.environment
   sieve_pipe_bin_dir = /etc/dovecot/sieve/bin
-  # into Junk: spam
+  # into a spam folder (Junk, or the name another mail program uses: Spam, Junk E-mail, Outlook's Junk Email): spam
   imapsieve_mailbox1_name = Junk
   imapsieve_mailbox1_causes = COPY APPEND
   imapsieve_mailbox1_before = file:/etc/dovecot/sieve/learn-spam.sieve
-  # out of Junk: not spam (the script skips Trash)
-  imapsieve_mailbox2_name = *
-  imapsieve_mailbox2_from = Junk
-  imapsieve_mailbox2_causes = COPY
-  imapsieve_mailbox2_before = file:/etc/dovecot/sieve/learn-ham.sieve
+  imapsieve_mailbox2_name = Spam
+  imapsieve_mailbox2_causes = COPY APPEND
+  imapsieve_mailbox2_before = file:/etc/dovecot/sieve/learn-spam.sieve
+  imapsieve_mailbox3_name = Junk E-mail
+  imapsieve_mailbox3_causes = COPY APPEND
+  imapsieve_mailbox3_before = file:/etc/dovecot/sieve/learn-spam.sieve
+  imapsieve_mailbox4_name = Junk Email
+  imapsieve_mailbox4_causes = COPY APPEND
+  imapsieve_mailbox4_before = file:/etc/dovecot/sieve/learn-spam.sieve
+  # out of a spam folder: not spam (the script skips the trash and spam folders)
+  imapsieve_mailbox5_name = *
+  imapsieve_mailbox5_from = Junk
+  imapsieve_mailbox5_causes = COPY
+  imapsieve_mailbox5_before = file:/etc/dovecot/sieve/learn-ham.sieve
+  imapsieve_mailbox6_name = *
+  imapsieve_mailbox6_from = Spam
+  imapsieve_mailbox6_causes = COPY
+  imapsieve_mailbox6_before = file:/etc/dovecot/sieve/learn-ham.sieve
+  imapsieve_mailbox7_name = *
+  imapsieve_mailbox7_from = Junk E-mail
+  imapsieve_mailbox7_causes = COPY
+  imapsieve_mailbox7_before = file:/etc/dovecot/sieve/learn-ham.sieve
+  imapsieve_mailbox8_name = *
+  imapsieve_mailbox8_from = Junk Email
+  imapsieve_mailbox8_causes = COPY
+  imapsieve_mailbox8_before = file:/etc/dovecot/sieve/learn-ham.sieve
 }
 EOF
   mkdir -p /etc/dovecot/sieve/bin
@@ -1160,7 +1182,7 @@ EOF
   cat > /etc/dovecot/sieve/learn-ham.sieve <<'EOF'
 require ["vnd.dovecot.pipe", "copy", "imapsieve", "environment", "variables"];
 if environment :matches "imap.mailbox" "*" { set "mailbox" "${1}"; }
-if string :is "${mailbox}" ["Trash", "Deleted Messages", "Junk"] { stop; }
+if string :is "${mailbox}" ["Trash", "Deleted Messages", "Deleted Items", "Junk", "Spam", "Junk E-mail", "Junk Email"] { stop; }
 pipe :copy "rspamd-learn" ["ham"];
 EOF
   printf '%s\n' '#!/bin/sh' '# Flashlight: passes a message moved into or out of Junk to Rspamd ($1: spam or ham)' \

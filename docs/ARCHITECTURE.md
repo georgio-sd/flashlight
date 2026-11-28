@@ -446,8 +446,10 @@ Thresholds: 6 points add the spam header (Junk), 15 refuse the message (see
 ### Learning
 
 Rspamd's Bayes filter learns by itself from mail that scores very high or very low, and from the users:
-Dovecot's imapsieve runs a script when a message is moved into Junk (learn as spam) or out of Junk to any folder
-but Trash (learn as not spam), and passes the message to Rspamd. This works from any mail program. Roundcube
+Dovecot's imapsieve runs a script when a message is moved into a spam folder (learn as spam) or out of one to any
+folder but a trash or spam folder (learn as not spam), and passes the message to Rspamd. The folders go by name:
+Junk, and the names other programs use (Spam, Junk E-mail, Outlook's Junk Email); Trash, Deleted Messages and
+Outlook's Deleted Items. This works from any mail program. Roundcube
 adds Junk and Not junk buttons (the `markasjunk` plugin), which move the message the same way.
 
 ### Web interface

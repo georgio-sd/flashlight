@@ -41,6 +41,9 @@ folder is frozen.
 
 ### Fixed
 
+- Spam deleted from Junk in Outlook (which moves it to its own Deleted Items folder) no longer teaches the spam
+  filter that it isn't spam. Moving mail into or out of Outlook's Junk Email folder (or folders named Spam or
+  Junk E-mail) now teaches the filter like Junk does.
 - A failed first creation of stage 1 no longer ends in ROLLBACK_FAILED with a config bucket that has to be
   emptied and deleted by hand: the rollback empties the bucket, so it is deleted with the rest. A rollback within
   a few minutes after the reverse DNS of the Elastic IP was set no longer fails either (AWS refused to remove a

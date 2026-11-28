@@ -680,7 +680,7 @@ sudo fail2ban-client unban --all           # every banned address
 ### The spam filter
 
 - **Users teach it.** Moving a message into Junk teaches the filter that it is spam; moving it out of Junk
-  teaches it that it isn't. In webmail, the **Junk** and **Not junk** buttons above a message do the same. This
+  teaches it that it isn't, except into Trash. Outlook's own Junk Email and Deleted Items folders count the same. In webmail, the **Junk** and **Not junk** buttons above a message do the same. This
   works from any mail program.
 - **Why did a message get its verdict?** The **History** tab of the Rspamd web interface
   (`https://admin.<main domain>/rspamd/`) shows each message with the checks that fired and their points.
