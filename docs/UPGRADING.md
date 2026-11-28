@@ -40,7 +40,8 @@ itself during the upgrade and then records its own release for the data (see [Wh
    ```
 
    The `flashlight=` line is the release.
-3. Download the templates of the new release: `1-dns-preset.yaml`, `2-deployment.yaml` and
+3. Download the templates of the new release from its page on
+   [GitHub](https://github.com/georgio-sd/flashlight/releases): `1-dns-preset.yaml`, `2-deployment.yaml` and
    `x-maintenance.yaml`.
 4. Plan for about 30 minutes without mail service. Other mail servers keep the messages they couldn't deliver
    and retry for several days, so incoming mail arrives after the upgrade. Webmail and IMAP are unavailable

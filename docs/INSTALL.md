@@ -31,7 +31,7 @@ The whole installation takes about half an hour, most of it waiting for AWS.
    ([sign up](https://www.spamhaus.com/data-access/free-data-query-service/)). Spamhaus answers queries from
    AWS only with a key. The spam filter works without it, but noticeably better with it.
 6. **The templates** of the Flashlight release: `1-dns-preset.yaml`, `2-deployment.yaml` and
-   `x-maintenance.yaml`.
+   `x-maintenance.yaml`, attached to the release on [GitHub](https://github.com/georgio-sd/flashlight/releases).
 
 ### Asking AWS to allow outgoing mail
 

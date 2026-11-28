@@ -616,11 +616,14 @@ themselves and are rarely needed.
 
 ## Releases and upgrades
 
-A release is the three templates plus the installer files in the public bucket under its version
-(`flashlight-mail-server/vX.Y/`). Stage 1 copies them into the config bucket, and every instance installs from
-there. Data changes between releases are migrations, run in order by the new instance; the web applications
-are updated by their version instead, whenever the release brings a newer one. How to upgrade:
-[UPGRADING](UPGRADING.md). How a release is made: [RELEASING](RELEASING.md).
+A release is the three templates, attached to its page on GitHub
+([releases](https://github.com/georgio-sd/flashlight/releases)), plus the installer files, published in the
+public bucket under its version (`flashlight-mail-server/vX.Y/`). A published release never changes; a fix is a
+new release. Stage 1 copies the installer files into the config bucket, and every instance installs from there.
+The server image isn't part of a release: stage 1 takes the newest one. Data changes between releases are
+migrations, run in order by the new instance; the web applications are updated by their version instead,
+whenever the release brings a newer one. How to upgrade: [UPGRADING](UPGRADING.md). How a release is made:
+[RELEASING](RELEASING.md).
 
 ## Software
 
