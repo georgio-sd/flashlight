@@ -71,7 +71,7 @@ stacks of one server have one value for the billing. The instance gets both from
 does the launch template itself. The EFS backups (AWS Backup recovery points) get the file system's tags from
 AWS Backup. The instance also has `flashlight:instance-types` and `flashlight:lifecycle`
 (see above). DnsPreset tags the image copy it makes and its snapshot with `Name` = the image name
-(`Flashlight AlmaLinux …`; an older name without `Flashlight ` gets it in front) and
+(`Flashlight AlmaLinux …`) and
 `flashlight:installation` = its own stack's name: the copy counts for the server that copied it, though other
 stacks in the region may use it too. Its role may tag only as it
 copies (`ec2:CreateAction` = `CopyImage`), so a copy made before tags existed stays untagged until the next
