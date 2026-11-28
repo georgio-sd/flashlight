@@ -469,14 +469,22 @@ with an `ALERT` line in the event log. The limits can be changed by the admin
 
 ## DNS and certificates
 
+The domains' DNS records are in their hosted zones in Amazon Route 53, which the stack is given (their zone
+IDs): stage 1 writes the records that depend only on the stack, the server those that depend on its own data.
+The reverse DNS of the Elastic IP isn't in Route 53: AWS keeps it with the address. Of the certificates, only the
+one for `mail.` and `admin.` is trusted: it comes from Let's Encrypt. The server makes the rest itself: a
+self-signed certificate for `localhost` (a new one on every new instance, for the catch-all HTTPS site that
+refuses requests to other names) and the DKIM keys (once, kept on EFS).
+
 | Record | Created by | When |
 |---|---|---|
-| A of `mail.` and `admin.` | Stage 1 Lambda | Stack create and update |
-| MX of every domain (`10 mail.<main domain>`) | Stage 1 Lambda | Stack create and update |
-| Reverse DNS of the Elastic IP | Stage 1 Lambda | Stack create and update |
-| SPF (`v=spf1 ip4:<EIP> -all`) | `dnsupd.py` on the server | Every install, unless the record already allows the address |
-| DKIM (`<selector>._domainkey`, RSA) | `dnsupd.py` on the server | Every install |
-| DMARC (`p=reject`) | `dnsupd.py` on the server | Only when the domain has no DMARC record |
+| A of `mail.` and `admin.` (in the main domain's zone) | Stage 1 Lambda | Stack create; updates that change the domain list or the release, or switch Updater; removed when the stack is deleted |
+| MX of every domain (`10 mail.<main domain>`) | Stage 1 Lambda | The same |
+| Reverse DNS of the Elastic IP (`mail.<main domain>`) | Stage 1 Lambda | The same |
+| SPF of every domain (`v=spf1 ip4:<EIP> -all`) | `dnsupd.py` on the server | Every install, unless the record already allows the address |
+| SPF of `mail.<main domain>` (checked for bounces, which have an empty sender) | `dnsupd.py` on the server | The same |
+| DKIM (`mail._domainkey`, RSA 2048; the key is made once and kept on EFS) | `dnsupd.py` on the server | Every install: the record is brought to the key |
+| DMARC (`v=DMARC1; p=reject; sp=reject; adkim=r; aspf=r`) | `dnsupd.py` on the server | Only when the domain has no DMARC record |
 
 `dnsupd.py` keeps other TXT values of the domain (site verifications, for example). It also keeps the admin's
 own records: an SPF record that already allows the server's address (with an `include:` of another mail service,
@@ -486,7 +494,8 @@ instance.log that shows it. A domain removed from the stack loses its DKIM key a
 
 The certificate (Let's Encrypt, RSA) covers `mail.<main domain>` and `admin.<main domain>`; it is used by
 Postfix, Dovecot and Apache. Certbot validates through DNS (`_acme-challenge` TXT records in Route 53), so no
-port has to be open for it. It renews twice a day if due (`certbot-renew.timer`) and reloads the services only
+port has to be open for it. It is kept on EFS (`etc/letsencrypt`), so a new instance takes it over instead of
+asking Let's Encrypt again. It renews twice a day if due (`certbot-renew.timer`) and reloads the services only
 when a new certificate was issued. With CertificateMode `staging` the certificate comes from the Let's Encrypt
 test CA; switching to `production` with a stack update replaces it on the next install.
 
