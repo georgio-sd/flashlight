@@ -208,19 +208,22 @@ the newer instance has already upgraded to a newer release.
 
 | Event | Meaning |
 |---|---|
-| BOOT | A new instance starts installing |
+| BOOT | A new instance starts installing (logged once EFS is mounted, after the OS update) |
 | READY | Installed, rebooted, services up |
-| FAILED | An install failed, with the reason and where the log is |
+| FAILED | An install, a data upgrade or a web application update failed, with the reason and where the log is |
 | REPLACE | The instance asks for a replacement, and why |
-| SHUTDOWN, REBOOT, STOP, RESUME | The instance goes down, stops its services for another one, or takes over again |
-| UPGRADE | Data upgrades between releases |
-| CERT | Changes of the certificate |
-| MAILBOX | Clean-up of deleted mailboxes |
+| SHUTDOWN, REBOOT | The instance goes down or reboots |
+| STOP, RESUME | The instance stops its services (before its own replacement, or for another instance that took over the EFS), or takes over again |
+| UPGRADE | Data upgrades between releases, and web application updates |
+| CERT | The switch from the test certificate to a trusted one (CertificateMode), or why it didn't work |
+| MAILBOX | Deleted mailboxes: mail moved to the trash, a Roundcube user removed, trash deleted for good after 30 days |
 | BACKUP | The daily database dump |
 | ALERT | A mailbox that may be compromised |
 | CHECK, ERROR | The weekly Spot price check: its decision with the prices, or why it couldn't compare |
-| WARN | Something worked with a fallback (swap made smaller...), an AlertEmail address isn't confirmed, the spam filter's data are over 85% of Valkey's memory cap, a second SPF record of a domain was deleted, or the nightly storage statistics had errors |
+| WARN | Something works with less than planned or needs a look: swap made smaller, oletools not installed, the storage statistics database not set up or the nightly statistics had errors, an alert email not sent or an AlertEmail address not confirmed, the spam filter's data over 85% of Valkey's memory cap, a second SPF record of a domain deleted, a web application newer than the release's kept |
 | USER | The admin's user-script.sh failed |
+
+The file isn't rotated: a server in normal use adds about 30 KB a month.
 
 ## Data on EFS
 
