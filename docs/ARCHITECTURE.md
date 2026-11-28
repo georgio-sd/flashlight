@@ -436,7 +436,7 @@ attachments. Added by Flashlight:
 |---|---|---|
 | Spamhaus via DQS | SpamhausDQSKey | Spamhaus's address, domain and hash lists, queried with the key (Spamhaus refuses AWS without one) |
 | Risky attachments | AttachmentPolicy | `Score` (the default): Rspamd's own rules only add points for risky file types. `Gmail`: the file types Gmail blocks (`attachments-gmail.map`), also inside archives: the message is refused with an explanation for the sender; encrypted archives and archives inside archives go at least to Junk. `Strict`: the same with Gmail's list plus more Windows code types from Outlook's list (`attachments-strict.map`) |
-| Macros in Office documents | always (if oletools installed) | olefy passes Office files to oletools; a macro that runs by itself and does suspicious things adds 7 points (Junk). If pip can't install oletools, the server works without the check (`WARN` line) |
+| Macros in Office documents | always | olefy passes Office files to oletools; a macro that runs by itself and does suspicious things adds 7 points (Junk). If pip can't install oletools, the server works without the check (`WARN` line) |
 | Viruses | Antivirus | ClamAV scans every part of the message; a virus is refused. The signature database is on EFS, so a new instance only updates it |
 | Partner whitelist | `rspamd/whitelist-domains.map` | −6 points if a listed domain's SPF passes, −6 more if its DKIM passes (−12 when both pass) |
 
