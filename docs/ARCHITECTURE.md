@@ -27,10 +27,11 @@ is "a new instance installs itself over the existing data".
 | S3 config bucket | The installer files of the release; `install-logs/` (logs of failed installs, 90 days); `upload/` (the admin's folder) |
 | Lambda DownloadBundles | Copies the release's installer files from the public Flashlight bucket into the config bucket. Runs on every stack create and update. On the rollback of a failed first creation it empties the bucket, so CloudFormation can delete it (it tells such a rollback by the stack's status); a normal delete leaves the bucket to the admin |
 | Lambda DnsPreset | Finds the newest Flashlight image (AMI) and copies it into the account's region if needed, waiting until the copy can be used; creates the A records of `mail.` and `admin.` in the main zone and an MX record in every mail zone; sets reverse DNS of the Elastic IP to `mail.<main domain>`. On deletion, or when a domain leaves the list, it removes Flashlight's values from these records and from DKIM, SPF and DMARC, leaving other values of the same records alone. On the rollback of a failed first creation (its own failure, or the stack's status `ROLLBACK_IN_PROGRESS`) it removes only the A records with the stack's address, which is released next; the MX, DKIM, SPF and DMARC records stay, as the domain may have had them before the install |
+| Server image (AMI), not a stack resource | DnsPreset's copy of the Flashlight image in the account's region, with its snapshot; stage 2's instances start from it. One copy serves every Flashlight stack in the region. CloudFormation doesn't know about it: it stays when the stack is deleted, and an older copy stays when a newer image comes, until you deregister it (see [Old server images](INSTALL.md#old-server-images)). Its tags: see [Tags](#tags) |
 | Log groups | The logs of the two functions |
 
 The stage 2 stack reads stage 1's outputs (the address, the bucket, the image, the domains) through
-CloudFormation exports. That's why stage 1 can't change its domain list while stage 2 uses it.
+CloudFormation exports. That's why stage 1 can't change its domain list or the image while stage 2 uses them.
 
 ### Stage 2: `2-deployment.yaml`
 
