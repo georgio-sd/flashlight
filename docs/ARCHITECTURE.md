@@ -238,21 +238,22 @@ The file isn't rotated: a server in normal use adds about 30 KB a month.
 | `etc/postfix/dkim/` | DKIM keys and OpenDKIM's config |
 | `etc/crontab` | The system crontab: Flashlight's block and the admin's own lines |
 | `etc/<program>/` | The admin's own settings files |
-| `www/admin/` | PostfixAdmin and phpMyAdmin with their configs, the admin site's password file, its start page (`index.html`), the Mail storage statistics page (`storage_stats/index.php`) and the site's icon (`favicon.svg`), all rewritten at every boot from `apache/` |
-| `www/webmail/` | Roundcube's logs |
+| `www/admin/` | PostfixAdmin and phpMyAdmin (updated only when a release brings a newer version; their configs are rewritten at every boot), the admin site's password file (`.htpasswd`, made at the first install), its start page (`index.html`), the Mail storage statistics page (`storage_stats/index.php`) and the site's icon (`favicon.svg`), the last three rewritten at every boot from `apache/` |
+| `www/webmail/` | Roundcube: the application (updated like the admin applications), its config (rewritten at every boot), `temp/` and `logs/` |
 | `rspamd/` | The spam filter's web interface settings, statistics, graphs, whitelist |
 | `valkey/` | What the spam filter has learned |
 | `clamav/` | The antivirus signatures (only while Antivirus is enabled) |
-| `root/` | `credentials`, `secrets` (generated passwords and keys), the fail2ban note |
-| `automation/` | The cron scripts |
+| `root/` | `credentials`, `secrets` (generated passwords and keys), `unbanip` (how to lift a fail2ban ban) |
+| `automation/` | Flashlight's scripts: the cron jobs, the Spot watcher, `replace-instance` |
 | `backup/` | Database dumps (28 days) and upgrade backups (90 days) |
-| `log/` | `instance.log`, install logs (90 days), the cron scripts' logs |
+| `log/` | `instance.log`, the log of every install (`install/`, 90 days), and the state files of the alert emails (`alert-last-failure`) and of `outbound-alert` |
 | `versions` | The Flashlight release of the data, and what the last instance ran: its image and OS, the web applications, and the packages that work with the data (MariaDB, Dovecot, Rspamd, Valkey) |
 | `flag`, `flag-ec2id-<id>` | The first install is done; the instance that owns the EFS now |
 
 The file system outlives the stack (`DeletionPolicy: RetainExceptOnCreate`): deleting the stage 2 stack leaves it
-in the account, to be deleted by hand; its name (`<stack>-Flashlight`) tells whose it is. EFS is encrypted at rest, and the instance mounts it over TLS. With MailStorageLifecyclePolicy, files not read
-for a while move to the Infrequent Access class.
+in the account, to be deleted by hand; its name (`<stack>-Flashlight`) tells whose it is. EFS is encrypted at
+rest, and the instance mounts it over TLS. With MailStorageLifecyclePolicy, files not read for a while move to
+the Infrequent Access class.
 
 Each instance introduces itself to EFS with its own NFS client identity, the instance ID (`nfs4_unique_id`,
 set in `/etc/modprobe.d/flashlight-nfs.conf`). By default Linux uses the hostname, which the old and the new
