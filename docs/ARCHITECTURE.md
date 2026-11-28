@@ -129,8 +129,8 @@ associations, SNS subscriptions), short-lived Spot requests, and the network obj
 5. **`install-finish ready`** runs once after the reboot: when all services of the list are up (it waits up to
    2 minutes), it writes `READY` to the event log and signals SUCCESS to CloudFormation.
 
-An install takes 6 to 10 minutes from the instance's start to READY, depending on the instance type and on whether the antivirus database must be
-downloaded.
+An install takes 6 to 10 minutes from the instance's start to READY, depending on the instance type and on
+whether the antivirus database must be downloaded.
 
 ### When an install fails
 
