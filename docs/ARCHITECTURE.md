@@ -179,13 +179,14 @@ ordinary mail to AdminEmail (see [Outgoing mail and compromised mailboxes](#outg
 | Cause | What happens |
 |---|---|
 | Spot interruption | `spot-instance-shutdown` (the `autoshutdown` service) watches the instance metadata for the 2-minute notice. On it, `replace-instance` stops the services cleanly and asks the Auto Scaling group for a new instance |
-| Weekly Spot price check | `spotprices.py`, Saturday-to-Sunday night 01:15: if this instance's pool (type and zone) averaged 7 days at a price noticeably above the cheapest allowed pool, the instance asks to be replaced; the group picks the new pool |
-| Scheduled rebuild | `rebuild-check`, Sundays 03:15: once the instance is older than RebuildAfterDays, it asks to be replaced, so the server runs on current packages |
+| Weekly Spot price check (Spot only) | `spotprices.py`, Saturday-to-Sunday night 01:15: compares the 7-day average price of this instance's pool (type and zone) with every pool the group may use (InstanceType and InstanceType2 in each zone). If it is 30% or more above the cheapest, the instance asks to be replaced; the group picks the new pool |
+| Scheduled rebuild | `rebuild-check`, Sundays 03:15: once the instance is older than RebuildAfterDays (counted from its install, so reboots don't reset it), it asks to be replaced, so the server runs on current packages |
 | Failed instance | The Auto Scaling group's EC2 health check replaces it |
-| Stack update | A new Auto Scaling group with a new instance; the old one is removed after the new one's success |
+| Failed install after a replacement | `install-finish` terminates the instance and the group starts a new one, up to 3 installs in 3 hours (see [When an install fails](#when-an-install-fails)) |
+| Stack update that changes the launch template (image, instance type, a parameter the install uses) | A new Auto Scaling group with a new instance; the old one is removed after the new one's success |
 
-In each case the new instance goes through the same install. Mail is down for about 6 to 10 minutes; other mail
-servers retry and deliver later.
+The times are in the server's time zone (TimeZone). In each case the new instance goes through the same install.
+Mail is down for about 6 to 10 minutes; other mail servers retry and deliver later.
 
 ### Only one instance
 
