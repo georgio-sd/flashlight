@@ -598,7 +598,7 @@ upgrades and replacements keep it as it is.
 | Rspamd (spam filter) | files in `/mnt/mailserver/etc/rspamd/override.d/` (see the README there) |
 
 OpenDKIM has no settings file of its own. In Rspamd, a file of yours replaces the whole section of that name,
-Flashlight's settings included, so start from a copy of ours in `/etc/rspamd/local.d/`.
+Flashlight's settings included, so start from a copy of Flashlight's in `/etc/rspamd/local.d/`.
 
 For changes that aren't settings (extra packages, for example), upload your own `user-script.sh` to the config
 bucket: every new server runs it once after the install. The template with instructions is
