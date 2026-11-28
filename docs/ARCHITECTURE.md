@@ -559,6 +559,7 @@ password), loads nothing from outside, and sends a strict Content-Security-Polic
   security group only. IPv6 is off. SSH accepts keys only (password logins are off in the image).
 - **Encryption.** EFS is encrypted at rest and in transit (TLS mount). The instance's root disk is encrypted with
   the AWS-managed key, so swap is too. Users connect with TLS 1.2 or newer; port 25 offers TLS to other servers.
+  The config bucket answers only HTTPS: its bucket policy refuses every request without TLS, whoever makes it.
 - **The instance's rights in AWS** (IAM role): associate an Elastic IP (any of the account's: the role doesn't
   name the address); change TXT records only, in the stack's zones only; replace only its own stack's instances;
   signal its own stack and read its status; read its own mail storage's size; read the config bucket, write
@@ -566,12 +567,10 @@ password), loads nothing from outside, and sends a strict Content-Security-Polic
   its subscriptions; besides, read-only lookups (its instances, Spot prices, its Auto Scaling group, the Route 53
   zones). It can't change the installer files, so a compromised server can't plant a modified installer for the
   next instances.
-- **The config bucket answers only HTTPS.** Its bucket policy refuses every request without TLS, whoever makes
-  it; the instance, the Lambdas, the AWS CLI and the console use HTTPS anyway.
 - **Passwords.** Generated on the first install, kept in `root/secrets` and `root/credentials` (root only). The
   admin tools are behind the admin site's password (basic auth over HTTPS) and their own logins.
 - **fail2ban** bans addresses after repeated failed logins to SSH, mail, webmail and the admin site (nftables).
-- **SELinux is off.**
+- **SELinux is off**, for ease of developing the server; a later release may turn it on.
 - **The server's reputation.** No open relay; users send only as their own addresses, with limits; the admin is
   warned about compromised mailboxes; DMARC `p=reject` stops others from forging your domains.
 
