@@ -644,7 +644,6 @@ whenever the release brings a newer one. How to upgrade: [UPGRADING](UPGRADING.m
 | Rspamd | 4.3 | The release (pinned) |
 | Valkey | 8.1 | AlmaLinux (follows it, see RELEASING) |
 | Unbound | 1.26 | AlmaLinux |
-| oletools | 0.60 | PyPI with pinned hashes |
-| olefy (connects oletools to Rspamd) | 9c01c57 | The release (`olefy.py`) |
+| oletools, olefy (connects it to Rspamd) | 0.60, 9c01c57 | oletools: PyPI with pinned hashes; olefy: the release (`olefy.py`) |
 | ClamAV | 1.4 | EPEL |
 | fail2ban | 1.1 | EPEL |
