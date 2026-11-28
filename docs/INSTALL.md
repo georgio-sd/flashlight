@@ -422,8 +422,9 @@ contacts are not restored: they are only in the nightly database dumps in `/mnt/
 ### Webmail
 
 Webmail (Roundcube) is at `https://mail.<main domain>/`: users log in with their full e-mail address and
-password. Messages can be up to 25 MB. Attachments are encoded for sending, which makes them about a third
-bigger, so the files of one message can add up to about 18 MB; webmail shows this limit when a file is attached.
+password. Messages can be up to 25 MB, both those sent and those received (a bigger message from outside is
+refused). Attachments are encoded for sending, which makes them about a third bigger, so the files of one
+message can add up to about 18 MB; webmail shows this limit when a file is attached.
 Filters and the out-of-office reply run on the server when a message arrives, so they work whatever mail program
 the user reads with; spam goes to Junk before them and gets no reply. Messages in Trash and Junk are deleted
 30 days after they got there.
@@ -498,6 +499,12 @@ settings" and enter port 587 with TLS.
 
 One mailbox may have up to 30 connections from one address, so a computer and a phone behind the same office
 router both fit.
+
+**Message size and old mail in Trash and Junk** work as in webmail. A message can be up to 25 MB, both sent and
+received; attached files grow by about a third when a message is sent, so they can add up to about 18 MB. A
+bigger message is refused, and the program says so when it sends. Messages in Trash and Junk are deleted on the
+server 30 days after they got there, whichever program put them there; the program then removes them at its next
+sync.
 
 ### Checking that it works
 
