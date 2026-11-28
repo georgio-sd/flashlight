@@ -52,7 +52,7 @@ virtual_transport = lmtp:unix:private/dovecot-lmtp
 # Queue and message size
 #
 # (mail that can't be delivered is retried for 5 days before it is returned to the sender, Postfix's default)
-message_size_limit = 20971520
+message_size_limit = 26214400
 
 #
 # Per-client limits (anvil): connections and messages per minute, except the server itself

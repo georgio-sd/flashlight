@@ -422,7 +422,7 @@ contacts are not restored: they are only in the nightly database dumps in `/mnt/
 ### Webmail
 
 Webmail (Roundcube) is at `https://mail.<main domain>/`: users log in with their full e-mail address and
-password. Messages can be up to 20 MB. Filters and the out-of-office reply run on the server when a message
+password. Messages can be up to 25 MB. Filters and the out-of-office reply run on the server when a message
 arrives, so they work whatever mail program the user reads with; spam goes to Junk before them and gets no reply.
 
 **Example: an out-of-office reply.** Settings → **Out of Office**: write the **Subject** and the **Body** (for

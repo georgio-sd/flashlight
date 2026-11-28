@@ -729,11 +729,11 @@ cat > /etc/logrotate.d/roundcube <<'EOF'
 EOF
 #
 # PHP settings, rewritten at every boot (the package's php.ini stays untouched):
-# time zone, and attachments up to the 20 MB message limit of Postfix
+# time zone, and attachments up to the 25 MB message limit of Postfix (an 18 MB file is about 25 MB once encoded)
 cat > /etc/php.d/99-flashlight.ini <<EOF
 date.timezone = $TIMEZONE
-upload_max_filesize = 15M
-post_max_size = 20M
+upload_max_filesize = 18M
+post_max_size = 25M
 EOF
 #
 # MariaDB root password and daily database backups.
@@ -1019,7 +1019,7 @@ EOF
     systemctl daemon-reload
     systemctl enable olefy
     rspamd_conf external_services.conf "oletools {" '  type = "oletools";' '  servers = "127.0.0.1:10050";' \
-      "  extended = false;" "  timeout = 20.0;" "  max_size = 20971520;" "}"
+      "  extended = false;" "  timeout = 20.0;" "  max_size = 26214400;" "}"
     rspamd_conf groups.conf 'group "flashlight" {' "  symbols {" \
       '    "OLETOOLS" { weight = 7.0; description = "Office document with a macro that runs by itself and does suspicious things"; }' \
       "  }" "}"
@@ -1053,7 +1053,7 @@ EOF
     done
     rspamd_conf antivirus.conf "clamav {" '  type = "clamav";' '  servers = "127.0.0.1:3310";' \
       "  scan_mime_parts = true;" '  symbol = "CLAM_VIRUS";' '  action = "reject";' \
-      "  message = '\${SCANNER}: virus found: \"\${VIRUS}\"';" "  timeout = 20.0;" "  max_size = 20971520;" "}"
+      "  message = '\${SCANNER}: virus found: \"\${VIRUS}\"';" "  timeout = 20.0;" "  max_size = 26214400;" "}"
     efs_unit clamd@scan
     efs_unit clamav-freshclam
     # clamd needs some time to load its database. It counts as started once it answers (up to 2 minutes; the "-"

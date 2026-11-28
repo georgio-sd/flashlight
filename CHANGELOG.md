@@ -75,6 +75,8 @@ folder is frozen.
 - Install logs, upgrade backups and the trash folders of deleted mailboxes are named with a compact date and
   time, `20261125-230930` (was `2026-11-25-23-09-30`, and `2026-11-25-230930` for the trash). Older ones keep
   their names until they are deleted by age.
+- Messages can be up to 25 MB, incoming and outgoing (was 20 MB); a single attachment in webmail up to 18 MB.
+  The receiving server may have a lower limit of its own.
 
 ## [1.1] - 2026-11-23
 

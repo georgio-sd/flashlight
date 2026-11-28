@@ -373,16 +373,18 @@ flowchart LR
    messages a minute. It refuses invalid HELO names, unknown sender domains, recipients it doesn't host, and
    relaying for anyone not logged in. Domains, mailboxes and aliases come from the PostfixAdmin database; only
    active ones count, and a mailbox of a turned-off domain can't log in either (Dovecot checks both Active flags).
+   Messages are limited to 25 MB, incoming and outgoing (a receiving server may have a lower limit).
 2. **Rspamd** (first milter) scores the message (see [Spam filter](#spam-filter)). From 15 points, or for a virus
-   or a blocked attachment, the message is refused during the SMTP session, so the sender learns about it. Over
-   6 points it gets an `X-Spam: Yes` header.
+   or a blocked attachment, the message is refused during the SMTP session, so the sender learns about it. From
+   6 points it gets an `X-Spam: Yes` header. There is no greylisting: it would delay legitimate mail by minutes
+   or hours.
 3. **OpenDKIM** (second milter) only signs; with the spam filter, Rspamd has already checked SPF, DKIM, DMARC
    and ARC and written the Authentication-Results header. Without the spam filter OpenDKIM verifies too.
 4. **Dovecot** delivers through LMTP. A global Sieve script (`sieve_before`) puts mail with `X-Spam: Yes` into
    Junk and stops there, so the user's own filters and vacation replies never answer spam. Other mail goes
-   through the user's filters. Mailbox quotas from PostfixAdmin apply: Postfix asks Dovecot
-   (its `quota-status` service) before it accepts a message, and refuses mail for a full mailbox during the SMTP
-   session, so no bounce goes out later to a forged sender address.
+   through the user's filters. Mailbox quotas from PostfixAdmin apply: Postfix asks Dovecot (its `quota-status`
+   service) before it accepts a message, and refuses mail for a full mailbox during the SMTP session, so no
+   bounce goes out later to a forged sender address.
 
 If a milter is down, mail still flows, unchecked or unsigned (`milter_default_action = accept`).
 
@@ -391,12 +393,12 @@ If a milter is down, mail still flows, unchecked or unsigned (`milter_default_ac
 1. The user logs in (Postfix asks Dovecot). Login is only possible on 587 (after STARTTLS) and 465, with TLS
    1.2 or newer; port 25 has no login, so passwords can't be guessed through it.
 2. Postfix checks that the user sends as their own address or an alias that delivers to their mailbox
-   (`reject_authenticated_sender_login_mismatch`), and allows at most 20 recipients per message.
-3. Rspamd counts the user's messages: each user has an allowance of 30 messages that refills at 30 an hour, and one of 300 that
-   refills at 300 a day (so at most about 60 in the first hour and 600 in the first day); over either, the message
-   is refused for now. Messages it
-   scores at 15 points or more, or with a virus or a blocked attachment, are refused. Outgoing mail never gets a
-   spam header.
+   (`reject_authenticated_sender_login_mismatch`), and allows at most 20 recipients per message (the admin can
+   change it: [Limits on outgoing mail](INSTALL.md#limits-on-outgoing-mail)).
+3. Rspamd counts the user's messages: each user has an allowance of 30 messages that refills at 30 an hour, and
+   one of 300 that refills at 300 a day (so at most about 60 in the first hour and 600 in the first day); over
+   either, the message is refused for now. Messages it scores at 15 points or more, or with a virus or a blocked
+   attachment, are refused. Outgoing mail never gets a spam header.
 4. OpenDKIM signs it with the domain's key. Postfix delivers it, with TLS when the receiving server offers it.
 
 Webmail sends the same way, logging in to Postfix on the server itself. Mail generated on the server (cron,

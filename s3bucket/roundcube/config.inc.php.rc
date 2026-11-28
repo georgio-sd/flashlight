@@ -22,7 +22,7 @@ $config['smtp_conn_options'] = [
 ];
 
 // Same limit as Postfix (message_size_limit), so the user sees it before sending
-$config['max_message_size'] = '20M';
+$config['max_message_size'] = '25M';
 
 // A login without @domain gets the main domain (mail.example.com -> example.com)
 $config['username_domain'] = '%t';
