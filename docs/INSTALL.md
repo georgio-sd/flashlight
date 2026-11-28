@@ -506,6 +506,11 @@ bigger message is refused, and the program says so when it sends. Messages in Tr
 server 30 days after they got there, whichever program put them there; the program then removes them at its next
 sync.
 
+**Classic Outlook for Windows** may make its own Deleted Items, Junk Email and Sent Items folders next to the
+server's Trash, Junk and Sent, so webmail and other programs then show two of each. Flashlight empties the trash
+and spam folders of both kinds after 30 days and learns from both, but a program that uses the server's folders
+(Thunderbird or Apple Mail, for example) keeps one set and is the better choice.
+
 ### Checking that it works
 
 1. Send a message from a new mailbox to an outside address (Gmail, for example) and back. Gmail often puts the
