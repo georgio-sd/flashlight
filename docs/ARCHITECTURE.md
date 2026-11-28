@@ -190,13 +190,17 @@ Mail is down for about 6 to 10 minutes; other mail servers retry and deliver lat
 
 ### Only one instance
 
-Two instances must never write to the same data. The Auto Scaling group has at most one instance, but during a
-stack update there are two groups for a while. The `double-inst-prot` service runs `services-shutdown`, which
-watches the EFS flags: when a newer instance writes its flag, this one stops every service that writes to EFS
-(MariaDB, Postfix, Dovecot, Rspamd, Valkey, cron, the timers...) and waits. Usually it's terminated soon after.
-If instead the newer instance is terminated first (its install failed and the update rolled back), this one
-takes over again: its flag, its services, the Elastic IP. It doesn't take over data that the newer instance has
-already upgraded to a newer release.
+Two instances must never write to the same data. The Auto Scaling group has at most one instance, and every
+replacement terminates the old instance first, but a stack update makes a new group while the old one still
+runs. The `double-inst-prot` service runs `services-shutdown`, which checks the EFS flags every 15 seconds: when
+a newer instance writes its flag (before it installs its packages, minutes before it starts MariaDB), this one
+stops every service that writes to EFS (MariaDB, Postfix, Dovecot, Apache and PHP-FPM, OpenDKIM, Rspamd, Valkey,
+the antivirus updater, cron with Flashlight's jobs, the log rotation and certificate renewal timers) and the
+Spot watcher, so it can't ask for yet another instance, and waits. What keeps running only reads EFS or works
+locally (fail2ban, the virus scanner, Unbound); the event log gets this instance's `STOP` line. Usually it's
+terminated soon after. If instead the newer instance is terminated first (its install failed and the update
+rolled back), this one takes over again: its flag, its services, the Elastic IP. It doesn't take over data that
+the newer instance has already upgraded to a newer release.
 
 ### The event log
 
