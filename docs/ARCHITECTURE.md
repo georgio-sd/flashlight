@@ -382,8 +382,8 @@ flowchart LR
    and answers Postfix. From 15 points, or for a virus or a blocked attachment, the message is refused during the
    SMTP session, so the sender learns about it. From 6 points it gets an `X-Spam: Yes` header. There is no
    greylisting: it would delay legitimate mail by minutes or hours.
-3. **OpenDKIM** (second milter) only signs; with the spam filter, Rspamd has already checked SPF, DKIM, DMARC
-   and ARC and written the Authentication-Results header. Without the spam filter OpenDKIM verifies too.
+3. **OpenDKIM** (second milter) only signs; with the spam filter, Rspamd has already checked SPF, DKIM and
+   DMARC and written the Authentication-Results header. Without the spam filter OpenDKIM verifies too.
 4. **Dovecot** delivers through LMTP. A global Sieve script (`sieve_before`) puts mail with `X-Spam: Yes` into
    Junk and stops there, so the user's own filters and vacation replies never answer spam. Other mail goes
    through the user's filters. Mailbox quotas from PostfixAdmin apply: Postfix asks Dovecot (its `quota-status`
@@ -428,7 +428,7 @@ With Antispam (the default), the spam filter is Rspamd 4.3 with its own helpers:
 
 ### What it checks
 
-Rspamd's standard modules: SPF, DKIM, DMARC and ARC, blocklists of sending addresses and of links in the
+Rspamd's standard modules: SPF, DKIM and DMARC, blocklists of sending addresses and of links in the
 message, the Bayes filter, fuzzy hashes, the message's structure and headers, phishing, MIME types of
 attachments. Added by Flashlight:
 
