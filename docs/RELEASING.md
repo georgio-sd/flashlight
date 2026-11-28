@@ -14,7 +14,7 @@ A release `X.Y` consists of:
 - the installer files, published in the public bucket `flashlight-mail-server` (us-west-2) under `vX.Y/`: those
   of `s3bucket/` with the same folder layout (`system/base.sh`, `postfix/main.cf`...), and the binary packages
   in `packages/` (the EFS client, Rspamd, the web applications), which are kept only in the bucket, not in the
-  repository: a new release folder starts with a copy of the previous release's `packages/`;
+  repository: a new release folder starts as a copy of the previous one (Starting a version, step 4);
 - the tag `vX.Y` on `main`, its GitHub release with the release notes, and its section in `CHANGELOG.md`.
 
 Stage 1 copies the files listed in its `Files` property from `BaseUrl` into the stack's config bucket. The
@@ -169,8 +169,10 @@ starts, the code names `X.Y` everywhere, so a stand installed from `develop` is 
 3. In `CHANGELOG.md`, open an `[Unreleased]` section for the changes of `X.Y`, with the version table under its
    first paragraph: the previous release's column and an `X.Y` column, same rows in the same order (AlmaLinux,
    Roundcube, Larry, PostfixAdmin, phpMyAdmin, Rspamd, oletools, olefy, amazon-efs-utils).
-4. Create the bucket folder `vX.Y/` (the public bucket's policy already makes every `v*/` folder readable).
-   Until the release it holds the work in progress and is updated from `develop`; test stands install from it.
+4. Create the bucket folder `vX.Y/` as a copy of the previous release's folder, packages included
+   (`aws s3 cp --recursive s3://flashlight-mail-server/v<previous>/ s3://flashlight-mail-server/vX.Y/`), then
+   upload `s3bucket/` over it. The public bucket's policy already makes every `v*/` folder readable. Until the
+   release the folder holds the work in progress and is updated from `develop`; test stands install from it.
 
 A stand installed from `develop` marks its data as `X.Y` at its next install. If a migration to `X.Y` is added
 later, the stand's data won't run it. To test it there, set the data back with
@@ -258,11 +260,10 @@ The release fixes what was done on `develop` and builds the bridge from the prev
    still there. If the release has a migration, also test a release skip (from two releases back) if one exists,
    and a failing migration. A failing migration is tested on the instance with `MIGRATIONS_DIR`, `RELEASES` and
    `THIS_RELEASE`, which `upgrade-data` reads instead of its built-in values.
-12. **Publish the files.** Copy `packages/` of the previous release into `vX.Y/packages/` (`aws s3 cp --recursive`),
-   then replace the packages the release updates (steps 6, 7 and the web applications). Upload `s3bucket/` to
+12. **Publish the files.** Make sure `vX.Y/packages/` holds exactly the release's packages: the ones it updates
+   (steps 6, 7 and the web applications) replaced, the old ones removed. Upload `s3bucket/` to
    `s3://flashlight-mail-server/vX.Y/` once more, keeping the layout, so the folder matches the release, and check
-   that every path of the `Files` list is there. From now on the
-   folder is frozen.
+   that every path of the `Files` list is there. From now on the folder is frozen.
 13. **Publish the code.** In `CHANGELOG.md`, turn `[Unreleased]` into `[X.Y] - <date>` and check its version table
    against the newest server image (step 9), the `Files` list (`packages/`), `olefy-requirements.txt` and
    `olefy.py`: a version that changed is in bold. Merge into `main`, tag `vX.Y`, create its GitHub release with
