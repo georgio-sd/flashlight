@@ -239,7 +239,7 @@ The file isn't rotated: a server in normal use adds about 30 KB a month.
 | `etc/crontab` | The system crontab: Flashlight's block and the admin's own lines |
 | `etc/<program>/` | The admin's own settings files |
 | `www/admin/` | PostfixAdmin and phpMyAdmin (updated only when a release brings a newer version; their configs are rewritten at every boot), the admin site's password file (`.htpasswd`, made at the first install), its start page (`index.html`), the Mail storage statistics page (`storage_stats/index.php`) and the site's icon (`favicon.svg`), the last three rewritten at every boot from `apache/` |
-| `www/webmail/` | Roundcube: the application (updated like the admin applications), its config (rewritten at every boot), `temp/` and `logs/` |
+| `www/webmail/` | Roundcube: the application (updated like the admin applications), its config (rewritten at every boot), `temp/` and `logs/` (rotated weekly, kept 13 weeks) |
 | `rspamd/` | The spam filter's web interface settings, statistics, graphs, whitelist |
 | `valkey/` | What the spam filter has learned |
 | `clamav/` | The antivirus signatures (only while Antivirus is enabled) |
@@ -483,7 +483,7 @@ test CA; switching to `production` with a stack update replaces it on the next i
 | Saturday-to-Sunday 01:15 | `spotprices.py` (Spot) |
 | Sundays 03:15 | `rebuild-check` (RebuildAfterDays > 0) |
 | Twice a day | Certificate renewal |
-| Daily | Log rotation: the logs on EFS are rotated weekly and kept 13 weeks |
+| Daily | Log rotation: Roundcube's logs on EFS are rotated weekly and kept 13 weeks (`instance.log` isn't rotated) |
 
 Times are in the server's time zone (TimeZone).
 
