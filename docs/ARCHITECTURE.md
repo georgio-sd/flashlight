@@ -84,27 +84,42 @@ associations, SNS subscriptions), short-lived Spot requests, and the network obj
 ### Install
 
 1. **UserData** (in the launch template) sets up the basics: turns SELinux off, makes the AWS CLI retry
-   temporary errors, updates the operating system (`dnf upgrade`), installs the AWS CLI, then downloads and runs
-   `base.sh` from the config bucket. The install log goes to the root-only `/var/log/flashlight-install.log`. It
-   traces every command, except the steps that handle passwords and keys: those show only a
-   `+ secret_step <what it does>` line, so the log, also its copy in the config bucket, holds no passwords.
+   temporary errors, updates the operating system (`dnf upgrade`), installs the AWS CLI, downloads
+   `install-finish` first (so even an install that can't go on is reported), then downloads and runs `base.sh`
+   from the config bucket, stopping it after 60 minutes if it hangs. The install log goes to the root-only
+   `/var/log/flashlight-install.log`. It traces every command, except the steps that handle passwords and keys:
+   those show only a `+ secret_step <what it does>` line, so the log, also its copy in the config bucket, holds
+   no passwords.
 2. **`base.sh`** does the rest:
-   - mounts EFS (TLS) at `/mnt/mailserver` and installs the helper scripts;
+   - turns off what the image runs but the server doesn't need: IPv6 (the VPC has none), amazon-ssm-agent, EC2
+     Instance Connect's SSH key lookup (`/etc/ssh/sshd_config.d/50-flashlight.conf`), nm-cloud-setup (it sets
+     up extra IPs and network interfaces from the instance metadata, while the server has one interface with one
+     IP), fwupd, the dnf cache refresh, SSSD and gssproxy;
+   - makes the services that keep data on EFS start only after it is mounted, and start again by themselves
+     30 seconds after a crash;
+   - mounts EFS (TLS) at `/mnt/mailserver`, with an NFS client identity of its own, and installs the helper
+     scripts;
    - stops if the data on EFS belong to a newer Flashlight release;
    - associates the Elastic IP;
    - writes its own flag `flag-ec2id-<instance id>` on EFS, which makes any other running instance stop its
      services (see [Only one instance](#only-one-instance));
-   - turns off what the image runs but the server doesn't need (amazon-ssm-agent; EC2 Instance Connect's SSH key
-     lookup, `/etc/ssh/sshd_config.d/50-flashlight.conf`; nm-cloud-setup, which sets up
-     extra IPs and network interfaces from the instance metadata, while the server has one interface with one IP);
-   - creates swap, quiets known harmless warnings, installs the packages;
+   - installs the packages (EPEL from the branch of this AlmaLinux minor release), quiets known harmless
+     warnings, closes the instance metadata to everyone but root (nftables), creates swap and raises the inotify
+     limit for IMAP IDLE;
    - starts MariaDB and, if the data are from an older release, upgrades them (see [UPGRADING](UPGRADING.md));
+     creates the database of the storage statistics where it is missing;
    - on existing data, updates a web application whose installed package (in `versions`) is older than the
      release's, with its own upgrade steps, a backup, and a restore on a failure;
+   - on the first install only: creates the databases, the passwords, the certificates (a later install
+     replaces a test certificate when CertificateMode is switched to production);
    - rebuilds every configuration file from the release, then applies the admin's own settings files;
-   - on the first install only: creates the databases, the passwords, the certificates;
+   - sets up the stack's options: the spam filter (Rspamd with Valkey, Unbound and olefy), the antivirus,
+     fail2ban;
    - adds new domains of the stack to PostfixAdmin, creates DKIM keys and DNS records;
-   - writes the list of its services for the helper scripts.
+   - writes Flashlight's block of cron jobs, starts the Spot watcher (on Spot) and the watch for another
+     instance taking over the EFS;
+   - records the versions of the packages that work with the data, and writes the list of its services for the
+     helper scripts.
 3. **`user-script.sh`**, if the admin put one into the config bucket, runs next. Its failure is reported
    (`USER` line) but doesn't fail the install.
 4. **`install-finish result`** decides: on success it writes the EFS `flag` (the first install is done) and
