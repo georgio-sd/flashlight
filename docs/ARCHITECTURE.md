@@ -630,18 +630,21 @@ whenever the release brings a newer one. How to upgrade: [UPGRADING](UPGRADING.m
 | Component | Version | Source |
 |---|---|---|
 | AlmaLinux | 10 | Flashlight's image, updated at every install |
+| amazon-efs-utils (the EFS client) | 3.4 | The release (a prebuilt RPM, see `build/efs-utils.md`) |
 | Postfix | 3.8 | AlmaLinux |
 | Dovecot (with Pigeonhole) | 2.3 | AlmaLinux |
 | OpenDKIM | 2.11 | EPEL |
 | MariaDB | 10.11 | AlmaLinux |
-| Apache, PHP-FPM | | AlmaLinux |
-| Roundcube | 1.7 | The release (pinned) |
+| Apache, PHP-FPM | 2.4, PHP 8.3 | AlmaLinux |
+| Roundcube, its skin Larry | 1.7, 03ccd35 | The release (pinned) |
 | PostfixAdmin | 4.0 | The release (pinned) |
 | phpMyAdmin | 5.2 | The release (pinned) |
-| Certbot with the Route 53 plugin | | EPEL |
+| Mail storage statistics (`storage-stats` and the admin page) | Flashlight's own | The release: its version is Flashlight's |
+| Certbot with the Route 53 plugin | 5 | EPEL |
 | Rspamd | 4.3 | The release (pinned) |
 | Valkey | 8.1 | AlmaLinux (follows it, see RELEASING) |
-| Unbound | | AlmaLinux |
-| oletools (olefy) | 0.60 | PyPI with pinned hashes; olefy.py in the release |
+| Unbound | 1.26 | AlmaLinux |
+| oletools | 0.60 | PyPI with pinned hashes |
+| olefy (connects oletools to Rspamd) | 9c01c57 | The release (`olefy.py`) |
 | ClamAV | 1.4 | EPEL |
-| fail2ban | | EPEL |
+| fail2ban | 1.1 | EPEL |
