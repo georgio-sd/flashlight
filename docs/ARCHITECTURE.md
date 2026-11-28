@@ -295,9 +295,9 @@ every install; lines outside belong to the admin.
 | Service | Role | Listens on |
 |---|---|---|
 | Postfix | SMTP: receives and sends mail | 25 (other servers), 587 and 465 (users) |
-| Dovecot | IMAP, login checks for Postfix, delivery (LMTP, a Unix socket for Postfix only), ManageSieve | 143, 993; 4190 (closed from outside) |
+| Dovecot | IMAP, login checks for Postfix, delivery (LMTP, a Unix socket for Postfix only), the quota check before Postfix takes a message (a full mailbox is refused at once, not bounced later), ManageSieve | 143, 993; 4190 (closed from outside) |
 | OpenDKIM | Signs outgoing mail | 127.0.0.1:8891 |
-| MariaDB | The PostfixAdmin, Roundcube and phpMyAdmin databases | Unix socket only |
+| MariaDB | The PostfixAdmin, Roundcube and phpMyAdmin databases, and `flashlight` (the storage statistics) | Unix socket only |
 | Apache + PHP-FPM | Webmail, the admin site | 80 (redirects), 443 |
 | Rspamd | The spam filter (milter, workers, web interface) | 127.0.0.1:11332-11334 |
 | Valkey | Rspamd's learned data | 127.0.0.1:6379 |
@@ -308,6 +308,8 @@ every install; lines outside belong to the admin.
 | cron, timers | Scheduled jobs, log rotation, certificate renewal | |
 | double-inst-prot | Only one instance at a time | |
 | autoshutdown | Spot interruption watcher (Spot) | |
+| nftables | The instance metadata for root only; fail2ban's bans | |
+| shutdown-log | `SHUTDOWN` and `REBOOT` lines in the event log | |
 
 Services that use EFS start only when it is mounted (`RequiresMountsFor`) and not at all if it isn't, so MariaDB
 can't start on an empty local folder. A service starts after the services it uses: Postfix, Dovecot and
@@ -322,10 +324,11 @@ connects to clamd for every message, so the virus scan resumes by itself once cl
 restarted after 30 seconds, at most 5 times in 10 minutes (each start loads its database: about 1 GB).
 
 MariaDB, Postfix, Dovecot, Valkey, Rspamd, PHP-FPM and Apache restart after a crash every 30 seconds with no
-limit, so they come back by themselves after a short EFS outage or a lost NFS lock, for example; OpenDKIM,
-Unbound, fail2ban and crond keep their packages' own restart settings. A service stopped with `systemctl stop` (also when another instance takes
-over or this one is replaced) stays stopped. The Auto Scaling group's health check sees only the instance, not its
-services, so these restarts are what brings a crashed service back.
+limit, so they come back by themselves after a short EFS outage or a lost NFS lock, for example; olefy restarts
+after 3 seconds, also with no limit; OpenDKIM, Unbound, fail2ban and crond keep their packages' own restart
+settings. A service stopped with `systemctl stop` (also when another instance takes over or this one is
+replaced) stays stopped. The Auto Scaling group's health check sees only the instance, not its services, so
+these restarts are what brings a crashed service back.
 
 `/usr/local/etc/flashlight-services` lists the services of this instance (they depend on the stack's
 parameters): `services_running` must be up after an install, `services_efs` write to EFS and are stopped
@@ -333,8 +336,9 @@ together when another instance takes over or this one is replaced.
 
 MariaDB is the last process the kernel stops when memory runs out (`OOMScoreAdjust=-500`): without it, logins
 and mail lookups fail, while Rspamd and the PHP workers come back by themselves. A swap file of half the memory
-(at most 4 GB) is always made and absorbs short peaks, such as ClamAV holding two copies of its database while
-it loads new signatures. PHP-FPM's pool is sized by memory, about 10 processes per 2 GB.
+(at most 4 GB) absorbs short peaks, such as ClamAV holding two copies of its database while it loads new
+signatures. The template's rules make the disk big enough for it; only if it is still short of space (a much
+bigger operating system image, for example) the swap file is made smaller, or not at all, with a `WARN` line. PHP-FPM's pool is sized by memory, about 10 processes per 2 GB.
 
 MariaDB logs with `log_warnings = 1` instead of its default 2: Postfix's lookups go through proxymap, which ends
 its database connections without a goodbye when it exits (after 100 clients, like every Postfix process), and
@@ -346,8 +350,9 @@ about 1.6 MB (measured), so IMAP gets about one connection per 2 MB of what is l
 2.5 GB with ClamAV) and 512 MB for the page cache, never fewer than Dovecot's default 1024: 2-4 GB servers keep
 1024, 8 GB with ClamAV gets about 2350, 16 GB about 6350. The stats, anvil and auth services, which every
 IMAP and LMTP process connects to, take that limit plus 1000. One mailbox may have up to 30 IMAP connections
-from one address, so a desktop program, a second computer and a phone behind an office's NAT address all fit. The kernel allows 8192 inotify instances per
-user (the default of 128 is used up by ~128 mail programs waiting in IDLE).
+from one address, so a desktop program, a second computer and a phone behind an office's NAT address all fit.
+The kernel allows 8192 inotify instances per user (the default of 128 is used up by ~128 mail programs waiting
+in IDLE).
 
 ## Mail flow
 
