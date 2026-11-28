@@ -157,19 +157,22 @@ Only with the AlertEmail parameter (up to 3 addresses); without it, none of this
 SNS topic with an email subscription per address; AWS sends each address a confirmation email, and an address
 that doesn't confirm within 48 hours is dropped by AWS. Subscriptions follow the position in the list: removing
 an address subscribes the ones after it again, and each gets a new confirmation email (in a test SNS kept the
-address's confirmed subscription, which AWS doesn't document, so INSTALL asks to click the link). CloudFormation doesn't notice an
-address that unsubscribed or was dropped; updating the stack without it and then with it subscribes it again.
-The server never subscribes anyone itself.
+address's confirmed subscription, which AWS doesn't document, so INSTALL asks to click the link).
+CloudFormation doesn't notice an address that unsubscribed or was dropped; updating the stack without it and then
+with it subscribes it again. The server never subscribes anyone itself.
 
 | Event | Sent by | Emails |
 |---|---|---|
-| An install after a replacement failed | `install-finish` | The first failure ("retrying"), the last of 3 ("server is DOWN"), and the first working install after failures ("up again"; the newest failure log it reported is kept in `log/alert-last-failure` on EFS, so each run of failures gets one). Stack creates and updates send none: the person running them watches |
+| An install after a replacement failed | `install-finish` | The first failure ("retrying"; a new instance tries 5 minutes later), the last of 3 failures within 3 hours ("server is DOWN"; that instance stays up for diagnosis), and the first working install after failures ("up again"; the newest failure log it reported is kept in `log/alert-last-failure` on EFS, so each run of failures gets one). If the stack's status can't be read, one email ("no retry") and no further attempt. Stack creates and updates send none: the person running them watches |
 | The install can't start | UserData | One per attempt, about every 35 minutes. No "up again" afterwards: without the bucket and EFS the instance has nowhere to record the failure |
 | No instance for 15 minutes | CloudWatch alarm `<stack>-no-mail-server-instance` on the group's `GroupInServiceInstances` metric (collected only with AlertEmail, at no cost) | ALARM once, OK when an instance runs again. AWS has no capacity for the instance types (Spot or On-Demand); a normal replacement leaves the group empty for a few minutes only. A new alarm goes from INSUFFICIENT_DATA to OK and sends one OK email: when AlertEmail is set on an existing stack and when maintenance ends (the alarm is made again). A stack update keeps the alarm and its state |
 
 At `READY`, `install-finish` also compares AlertEmail (read from the stack's parameters) with the topic's
 subscriptions and writes a `WARN` line for each address that isn't confirmed yet or has no subscription. The
 instance role may publish to the topic and list its subscriptions, nothing else in SNS.
+
+The warnings about mailboxes that may have been taken over are not alert emails: `outbound-alert` sends them as
+ordinary mail to AdminEmail (see [Outgoing mail and compromised mailboxes](#outgoing-mail-and-compromised-mailboxes)).
 
 ### Replacements
 
