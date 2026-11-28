@@ -297,7 +297,7 @@ every install; lines outside belong to the admin.
 | Postfix | SMTP: receives and sends mail | 25 (other servers), 587 and 465 (users) |
 | Dovecot | IMAP, login checks for Postfix, delivery (LMTP, a Unix socket for Postfix only), the quota check before Postfix takes a message (a full mailbox is refused at once, not bounced later), ManageSieve | 143, 993; 4190 (closed from outside) |
 | OpenDKIM | Signs outgoing mail | 127.0.0.1:8891 |
-| MariaDB | The PostfixAdmin, Roundcube and phpMyAdmin databases, and `flashlight` (the storage statistics) | Unix socket only |
+| MariaDB | The PostfixAdmin, Roundcube and phpMyAdmin databases, and `flashlight` (the storage statistics) | 127.0.0.1:3306 (Flashlight's clients use the unix socket) |
 | Apache + PHP-FPM | Webmail, the admin site | 80 (redirects), 443 |
 | Rspamd | The spam filter (milter, workers, web interface) | 127.0.0.1:11332-11334 |
 | Valkey | Rspamd's learned data | 127.0.0.1:6379 |
@@ -554,20 +554,24 @@ password), loads nothing from outside, and sends a strict Content-Security-Polic
   credentials to any local process. A firewall rule (nftables, `flashlight_imds`) lets only root reach it, so
   a broken-into web application, which runs as `apache`, doesn't get the server's rights in AWS. All of
   Flashlight's AWS calls run as root; a non-root program of your own that needs AWS access is refused there.
-- **Network.** Only the mail, web and SSH ports are open. EFS accepts connections from the instance's security
-  group only. IPv6 is off.
+- **Network.** Only the mail, web and SSH ports are open; everything else listens on 127.0.0.1 only (MariaDB,
+  Rspamd, Valkey, Unbound, OpenDKIM, ClamAV, olefy, ManageSieve). EFS accepts connections from the instance's
+  security group only. IPv6 is off. SSH accepts keys only (password logins are off in the image).
 - **Encryption.** EFS is encrypted at rest and in transit (TLS mount). The instance's root disk is encrypted with
   the AWS-managed key, so swap is too. Users connect with TLS 1.2 or newer; port 25 offers TLS to other servers.
-- **The instance's rights in AWS** (IAM role): associate the Elastic IP; change TXT records only, in the stack's
-  zones only; replace only its own stack's instances; signal its own stack; read its own mail storage's size; read the config bucket, write
+- **The instance's rights in AWS** (IAM role): associate an Elastic IP (any of the account's: the role doesn't
+  name the address); change TXT records only, in the stack's zones only; replace only its own stack's instances;
+  signal its own stack and read its status; read its own mail storage's size; read the config bucket, write
   `install-logs/`, and full access to `upload/`; with AlertEmail, publish to the stack's alert topic and list
-  its subscriptions. It can't change the installer files, so a compromised server
-  can't plant a modified installer for the next instances.
+  its subscriptions; besides, read-only lookups (its instances, Spot prices, its Auto Scaling group, the Route 53
+  zones). It can't change the installer files, so a compromised server can't plant a modified installer for the
+  next instances.
 - **The config bucket answers only HTTPS.** Its bucket policy refuses every request without TLS, whoever makes
   it; the instance, the Lambdas, the AWS CLI and the console use HTTPS anyway.
 - **Passwords.** Generated on the first install, kept in `root/secrets` and `root/credentials` (root only). The
   admin tools are behind the admin site's password (basic auth over HTTPS) and their own logins.
-- **fail2ban** bans addresses after repeated failed logins to SSH, mail and webmail (nftables).
+- **fail2ban** bans addresses after repeated failed logins to SSH, mail, webmail and the admin site (nftables).
+- **SELinux is off.**
 - **The server's reputation.** No open relay; users send only as their own addresses, with limits; the admin is
   warned about compromised mailboxes; DMARC `p=reject` stops others from forging your domains.
 
