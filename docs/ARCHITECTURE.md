@@ -534,9 +534,9 @@ Sizes are Dovecot's own totals (`doveadm quota get -A`, `doveadm mailbox status 
 nothing is recounted, and a run takes about 5 minutes for 2,500 mailboxes. Trash, Junk and Sent are the folders
 of these names; folders that other programs use instead (Outlook's Deleted Items, for example) count in the
 mailbox's size only. What Dovecot doesn't serve (inactive mailboxes, mailboxes of an inactive domain) and the
-trash folders of deleted mailboxes are counted from the Maildir file names, which carry the sizes; a trash folder only once in its life, with a 10-minute limit and three
-nights at most. The EFS size comes from AWS. A source that fails leaves its fields empty; its error goes to
-`storage_day` and to a `WARN` line.
+trash folders of deleted mailboxes are counted from the Maildir file names, which carry the sizes; a trash folder
+only once in its life, with a 10-minute limit and three nights at most. The EFS size comes from AWS. A source
+that fails leaves its fields empty; its error goes to `storage_day` and to a `WARN` line.
 
 The page (`www/admin/storage_stats/index.php`, rewritten at every install) only reads. The thresholds of its
 amber marks come from the admin's `etc/storage-stats/custom.ini`, read at every visit. It connects as the `apache`
