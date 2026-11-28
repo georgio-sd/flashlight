@@ -261,7 +261,7 @@ instance share during a replacement: EFS would take them for one client, and whe
 unmounted, it would wipe the other's state, so the new server could lose its file locks (the kernel's
 `NFS: lost N locks`).
 
-## Configuration: ours and the admin's
+## Configuration: Flashlight's and the admin's
 
 Flashlight's configuration files are rewritten from the release at every install, that is on every new instance
 (a reboot of the same instance doesn't rewrite them; "at every boot" in the files' headers means the same), so
@@ -271,7 +271,7 @@ configure, and are rewritten all the same. They carry a "DON'T EDIT" header. A h
 from the stack's parameters and from `root/secrets`.
 
 The admin's settings live in separate files on EFS, created once with an explanation and never changed by
-Flashlight. Each program reads them after ours, so they win:
+Flashlight. Each program reads them after Flashlight's, so they win:
 
 | Program | The admin's file | How it is applied |
 |---|---|---|
@@ -282,7 +282,7 @@ Flashlight. Each program reads them after ours, so they win:
 | Rspamd | `etc/rspamd/override.d/` | Linked as `/etc/rspamd/override.d`; a file replaces the whole section of that name |
 | fail2ban | `etc/fail2ban/custom.local` | Read after `jail.local`; starts as commented examples from the release |
 | Mail storage statistics | `etc/storage-stats/custom.ini` | The thresholds of the page's amber marks, read at every visit |
-| Roundcube, PostfixAdmin, phpMyAdmin | `etc/roundcube/custom.inc.php`, `etc/postfixadmin/custom.php`, `etc/phpmyadmin/custom.php` | Included at the end of our config |
+| Roundcube, PostfixAdmin, phpMyAdmin | `etc/roundcube/custom.inc.php`, `etc/postfixadmin/custom.php`, `etc/phpmyadmin/custom.php` | Included at the end of Flashlight's config |
 
 OpenDKIM has no file of the admin's. For changes that aren't settings (extra packages, for example), the admin's
 `user-script.sh` in the config bucket runs after every install (see [Install](#install)).
