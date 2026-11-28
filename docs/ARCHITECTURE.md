@@ -129,7 +129,7 @@ associations, SNS subscriptions), short-lived Spot requests, and the network obj
 5. **`install-finish ready`** runs once after the reboot: when all services of the list are up (it waits up to
    2 minutes), it writes `READY` to the event log and signals SUCCESS to CloudFormation.
 
-An install takes 4 to 10 minutes, depending on the instance type and on whether the antivirus database must be
+An install takes 6 to 10 minutes from the instance's start to READY, depending on the instance type and on whether the antivirus database must be
 downloaded.
 
 ### When an install fails
@@ -181,7 +181,7 @@ instance role may publish to the topic and list its subscriptions, nothing else 
 | Failed instance | The Auto Scaling group's EC2 health check replaces it |
 | Stack update | A new Auto Scaling group with a new instance; the old one is removed after the new one's success |
 
-In each case the new instance goes through the same install. Mail is down for about 4 to 6 minutes; other mail
+In each case the new instance goes through the same install. Mail is down for about 6 to 10 minutes; other mail
 servers retry and deliver later.
 
 ### Only one instance
