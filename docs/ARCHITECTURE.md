@@ -598,12 +598,20 @@ themselves and are rarely needed.
 
 ## Backups
 
-- **Databases:** dumped every night to `backup/` on EFS, kept 28 days. They are consistent snapshots taken without
-  locking, so mail keeps flowing.
-- **Everything:** with MailStorageBackupPolicy, AWS Backup backs up the whole EFS every day.
+- **Databases:** dumped every night at 22:55 to `backup/` on EFS (root only): MariaDB's users and the postfix,
+  roundcube, phpmyadmin and flashlight databases, as consistent snapshots taken without locking, so mail keeps
+  flowing. Kept 28 days; old dumps are deleted only after a good run, so a run of failures never eats the last
+  good copies. Each night writes a `BACKUP` line to the event log: the size, or which dumps failed.
+- **Mail and everything else:** only with MailStorageBackupPolicy. AWS then backs up the whole EFS once a day
+  (its plan `aws/efs/automatic-backup-plan`, vault `aws/efs/automatic-backup-vault`) and keeps each copy 35
+  days, billed separately by AWS. A copy restores in the AWS Backup console, to the same file system or a new
+  one, whole or chosen folders. Without it, mail has no copy besides EFS's own redundancy across Availability
+  Zones: the database dumps don't hold it.
+- **Deleted mailboxes:** their mail is kept 30 days in `mail/.deleted/` and can be restored
+  ([how](INSTALL.md#mailboxes)).
 - **Upgrades:** before a data upgrade, the new instance backs up the databases and the `etc`, `www`, `root` and
   `automation` folders, and restores them if the upgrade fails ([UPGRADING](UPGRADING.md)). Before a web
-  application update, the same for the application's database and folder.
+  application update, the same for the application's database and folder. Kept 90 days.
 
 ## Releases and upgrades
 
