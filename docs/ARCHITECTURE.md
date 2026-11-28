@@ -503,8 +503,9 @@ test CA; switching to `production` with a stack update replaces it on the next n
 
 | When | Job |
 |---|---|
-| Every 10 minutes | `mailbox-cleanup`: mail of mailboxes deleted in PostfixAdmin moves to `mail/.deleted/` (30 days), their Roundcube data are deleted |
-| Every 10 minutes | `outbound-alert` (spam filter) |
+| At every boot | `cron-boot-runner`: one-time jobs after the final reboot of an install (the READY check of `install-finish`) |
+| Every 10 minutes | `mailbox-cleanup`: mail of mailboxes deleted in PostfixAdmin moves to `mail/.deleted/`, their Roundcube data are deleted; trash older than 30 days is deleted for good |
+| Every 10 minutes | `outbound-alert` (spam filter): warns the admin about mailboxes that may have been taken over (see [Outgoing mail and compromised mailboxes](#outgoing-mail-and-compromised-mailboxes)) |
 | Daily 04:15 | `storage-stats`: the night's snapshot for the Mail storage statistics page (see [Mail storage statistics](#mail-storage-statistics)) |
 | Daily 05:40 | `valkey-check` (spam filter): a `WARN` line while Valkey is over 85% of its memory cap |
 | Daily 22:55 | `db-backup`: dumps of all databases to `backup/`, 28 days |
@@ -512,6 +513,7 @@ test CA; switching to `production` with a stack update replaces it on the next n
 | Sundays 03:15 | `rebuild-check` (RebuildAfterDays > 0) |
 | Twice a day | Certificate renewal |
 | Daily | Log rotation: Roundcube's logs on EFS are rotated weekly and kept 13 weeks (`instance.log` isn't rotated) |
+| No schedule | Trash and Junk: Dovecot deletes messages older than 30 days when a session of the user ends (see [Incoming mail](#incoming-mail-port-25)) |
 
 Times are in the server's time zone (TimeZone).
 
