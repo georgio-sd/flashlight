@@ -422,7 +422,7 @@ With Antispam (the default), the spam filter is Rspamd 4.3 with its own helpers:
   at most 5 minutes after a change. Memory is capped at 256 MB. Bayes words get 180 days (Rspamd's
   bayes_expiry): the ones that by then clearly mark spam or ham are kept, the others are deleted; words common
   to spam and ham go after 10 days. At the cap Valkey drops the data that expire soonest first (rate limit
-  counters, greylisting), so `valkey-check` writes a `WARN` line to `instance.log` while it is over 85% full.
+  counters, caches), so `valkey-check` writes a `WARN` line to `instance.log` while it is over 85% full.
 - **Unbound** is Rspamd's own DNS resolver: blocklists refuse queries that come through big shared resolvers,
   AWS's included.
 
@@ -435,13 +435,13 @@ attachments. Added by Flashlight:
 | Check | Setting | Effect |
 |---|---|---|
 | Spamhaus via DQS | SpamhausDQSKey | Spamhaus's address, domain and hash lists, queried with the key (Spamhaus refuses AWS without one) |
-| Risky attachments | AttachmentPolicy = Gmail or Strict | `BLOCKED_ATTACHMENT` finds file types from the release's lists (`attachments-gmail.map`, `attachments-strict.map`), also inside archives; the message is refused with an explanation for the sender. Encrypted archives and archives inside archives go at least to Junk |
+| Risky attachments | AttachmentPolicy | `Score` (the default): Rspamd's own rules only add points for risky file types. `Gmail`: the file types Gmail blocks (`attachments-gmail.map`), also inside archives: the message is refused with an explanation for the sender; encrypted archives and archives inside archives go at least to Junk. `Strict`: the same with Gmail's list plus more Windows code types from Outlook's list (`attachments-strict.map`) |
 | Macros in Office documents | always (if oletools installed) | olefy passes Office files to oletools; a macro that runs by itself and does suspicious things adds 7 points (Junk). If pip can't install oletools, the server works without the check (`WARN` line) |
 | Viruses | Antivirus | ClamAV scans every part of the message; a virus is refused. The signature database is on EFS, so a new instance only updates it |
-| Partner whitelist | `rspamd/whitelist-domains.map` | −6 points for a listed domain whose SPF or DKIM passes |
+| Partner whitelist | `rspamd/whitelist-domains.map` | −6 points if a listed domain's SPF passes, −6 more if its DKIM passes (−12 when both pass) |
 
-Thresholds: 6 points add the spam header (Junk), 15 refuse the message. No greylisting: it delays legitimate
-mail.
+Thresholds: 6 points add the spam header (Junk), 15 refuse the message (see
+[Incoming mail](#incoming-mail-port-25)).
 
 ### Learning
 

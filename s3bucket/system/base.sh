@@ -900,7 +900,7 @@ if [ "$ANTISPAM" = 'ENABLED' ]; then
   # IPv4 only: IPv6 is off, and the package's optional ::1 logs a bind warning at every start
   sed -i 's|^bind .*|bind 127.0.0.1|' /etc/valkey/valkey.conf
   # Memory cap. At the cap Valkey drops first the keys that expire soonest (volatile-ttl); keys without an expiry
-  # are never dropped. Expiring: rate limit counters, greylisting, caches, and Bayes words that are rare or common
+  # are never dropped. Expiring: rate limit counters, caches, and Bayes words that are rare or common
   # to spam and ham (bayes_expiry, see classifier-bayes.conf below); without an expiry: the Bayes words that
   # clearly mark spam or ham, and the Bayes counters. valkey-check warns at 85% of the cap.
   printf '%s\n' "# Flashlight: memory cap; at the cap the keys that expire soonest go first" "maxmemory 256mb" \
