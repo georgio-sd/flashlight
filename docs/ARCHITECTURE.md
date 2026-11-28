@@ -360,13 +360,15 @@ in IDLE).
 
 ```mermaid
 flowchart LR
-    sender["Other mail server"] --> postfix["Postfix<br/>checks: HELO, sender,<br/>recipient exists"]
+    sender["Other mail server"] --> postfix["Postfix<br/>HELO, sender, recipient,<br/>size (25 MB), quota"]
     postfix --> rspamd["Rspamd milter<br/>spam score"]
-    rspamd -- "15+ points, virus,<br/>blocked attachment" --> reject["refused<br/>(sender gets the reason)"]
     rspamd --> dkim["OpenDKIM milter"]
     dkim --> lmtp["Dovecot LMTP"]
-    lmtp --> sieve["Sieve: spam -> Junk,<br/>other mail -> the user's filters"]
-    sieve --> box[("Mailbox on EFS")]
+    lmtp --> sieve["Sieve: spam -> Junk,<br/>other mail -><br/>the user's filters"]
+    sieve --> box[("Mailbox<br/>on EFS")]
+    rspamd -- "15+ points, virus,<br/>blocked attachment" --> reject["refused<br/>(sender gets the reason)"]
+    rspamd <-. "attachments" .-> clamav["ClamAV: viruses<br/>(Antivirus)"]
+    rspamd <-. "Office files" .-> olefy["olefy: macros"]
 ```
 
 1. **Postfix** accepts the connection. Limits per client address: 20 connections at once, 30 connections and 30
