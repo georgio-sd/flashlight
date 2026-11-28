@@ -576,18 +576,25 @@ password), loads nothing from outside, and sends a strict Content-Security-Polic
 
 ## Logs
 
-| Log | Contents |
-|---|---|
-| `/mnt/mailserver/log/instance.log` | The server's events (see [The event log](#the-event-log)) |
-| `/mnt/mailserver/log/install/` | Install logs of all instances, 90 days |
-| `/mnt/mailserver/log/` | The logs of the cron scripts |
-| `/var/log/maillog` | Postfix and Dovecot |
-| `/var/log/rspamd/rspamd.log` | Rspamd, one line per checked message |
-| `/var/log/httpd/` | Apache |
-| `/mnt/mailserver/www/webmail/logs/` | Roundcube |
-| `journalctl` | All services |
+| Log | Contents | Kept |
+|---|---|---|
+| `/mnt/mailserver/log/instance.log` | The server's events, also those of the cron scripts (see [The event log](#the-event-log)) | Not rotated (about 30 KB a month) |
+| `/mnt/mailserver/log/install/` | Install logs of all instances | 90 days |
+| `install-logs/` in the config bucket | Logs of failed installs, also after a stack rollback | 90 days |
+| `/mnt/mailserver/www/webmail/logs/` | Roundcube | Weekly, 13 weeks |
+| `/var/log/flashlight-install.log` | This instance's install (root only) | Written once |
+| `/var/log/maillog` | Postfix and Dovecot | Weekly, 4 weeks |
+| `/var/log/rspamd/rspamd.log` | Rspamd, one line per checked message | Daily, 10 days |
+| `/var/log/httpd/` | Apache | Weekly, 4 weeks |
+| `/var/log/php-fpm/error.log` | PHP errors of the web applications | Weekly, 4 weeks |
+| `/var/log/mariadb/mariadb.log` | MariaDB | By size (its package's rule: from 50 MB monthly, 500 MB at once), 6 kept |
+| `/var/log/secure` | SSH logins, sudo | Weekly, 4 weeks |
+| `/var/log/fail2ban.log` | Bans and unbans | Weekly, 4 weeks |
+| `/var/log/messages`, `journalctl` | The system and all services | Weekly, 4 weeks; the journal by size |
 
-Logs on the instance's own disk are lost when the instance is replaced; the ones on EFS stay.
+Logs on the instance's own disk are lost when the instance is replaced; the ones on EFS and in the config
+bucket stay. Other logs in `/var/log` (package installs, cloud-init, the EFS mount helper, auditd) rotate by
+themselves and are rarely needed.
 
 ## Backups
 
